@@ -1,0 +1,15 @@
+# Netlify settings: what to publish and how to serve it.
+
+[build]
+  # Only this folder goes live. Everything else in the repo stays private.
+  publish = "public"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Keep this internal tool out of search engines.
+    X-Robots-Tag = "noindex, nofollow"
+    # Standard browser safety settings.
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
