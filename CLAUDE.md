@@ -32,6 +32,7 @@ The owner (Tolu, `tolu-scalency`) is completely new to coding. Treat every sessi
 
 ## Reference docs
 
+- **`docs/brand.md`: read this before any design, page, ad, email or document task.** It covers the name, voice and tone, writing rules, colours, fonts, layout style and open brand decisions. Only use what's marked confirmed or current, and don't invent answers for anything marked "to decide".
 - **`docs/business-context.md`: read this before any build, copy or content task.** It covers the ICP, the Leak Test offer, the quiz funnel, objections, what we can and can't claim, and compliance rules. Never write copy that breaks its "Never say" or compliance sections.
 - `docs/AI_Marketing_Platform_Build_Plan.docx` is the build plan for Scalency's AI marketing platform (modules, phases and ground rules from the SABM calls). Read it for context, for example with `textutil -convert txt -stdout docs/AI_Marketing_Platform_Build_Plan.docx`.
 - **Use it as loose guidance, not a checklist.** The owner will pick which parts to build and add things it doesn't cover. Ask before assuming a feature from the plan is wanted.
