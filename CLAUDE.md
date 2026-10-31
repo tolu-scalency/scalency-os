@@ -38,6 +38,10 @@ The owner (Tolu, `tolu-scalency`) is completely new to coding. Treat every sessi
 - **Use it as loose guidance, not a checklist.** The owner will pick which parts to build and add things it doesn't cover. Ask before assuming a feature from the plan is wanted.
 - It's private and listed in `.gitignore`. Never commit or push it, and never quote large parts of it into committed files.
 
+## Plans in progress
+
+- `docs/plans/sales-team-booking.md`: the Sales Team round-robin booking system (Google Calendar and Calendly). Read it before working on bookings or calendars.
+
 ## Project facts
 
 - Location on this Mac: `~/Developer/scalency-os`
