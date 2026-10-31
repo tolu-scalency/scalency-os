@@ -46,6 +46,10 @@ The owner (Tolu, `tolu-scalency`) is completely new to coding. Treat every sessi
 
 - Location on this Mac: `~/Developer/scalency-os`
 - GitHub: `https://github.com/tolu-scalency/scalency-os` (private), branch `main`.
+- Netlify (two projects, both deploy automatically when `main` is pushed):
+  - **`scalency-landing`**: public landing site from `landing/`, live at **https://scalency.us** (`www.scalency.us` redirects there). Pages: `index.html`, `book.html` (embeds the GoHighLevel `sales-call-4187` calendar) and `privacy.html`.
+  - **`scalency-os`**: private back office from `public/`, at **https://os.scalency.us** (Netlify login required).
+- DNS for scalency.us and scalency.co.uk is managed at **Namecheap**, not Netlify DNS. Never click "Set up Netlify DNS". Other scalency.us records are in use and must not be touched: `apply` and `onboarding` (Lovable sites) and the `mail` Mailgun records. On scalency.co.uk, `app` is the GoHighLevel login and email runs on Google Workspace.
 - Purpose: Scalency's internal operating system, an internal platform for the business. No app code or tech stack has been chosen yet. The `.gitignore` is GitHub's Node.js template.
 - Git identity for this repo: `tolu-scalency <tolu@scalency.co.uk>`.
 - GitHub access uses a fine-grained personal access token saved in the macOS keychain. Never ask the owner to paste a token into chat or the terminal prompt. If access fails, they should create a new token on GitHub.

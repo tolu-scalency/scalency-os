@@ -15,7 +15,7 @@ Read this before any design, page, ad, email or document task. It covers how Sca
 | Legal name | **Scalency LTD**, registered in England and Wales, company number 16598785. Registered office: 128 City Road, London, EC1V 2NX. Use the legal name only in legal copy (privacy policy, terms, contracts, invoices). Everywhere else, say **Scalency**. **Confirmed.** |
 | Tagline | **"Helping businesses scale with efficiency."** **Confirmed.** |
 | Contact | tolu@scalency.co.uk |
-| Domains | scalency.co.uk (no live site yet), scalency.us. The internal platform runs at os.scalency.us. |
+| Domains | **scalency.us** is the public website (landing and booking pages). The internal platform runs at os.scalency.us. scalency.co.uk has no working website yet; it carries email and the GoHighLevel login (app.scalency.co.uk). |
 | What we are | A marketing agency for UK service businesses that delivers high-quality appointments and books them into the client's calendar. **Confirmed.** |
 | Market | UK first, US later. Prices in GBP. |
 
