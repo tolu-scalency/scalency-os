@@ -1,6 +1,6 @@
 # Plan: Sales Team round-robin booking
 
-Status: **planned, not started** (31 October 2026).
+Status: **parked** (31 October 2026). For now, bookings go through a **GoHighLevel calendar link**. Come back to this plan when it's time to move off GoHighLevel. The decisions below already apply to the GoHighLevel calendar too.
 
 ## Goal
 
@@ -49,11 +49,21 @@ Team members use **a mix of calendars** (Google Calendar, Calendly, possibly Out
 
 Each phase ends with a test and a commit before the next starts.
 
-## Decisions to confirm
+## Decisions
 
-1. Call length (e.g. 45 minutes) and gap between calls (e.g. 15 minutes).
-2. Working hours and days for George.
-3. How far ahead people can book (e.g. 14 days).
-4. Video link: Google Meet (built into Google Calendar) or something else.
-5. Exact questions on the booking form.
-6. Whether George and future closers get @scalency.co.uk accounts.
+Given by Tolu, 31 October 2026:
+
+| Decision | Answer |
+|---|---|
+| Call length | **45 minutes** |
+| Gap between calls | **To confirm.** Tolu said "about an hour" in total and also "a 50-minute gap". 15 minutes (one hour in total) is assumed until confirmed. |
+| George's working days | **Monday to Sunday** |
+| George's hours | **8 am to 8 pm, UK time** (to confirm; "8 pm to 8 am" was also mentioned) |
+| Minimum notice | **24 hours** (needed for the Leak Test) |
+| Video link | **Google Meet** |
+| Booking form | **Owner's name, employee count, monthly revenue, website.** Then they pick a time. |
+
+Still to decide:
+1. How far ahead people can book (e.g. 14 days).
+2. Email and phone on the form. They're not in Tolu's list, but the booking confirmation, reminders and five-touch follow-up all need them. GoHighLevel's booking form usually asks for both by default.
+3. Whether George and future closers get @scalency.co.uk accounts.
