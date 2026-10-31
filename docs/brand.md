@@ -2,20 +2,21 @@
 
 Read this before any design, page, ad, email or document task. It covers how Scalency should look and sound. For *what* we sell and *who to*, see `docs/business-context.md`.
 
-**Status: draft v0.1 (31 October 2026).** Each section says how settled it is:
-- **Confirmed:** taken from something Tolu has already approved (house-style skills, decisions in chat).
-- **Current (not yet approved):** what the landing page uses today. Keep using it for consistency until Tolu decides.
-- **To decide:** Tolu hasn't decided yet. Don't invent an answer; ask or leave a placeholder.
+**Status: v1 (31 October 2026).** Each section says how settled it is:
+- **Confirmed:** decided by Tolu.
+- **Derived:** worked out from something confirmed (e.g. colours measured from the logo). Use it, but Tolu can override it.
+- **To decide:** not decided yet. Don't invent an answer; ask or leave a placeholder.
 
 ## 1. Brand basics
 
 | | |
 |---|---|
-| Name | **Scalency**: always one word with a capital S. Never "ScaleNcy", "Scalency Agency" or "SCALENCY" in running text. |
-| Company | Scalency, registered in England and Wales, company number 16598785. Registered office: 128 City Road, London, EC1V 2NX. **Confirmed.** Exact registered name (e.g. "Scalency Ltd") is *to confirm*. |
+| Name | **Scalency**: one word with a capital S in running text (the logo itself is lowercase). **Confirmed.** |
+| Legal name | **Scalency Limited**, registered in England and Wales, company number 16598785. Registered office: 128 City Road, London, EC1V 2NX. Use the legal name only in legal copy (privacy policy, terms, contracts, invoices). Everywhere else, say **Scalency**. **Confirmed.** |
+| Tagline | **"Helping businesses scale with efficiency."** **Confirmed.** |
 | Contact | tolu@scalency.co.uk |
 | Domains | scalency.co.uk (no live site yet), scalency.us. The internal platform runs at os.scalency.us. |
-| What we are | A marketing agency for UK service businesses that delivers high-quality appointments and books them into the client's calendar. **Confirmed** (31 October 2026). |
+| What we are | A marketing agency for UK service businesses that delivers high-quality appointments and books them into the client's calendar. **Confirmed.** |
 | Market | UK first, US later. Prices in GBP. |
 
 ### Positioning
@@ -23,10 +24,6 @@ Read this before any design, page, ad, email or document task. It covers how Sca
 - **Promise:** a full diary the owner doesn't have to babysit.
 - **How we're different:** we own what happens *after* the enquiry (fast replies and five-touch follow-up), not just the ads. The client keeps control: a short first term, they own the ad account and data, and a weekly enquiry log.
 - **Never mention the Leak Test publicly.** It's revealed on the sales call. See `docs/business-context.md`.
-
-### Tagline
-
-*To decide.* Current landing page headline, which works as a stand-in: **"High-quality appointments. Booked straight into your diary."**
 
 ## 2. Voice and tone
 
@@ -65,46 +62,60 @@ See "What we can and can't claim" in `docs/business-context.md`. In short: **no 
 
 ### Logo
 
-*To decide.* There's no logo file yet. The landing page uses a **text wordmark**: "Scalency" in heavy weight with a blue full stop ("Scalency."). Use that as a placeholder until a real logo exists. Don't design a new logo without being asked.
+**Confirmed.** File: `docs/brand/scalency-logo.png` (760 × 276 px PNG with a transparent background).
+
+- A lowercase **"scalency"** wordmark in a bold, rounded sans-serif, with a **turquoise-to-deep-blue gradient** running left to right. The "s" ends in an **upward arrow**, which stands for growth.
+- Use it on **white or very light backgrounds**. Leave clear space around it of at least the height of the "a".
+- **Don't** recolour it, stretch it, add shadows or outlines, or rebuild it in text. If you need a version for dark backgrounds, an icon-only mark (e.g. the arrow "s" for a favicon) or a larger file, ask Tolu. Those don't exist yet.
 
 ### Colour
 
-**Current (not yet approved)**, taken from the landing page:
+**Confirmed: white and blue.** The blues are **derived**, measured directly from the logo.
 
 | Role | Colour | Use |
 |---|---|---|
-| Ink | `#111111` | Text, primary buttons, dark sections |
-| White | `#FFFFFF` | Main background |
-| Soft grey | `#F6F6F4` | Alternate section backgrounds |
-| Line grey | `#E6E6E3` | Borders and dividers |
-| Muted text | `#5E5E5E` | Secondary text, captions |
-| Accent blue | `#2563EB` | The only accent: logo full stop, small labels, ticks, links |
-| Accent tint | `#EEF3FF` | Soft backgrounds behind accent details |
+| White | `#FFFFFF` | Main background. Most of every page should be white. |
+| Turquoise | `#64E7EF` | Gradient start (the "s"). Gradients and small highlights only, never for text (too light to read on white). |
+| Sky blue | `#2FA8EB` | Gradient middle (the "e"). Icons, illustrations, highlights. Not for small text. |
+| Bright blue | `#077DDC` | Hover states, links on large text, secondary accents |
+| **Deep blue** | **`#0465C7`** | **Main brand colour** (the "y"). Primary buttons, links, key headings and accents. Readable on white and with white text on top. |
+| Navy | `#0B2447` | Body text and headings. A dark blue rather than pure black, so text stays on-brand and easy to read. |
+| Muted text | `#52627A` | Secondary text, captions |
+| Light blue tint | `#EEF6FD` | Alternate section backgrounds, soft panels |
+| Border | `#D9E6F2` | Card borders and dividers |
 
-Rule of thumb: **mostly black and white, with one accent colour used sparingly.** Primary buttons are black, not blue.
+**Brand gradient:** `linear-gradient(90deg, #64E7EF 0%, #2FA8EB 50%, #0465C7 100%)`. Use it sparingly: a hero highlight, a thin top bar or one key word. Never behind body text.
 
-**Word documents (confirmed, house style):** black and white only, grey `#999999` rules and table borders, `#EEEEEE` table headers, link blue `#0563C1`. No logos or colour.
+**Accessibility:** for text on white, use only Navy, Muted text or Deep blue. White text sits on Deep blue or Navy only.
+
+**Word documents (confirmed, house style):** stay black and white, as set by the `scalency-docx-style` skill (grey `#999999` rules, `#EEEEEE` table headers, link blue `#0563C1`, no logos). Don't apply the web colours to Word documents unless Tolu asks.
 
 ### Typography
 
-| Where | Font | Status |
+**Confirmed: Montserrat everywhere**, on web pages, ads, documents and SOPs. Load it on the web from Google Fonts (weights 400, 500, 600, 700, 800).
+
+| Use | Weight | Notes |
 |---|---|---|
-| Word docs, SOPs, forms | **Montserrat** everywhere, 12pt body, 16pt bold title, 14pt bold section headers | **Confirmed** (house style) |
-| Website and landing pages | **Inter** (400–800), headlines bold with tight letter spacing | **Current, to decide.** It doesn't match Montserrat. Pick one brand font, or keep Inter for web and Montserrat for documents on purpose. |
+| Headlines | 700–800 | Tight letter spacing (about -0.02em) |
+| Sub-headings | 600 | |
+| Body | 400 | 16–18px on web, line height about 1.6 |
+| Buttons and labels | 600 | |
+| Word documents | As the house style | 12pt body, 16pt bold title, 14pt bold section headers |
 
 ### Layout and components (web)
 
-**Current (not yet approved).** A clean, modern agency style:
+**Derived** from the landing page style, updated to the confirmed colours and font:
 - Lots of white space, a max content width of about 1080px, and mobile-first layouts (most traffic comes from Meta ads on phones).
-- Big, bold two-line headlines, with the second line in muted grey.
-- Small uppercase "eyebrow" labels above headings, starting with a blue `//`.
-- **Primary button:** black background, white text, rounded corners, an arrow (→). **Secondary button:** white with a light grey border.
-- Content in rounded cards (14px corners, thin grey border), not heavy shadows.
-- Section dividers are thin grey lines. One dark (ink) section per page at most, for emphasis.
+- Big, bold headlines in Navy, with a key phrase picked out in Deep blue or the gradient.
+- Small uppercase "eyebrow" labels above headings, in Deep blue.
+- **Primary button:** Deep blue background, white text, rounded corners, an arrow (→). Bright blue on hover. **Secondary button:** white with a Border-coloured outline and Navy text.
+- Content in rounded cards (about 14px corners, thin Border-coloured outline) rather than heavy shadows.
+- Alternate sections between white and the Light blue tint.
+- The logo in the top left of every page's header.
 
 ### Imagery
 
-*To decide.* No photography, illustrations or icon style yet. Until then: no stock photos of handshakes or laptops. Prefer real screenshots, simple data visuals and plain text.
+**Confirmed: no imagery.** No photos, stock images or illustrations. Use the logo, type, colour and simple shapes (cards, lines, numbers) to carry the design. Simple data visuals and real screenshots are fine where they explain something.
 
 ## 4. Documents and SOPs
 
@@ -112,9 +123,5 @@ The Word house style and SOP structure live in the `scalency-docx-style` and `so
 
 ## 5. Open brand decisions
 
-1. Logo: is there one, or should one be made?
-2. Brand colours: keep the black, white and blue palette above, or use different colours?
-3. One brand font (Montserrat or Inter) or different fonts for web and documents?
-4. A tagline or one-line description for socials and profiles.
-5. Imagery style: photos of George and the team, screenshots, illustrations?
-6. Exact registered company name for legal copy.
+1. Extra logo versions: white or single-colour (for dark backgrounds), icon-only (favicon and social profile picture), and a high-resolution or vector (SVG) master file.
+2. Whether Word documents should stay black and white or adopt the blue palette and logo.
