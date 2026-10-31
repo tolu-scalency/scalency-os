@@ -12,7 +12,7 @@ Read this before any design, page, ad, email or document task. It covers how Sca
 | | |
 |---|---|
 | Name | **Scalency**: one word with a capital S in running text (the logo itself is lowercase). **Confirmed.** |
-| Legal name | **Scalency Limited**, registered in England and Wales, company number 16598785. Registered office: 128 City Road, London, EC1V 2NX. Use the legal name only in legal copy (privacy policy, terms, contracts, invoices). Everywhere else, say **Scalency**. **Confirmed.** |
+| Legal name | **Scalency LTD**, registered in England and Wales, company number 16598785. Registered office: 128 City Road, London, EC1V 2NX. Use the legal name only in legal copy (privacy policy, terms, contracts, invoices). Everywhere else, say **Scalency**. **Confirmed.** |
 | Tagline | **"Helping businesses scale with efficiency."** **Confirmed.** |
 | Contact | tolu@scalency.co.uk |
 | Domains | scalency.co.uk (no live site yet), scalency.us. The internal platform runs at os.scalency.us. |
