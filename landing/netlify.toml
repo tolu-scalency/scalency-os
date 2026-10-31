@@ -1,0 +1,14 @@
+# Netlify settings for the public landing page.
+# Set this Netlify project's "Base directory" to `landing` so it reads this file
+# and publishes only this folder.
+
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Standard browser safety settings.
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
