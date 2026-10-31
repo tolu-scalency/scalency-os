@@ -2,6 +2,15 @@
 
 Read this before any build, copy or content task. It's a summary of the current ICP, offer and research docs (v2, 31 October 2026). Those docs are drafts and will change. When they do, update this file.
 
+## Current direction (overrides older sections below)
+
+Decided by Tolu, 31 October 2026:
+
+- **Never mention the Leak Test on landing pages or in ads.** It's a surprise revealed to the owner on the call, after they've booked. Don't hint at it either: no "we'll test your business", "we'll send an enquiry", "recording" or "before you pay anything".
+- **Public positioning:** a marketing agency that delivers high-quality appointments and books them into the client's calendar. The Five Touch Rule, the research stats and the no-lock-in terms are fine to use publicly.
+- **Funnel for now:** Meta instant forms plus a simple landing page (`landing/`). The quiz funnel described below is parked.
+- **Open decision:** the Offer doc says the Leak Test must be consented. Decide with George how consent works now that it's a surprise (for example, agreed with the owner at booking but not with staff). Until then, keep the consent rule below.
+
 ## Who's involved
 
 - **Scalency:** Tolu's agency. The offer is planned to run under Scalency, with payments through Ayo's agency. The trading entity is still an **open decision**.
