@@ -56,6 +56,7 @@ The owner (Tolu, `tolu-scalency`) is completely new to coding. Treat every sessi
 - Purpose: Scalency's internal operating system, an internal platform for the business.
 - The app lives in **`platform/`**: Next.js 16 (App Router, TypeScript, Tailwind 4, `src/` folder). Read `platform/AGENTS.md` and the docs in `platform/node_modules/next/dist/docs/` before writing Next.js code, since this version differs from older ones. Brand colours are Tailwind colours in `platform/src/app/globals.css` (`text-brand`, `bg-tint`, `border-line` and so on).
 - Node.js 26 is installed in `~/.local/node` (no Homebrew). In commands, add it first: `export PATH="$HOME/.local/node/bin:$PATH"`. Run the app locally with `npx next dev --port 3100` inside `platform/`.
+- Supabase: project `scalency-os` (ref `nldagscfswzzdhxsnygf`, London `eu-west-2`, Free plan) in the "Scalency" organisation. It's the live database. Keys live in the owner's password manager and `.env`, never in the repo or chat.
 - os.scalency.us still serves the "coming soon" page from `public/`. Switching Netlify to `platform/` is a later step.
 - Git identity for this repo: `tolu-scalency <tolu@scalency.co.uk>`.
 - GitHub access uses a fine-grained personal access token saved in the macOS keychain. Never ask the owner to paste a token into chat or the terminal prompt. If access fails, they should create a new token on GitHub.
