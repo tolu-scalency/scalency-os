@@ -25,7 +25,7 @@ Scalency is a marketing agency that books high-quality appointments into clients
 | App | Next.js 16, TypeScript, Tailwind 4, Node.js 26 | `platform/` |
 | Database, login, scheduled jobs | Supabase (Postgres), London | Project `scalency-os` |
 | Hosting | Netlify | `scalency-os` → os.scalency.us; `scalency-landing` → scalency.us |
-| Building | Claude Code | Your own seat |
+| Building | Claude Code | Your own Claude account, with "Help improve Claude" (training on your chats) switched off in its privacy settings |
 | Email, SMS, Slack | To be connected, in test mode first | See the plan's decisions |
 
 Don't add new services to production (e.g. Railway, Vercel, n8n) without agreeing it with Tolu first. Fewer moving parts is the rule.
