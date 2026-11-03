@@ -42,6 +42,7 @@ The owner (Tolu, `tolu-scalency`) is completely new to coding. Treat every sessi
 
 - `docs/plans/sales-team-booking.md`: the Sales Team round-robin booking system (Google Calendar and Calendly). Read it before working on bookings or calendars.
 - `docs/plans/automation-engine.md`: Scalency's own automation engine, replacing GHL and Zapier. Read it before working on automations, workflows, contacts or pipelines.
+- `docs/database.md`: the plain-English guide to the database. The exact SQL is in `supabase/migrations/`. Change the database only by adding a new migration file, never by editing one already applied, and keep the guide in step with it.
 - Tolu's SOPs are in `GHL Backend SOPs/` and `Landing Page SOPs/`. They name clients, so they stay off GitHub (see `.gitignore`). Read them with `textutil -convert txt -stdout`, and never copy client names into committed files.
 
 ## Project facts
