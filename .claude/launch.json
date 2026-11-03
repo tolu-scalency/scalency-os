@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "platform",
+      "runtimeExecutable": "/Users/scalency/.local/node/bin/node",
+      "runtimeArgs": ["platform/node_modules/next/dist/bin/next", "dev", "platform", "--port", "3100"],
+      "port": 3100
+    }
+  ]
+}
