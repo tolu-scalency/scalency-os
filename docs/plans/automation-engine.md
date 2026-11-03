@@ -51,7 +51,22 @@ Some of these are spelled out in the SOPs. Others are implied by them: the SOP s
 | L6 | No-Show | Closer marks the appointment as a no-show | Tag, move to No-Show, follow up to rebook ("your call" in the Automation Standards SOP; copy **to decide**). |
 | L7 | SMS Failure | An outbound SMS fails | Email asking them to check their number |
 
-**Proposed lead-gen pipeline (to confirm):** Application Started → Qualified (Not Booked) → Call Booked → Confirmed → No Answer → No-Show → Unqualified → Follow-Up → Closed → Lost. The Pipelines SOP only gives the webinar pipeline. It says a VSL funnel gets its own pipeline, and that a stage only earns its place if it changes what the setter does next.
+**Lead-gen pipeline (decided 3 November 2026).** The Pipelines SOP only gives the webinar pipeline. It says a VSL funnel gets its own pipeline, and that a stage only earns its place if it changes what the setter or closer does next.
+
+| # | Stage | What it means | What the team does | Moved by |
+|---|---|---|---|---|
+| 1 | Application Started | Gave name, email and phone, didn't finish | Setter calls to help them finish | Automation |
+| 2 | Qualified, Not Booked | Qualified on the form, didn't book | Setter calls to get them booked | Automation |
+| 3 | Call Booked | Booked a call | Setter checks fit and confirms | Automation |
+| 4 | Confirmed | Replied YES, or confirmed on the phone | Closer prepares for the call | Automation (YES reply) or setter |
+| 5 | No Answer | Setter called to confirm, no answer | Setter tries again | Setter |
+| 6 | No-Show | Missed the call | Setter rebooks | Closer |
+| 7 | Unqualified | Disqualified on the form, or not the right person | Nothing; email nurture | Automation or setter |
+| 8 | Follow-Up | Had the call, undecided | Closer follows up | Closer |
+| 9 | Closed | Bought | Onboarding starts | Closer |
+| 10 | Lost | Didn't buy, not being followed up | Nothing | Closer |
+
+Unlike the webinar pipeline there's no separate "Qualified" stage after the setter's check: the application already qualifies, and Confirmed covers being ready for the call.
 
 **Qualifying answers** are stored on the opportunity, not the contact (GHL Custom Fields SOP). The budget question follows the SOP's rules: "I have nothing to invest" first, and five options or fewer.
 
@@ -158,8 +173,9 @@ Test on a test funnel in **shadow mode**: test contacts only, with messages goin
 ## 7. Decisions
 
 1. **Who is it for first (to decide).** Recommendation: build it for many accounts from day one (cheap now, very hard to add later), but switch on only Scalency and one test client first.
-2. **Lead-gen pipeline stages (to decide).** Confirm or change the proposed stages in section 2.
+2. **Lead-gen pipeline stages: decided** (3 November 2026). See the table in section 2.
 3. **Follow-up messages (to decide).** The timings and copy for L1, L2, L3 and L6. The SOPs set the structure but not the wording.
-4. **Email provider (to decide).** Mailgun is already set up on `mail.scalency.us`; check whether that account is Scalency's or GHL's. Otherwise Resend.
-5. **SMS (to decide).** Twilio account in Scalency's name; clients may use their own Twilio accounts (as in the Twilio SOP).
-6. **Meta instant forms (to decide).** Scalency's own ads use Meta instant forms (see `docs/business-context.md`), not a landing-page application. These leads need a Meta webhook into the engine, which needs a Meta developer app and business verification.
+4. **Email: Resend (decided 3 November 2026).** Sent from a new subdomain, `send.scalency.us` (records added at Namecheap). The Mailgun records on `mail.scalency.us` belong to GHL's own email (LC Email), so they stay untouched while GHL runs. Clients will later verify their own sending domains.
+5. **SMS: Twilio (decided 3 November 2026).** An account in Scalency's name, set up by Tolu, with a UK number leads can reply to (needs Twilio's regulatory bundle, which can take a few days). Clients may use their own Twilio accounts (as in the Twilio SOP).
+6. **Team alerts: Slack. The clock: Supabase Cron** (decided 3 November 2026). No extra hosting such as Railway.
+7. **Meta instant forms (to decide).** Scalency's own ads use Meta instant forms (see `docs/business-context.md`), not a landing-page application. These leads need a Meta webhook into the engine, which needs a Meta developer app and business verification.

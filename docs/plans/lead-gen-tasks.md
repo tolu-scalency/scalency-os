@@ -28,7 +28,7 @@ All testing uses made-up test contacts with the account in test mode, so message
 - On finish: save the answers on the submission and the opportunity, mark it qualified or unqualified (recording the answer that disqualified them), move the stage, and tell the page where to send them.
 - A hosted test form in the app, one question per screen with a progress bar, so it can be tested end to end. Client funnel pages will post to the same endpoint.
 - Phone numbers saved with the country code. Consent captured on the form.
-- The lead-gen pipeline stages from the plan (section 2), once Tolu has confirmed them.
+- The lead-gen pipeline and its 10 stages, as decided in the plan (section 2), created for each account.
 
 **Done when:**
 - [ ] Step 1 only → contact, started submission and opportunity exist, and no duplicate contact on a second try with the same email
@@ -47,7 +47,7 @@ All testing uses made-up test contacts with the account in test mode, so message
 - Quiet hours: SMS held until the account's sending window opens, in its time zone.
 - Test mode: every message goes to the account's test email or phone instead, and is marked as such.
 - Enrolment history and an execution log for every step (`workflow_enrollments`, `workflow_step_runs`, `messages`).
-- Email, SMS and Slack providers connected in test mode (which provider is an open decision in the plan: ask Tolu).
+- Providers connected in test mode: **Resend** for email (from `send.scalency.us`), **Twilio** for SMS, **Slack** for team alerts, and **Supabase Cron** as the clock (plan, section 7). Tolu sets up the Resend and Twilio accounts and adds the DNS records; ask for what you need.
 
 **Done when:**
 - [ ] Each action works on a test contact and shows in the execution log
