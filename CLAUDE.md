@@ -44,7 +44,7 @@ The owner (Tolu, `tolu-scalency`) is completely new to coding. Treat every sessi
 
 ## Project facts
 
-- Location on this Mac: `~/Developer/scalency-os`
+- Location on this Mac: `~/Documents/Scalency OS` (moved from `~/Developer/scalency-os` on 3 November 2026)
 - GitHub: `https://github.com/tolu-scalency/scalency-os` (private), branch `main`.
 - Netlify (two projects, both deploy automatically when `main` is pushed):
   - **`scalency-landing`**: public landing site from `landing/`, live at **https://scalency.us** (`www.scalency.us` redirects there). Pages: `index.html`, `book.html` (embeds the GoHighLevel `sales-call-4187` calendar) and `privacy.html`.
