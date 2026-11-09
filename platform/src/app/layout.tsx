@@ -1,24 +1,22 @@
 import type { Metadata } from "next";
-import { Montserrat } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
-// Montserrat everywhere (docs/brand.md).
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
+// Geist for the interface, Geist Mono for small labels, dates and numbers.
+// The fonts are bundled with the app (the "geist" package), so nothing is fetched from Google at build time.
+// docs/brand.md confirms Montserrat for Scalency's public brand. Using Geist in the app needs Tolu's OK.
 
 export const metadata: Metadata = {
-  title: "Scalency OS",
+  title: { default: "Scalency OS", template: "%s · Scalency OS" },
   description: "Scalency's internal operating system.",
   robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en-GB" className={`${montserrat.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en-GB" className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }
