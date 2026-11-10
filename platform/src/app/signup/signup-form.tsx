@@ -14,6 +14,7 @@ export function SignupForm() {
   const [form, setForm] = useState({ fullName: "", email: "", password: "" });
   const [state, setState] = useState<"idle" | "busy" | "confirm">("idle");
   const [message, setMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -85,7 +86,25 @@ export function SignupForm() {
       </label>
       <label className="flex flex-col gap-2">
         <span className="text-[13px] font-semibold">Password</span>
-        <input type="password" required minLength={8} autoComplete="new-password" value={form.password} onChange={set("password")} placeholder="At least 8 characters" className={inputClass} />
+        <span className="relative">
+          <input
+            type={showPassword ? "text" : "password"}
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={form.password}
+            onChange={set("password")}
+            placeholder="At least 8 characters"
+            className={`${inputClass} pr-16`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-[12.5px] font-semibold text-muted hover:text-brand"
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </span>
       </label>
       <button type="submit" disabled={state === "busy"} className="btn-primary flex min-h-[50px] items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-70">
         {state === "busy" ? "Creating your account…" : "Create account"}

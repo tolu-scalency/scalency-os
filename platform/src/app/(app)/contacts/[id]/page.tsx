@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Page, Tile, type Tone } from "@/components/ui";
-import { Loading } from "@/components/states";
 import { TaskList } from "@/components/task-list";
 import { addTask } from "@/app/(app)/tasks/actions";
 import { formatPence, getContactDetail, getWorkspace, timeAgo } from "@/lib/data";
@@ -27,9 +25,7 @@ export default function ContactPage(props: PageProps<"/contacts/[id]">) {
       <Link href="/contacts" className="-mb-2 inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted hover:text-brand">
         <Icon name="arrowLeft" size={15} /> Contacts
       </Link>
-      <Suspense fallback={<Loading rows={5} />}>
         <ContactRecord params={props.params} />
-      </Suspense>
     </Page>
   );
 }

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 import { ActionForm, IconSubmit, SubmitButton } from "@/components/action-form";
-import { Loading } from "@/components/states";
 import { getPipeline, getWorkspace } from "@/lib/data";
 import { addStage } from "../../pipeline/actions";
 import { deleteStage, renameStage, reorderStage } from "../actions";
@@ -11,9 +9,7 @@ export const metadata: Metadata = { title: "Pipeline settings" };
 
 export default function PipelineSettingsPage() {
   return (
-    <Suspense fallback={<Loading rows={4} />}>
       <Stages />
-    </Suspense>
   );
 }
 

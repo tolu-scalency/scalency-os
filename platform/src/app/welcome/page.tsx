@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { createClient } from "@/lib/supabase/server";
@@ -16,9 +15,7 @@ export default function WelcomePage() {
         <div className="flex justify-center">
           <Logo height={30} />
         </div>
-        <Suspense fallback={<div className="skeleton h-[560px] rounded-3xl" />}>
           <Welcome />
-        </Suspense>
       </div>
     </main>
   );

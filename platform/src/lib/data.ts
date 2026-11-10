@@ -363,3 +363,43 @@ export async function getProfile(userId: string) {
   const { data } = await supabase.from("profiles").select("full_name, job_title, phone").eq("user_id", userId).maybeSingle();
   return { fullName: data?.full_name ?? "", jobTitle: data?.job_title ?? "", phone: data?.phone ?? "" };
 }
+
+export type NoteRow = { id: number; text: string; author: string | null; createdAt: string; contactId: string | null; contactName: string | null };
+
+/** Every note written on a contact, newest first. Optional search. */
+export async function listNotes(accountId: string, q = "", limit = 200): Promise<NoteRow[]> {
+  const supabase = await createClient();
+  let query = supabase
+    .from("activity")
+    .select("id, summary, detail, created_at, contact_id, contacts(first_name, last_name, email, phone)")
+    .eq("account_id", accountId)
+    .eq("type", "note")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const term = searchTerm(q);
+  if (term) query = query.ilike("summary", `%${term}%`);
+  const { data } = await query;
+  return (data ?? []).map((n) => {
+    const c = n.contacts as unknown as { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
+    const detail = (n.detail ?? {}) as { author?: string };
+    return {
+      id: n.id,
+      text: n.summary,
+      author: detail.author ?? null,
+      createdAt: n.created_at,
+      contactId: n.contact_id,
+      contactName: c ? fullName(c.first_name, c.last_name, c.email ?? c.phone ?? "Contact") : null,
+    };
+  });
+}
+
+/** New contacts in the last 7 days, for the sidebar counter. */
+export async function leadsThisWeek(accountId: string) {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("contacts")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", accountId)
+    .gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString());
+  return count ?? 0;
+}

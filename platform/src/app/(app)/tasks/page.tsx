@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Page, PageHeader } from "@/components/ui";
-import { EmptyState, Loading } from "@/components/states";
+import { EmptyState } from "@/components/states";
 import { TaskList } from "@/components/task-list";
 import { contactOptions, getWorkspace, listTasks } from "@/lib/data";
 import { addTask } from "./actions";
@@ -13,9 +12,7 @@ export const metadata: Metadata = { title: "Tasks" };
 export default function TasksPage(props: PageProps<"/tasks">) {
   return (
     <Page>
-      <Suspense fallback={<Loading rows={5} />}>
         <Tasks searchParams={props.searchParams} />
-      </Suspense>
     </Page>
   );
 }

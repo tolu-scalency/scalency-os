@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 import { Icon } from "@/components/icon";
 import { Avatar, Page, PageHeader, Pill } from "@/components/ui";
-import { EmptyState, Loading } from "@/components/states";
+import { EmptyState } from "@/components/states";
 import { formatPence, getPipeline, getWorkspace, listContacts, timeAgo } from "@/lib/data";
 import { AddContact } from "./add-contact";
 
@@ -12,9 +11,7 @@ export const metadata: Metadata = { title: "Contacts" };
 export default function ContactsPage(props: PageProps<"/contacts">) {
   return (
     <Page>
-      <Suspense fallback={<Loading rows={6} />}>
         <Contacts searchParams={props.searchParams} />
-      </Suspense>
     </Page>
   );
 }
