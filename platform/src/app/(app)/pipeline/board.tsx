@@ -28,7 +28,7 @@ export function Board({ columns: initial, children }: { columns: BoardColumn[]; 
     setColumns(columns.map((c) => (c.id === from.id ? { ...c, cards: c.cards.filter((k) => k.opportunityId !== cardId) } : c.id === toStage ? { ...c, cards: [card, ...c.cards] } : c)));
     setError("");
     startTransition(async () => {
-      const result = await moveCard(cardId, toStage);
+      const result = await moveCard(cardId, toStage).catch(() => ({ error: "We couldn't move the card. Please try again." }));
       if (result.error) {
         setColumns(previous);
         setError(result.error);

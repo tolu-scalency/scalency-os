@@ -106,6 +106,24 @@ Migration `20261111090000_launch` gets the app ready for public use.
 | `profiles.email` and `is_teammate()` | Teammates can see each other's names and emails on the Team page. |
 | `remove_account_member()` | Owners can remove someone from their workspace (not themselves). |
 
+## Workspaces, workflows and chat
+
+Migration `20261112090000_workspaces_workflows_chat`.
+
+| Part | What it does |
+|---|---|
+| `create_workspace(name)` | Creates another workspace (like a GoHighLevel sub-account) with the signed-in person as owner. Up to 25 each. The app remembers the current one in a cookie. |
+| `my_pending_invites()`, `accept_invite(id)` | Lets someone who already has a login see and accept invites from the workspace menu. |
+| `chat_channels`, `chat_messages` | Team chat. Members read and post in their workspace; messages from workflows have no author. Realtime is switched on for live updates. |
+| `enroll_contact()` | Puts a contact into a workflow (once at a time). |
+| `run_due_workflows(account)` | The engine. Runs due steps for each enrolment, stops at each wait, logs every step in `workflow_step_runs`. Supabase Cron calls it every minute; the app also calls it straight after a change so the first steps run at once. |
+| Triggers on `contacts` and `opportunities` | A new contact, or a contact entering a stage, enrols them in matching active workflows. |
+
+**Workflow format.** `trigger` is `{"type": "contact_created"}`, `{"type": "stage_entered", "stage_id": "..."}` or `{"type": "manual"}`. `steps` is a list run top to bottom:
+`wait` (amount, unit: minutes/hours/days), `email` (subject, body), `sms` (body), `task` (title, due_in_days), `move_stage` (stage_id), `note` (text), `notify_team` (text, posted in #leads). Messages can use `{{first_name}}`, `{{last_name}}`, `{{name}}`, `{{email}}`, `{{phone}}` and `{{workspace}}`.
+
+**Test mode.** Emails and texts are saved in `messages` addressed to the workspace's test email or phone, with status `held_test_mode`. Nothing is delivered until Resend and Twilio are connected.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

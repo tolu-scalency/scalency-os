@@ -6,7 +6,8 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Page, Tile, type Tone } from "@/components/ui";
 import { TaskList } from "@/components/task-list";
 import { addTask } from "@/app/(app)/tasks/actions";
-import { formatPence, getContactDetail, getWorkspace, timeAgo } from "@/lib/data";
+import { formatPence, getContactDetail, getWorkspace, listWorkflows, timeAgo } from "@/lib/data";
+import { enrollContact } from "@/app/(app)/workflows/actions";
 import { addNote, setStage, setValue } from "./actions";
 import { ContactEditor } from "./contact-editor";
 
@@ -38,8 +39,9 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await getWorkspace();
-  const c = await getContactDetail(id, ws.account.id);
+  const [c, workflows] = await Promise.all([getContactDetail(id, ws.account.id), listWorkflows(ws.account.id)]);
   if (!c) notFound();
+  const liveWorkflows = workflows.filter((w) => w.status === "active");
 
   const stages = c.pipeline?.stages ?? [];
   const currentIndex = c.opportunity ? stages.findIndex((s) => s.id === c.opportunity!.stageId) : -1;
@@ -60,6 +62,9 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link href={`/inbox?c=${c.id}`} className="btn-ghost inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold">
+                <Icon name="send" size={15} /> Message
+              </Link>
               {c.phone && (
                 <a href={`tel:${c.phone}`} className="btn-ghost inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold">
                   <Icon name="phone" size={15} /> Call
@@ -182,6 +187,25 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
               <SubmitButton icon="plus" pendingText="Adding…">Add</SubmitButton>
             </ActionForm>
             {c.tasks.length === 0 ? <p className="py-2 text-[13.5px] text-muted">No tasks for this contact.</p> : <TaskList tasks={c.tasks} showContact={false} />}
+          </section>
+
+          <section className="card p-5">
+            <h2 className="mb-1 text-[16px] font-semibold">Workflows</h2>
+            {liveWorkflows.length === 0 ? (
+              <p className="text-[13.5px] text-muted">
+                No workflows are on yet. <Link href="/workflows" className="font-medium text-brand hover:underline">Create one</Link>
+              </p>
+            ) : (
+              <ActionForm action={enrollContact} className="mt-2 flex flex-wrap gap-2">
+                <input type="hidden" name="contact_id" value={c.id} />
+                <select name="workflow_id" aria-label="Workflow" className="field min-w-0 flex-[1_1_160px]">
+                  {liveWorkflows.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+                <SubmitButton icon="zap" pendingText="Adding…">Add</SubmitButton>
+              </ActionForm>
+            )}
           </section>
 
           <section className="card p-5">
