@@ -1,28 +1,52 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icon";
+import { Notice, inputClass } from "@/components/auth-shell";
 import { createClient } from "@/lib/supabase/browser";
 
 const errors: Record<string, string> = {
-  link: "That login link has expired or was already used. Ask for a new one below.",
-  setup: "Scalency OS isn't connected to its database yet. Add the Supabase settings to platform/.env.local, then restart the app.",
+  link: "That login link has expired or was already used. Log in with your password, or ask for a new link.",
+  setup: "Scalency OS isn't connected to its database yet. Add the Supabase settings in Netlify, then redeploy.",
 };
 
-// Invite-only email login: Supabase emails a one-time link. No new accounts are created from this form.
+function plain(message: string) {
+  if (/invalid login credentials/i.test(message)) return "That email and password don't match. Check them and try again.";
+  if (/email not confirmed/i.test(message)) return "Please confirm your email first. Open the link we sent when you signed up.";
+  if (/rate limit/i.test(message)) return "Too many emails were sent in the last hour. Log in with your password, or try the link again later.";
+  if (/signup|not allowed|not found/i.test(message)) return "There's no account with that email yet. Create one below.";
+  return message;
+}
+
+// Log in with email and password, or ask for a one-time login link by email.
 export function LoginForm() {
   const params = useSearchParams();
+  const router = useRouter();
+  const next = safeNext(params.get("next"));
+  const [mode, setMode] = useState<"password" | "link">("password");
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [password, setPassword] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
   const [message, setMessage] = useState(errors[params.get("error") ?? ""] ?? "");
 
-  async function sendLink(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setState("sending");
+    setState("busy");
     setMessage("");
-    const next = params.get("next") ?? "/dashboard";
     const supabase = createClient();
+    if (mode === "password") {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) {
+        setState("idle");
+        setMessage(plain(error.message));
+        return;
+      }
+      router.replace(next);
+      router.refresh();
+      return;
+    }
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
@@ -31,13 +55,8 @@ export function LoginForm() {
       },
     });
     if (error) {
-      setState("error");
-      // Supabase says "Signups not allowed" when the email isn't invited. Say that plainly.
-      setMessage(
-        /signup|not allowed|not found/i.test(error.message)
-          ? "That email isn't on the team yet. Ask the workspace owner to invite you."
-          : error.message,
-      );
+      setState("idle");
+      setMessage(plain(error.message));
       return;
     }
     setState("sent");
@@ -51,37 +70,39 @@ export function LoginForm() {
         <p className="text-sm text-muted">
           We sent a login link to <strong className="text-navy">{email}</strong>. Open it on this device. It works once and expires after an hour.
         </p>
-        <button type="button" onClick={() => setState("idle")} className="w-fit text-sm font-semibold text-brand">Use a different email</button>
+        <button type="button" onClick={() => setState("idle")} className="w-fit text-sm font-semibold text-brand">Back to log in</button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={sendLink} className="flex flex-col gap-[18px]">
-      {message && (
-        <p role="alert" className="rounded-xl border border-[#d99600]/35 bg-warn-bg px-3.5 py-3 text-[13px] text-warn">{message}</p>
-      )}
+    <form onSubmit={submit} className="flex flex-col gap-[18px]">
+      {message && <Notice>{message}</Notice>}
       <label className="flex flex-col gap-2">
-        <span className="text-[13px] font-semibold">Work email</span>
-        <input
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@scalency.co.uk"
-          className="min-h-[50px] rounded-xl border border-line-strong px-3.5 text-[15px] outline-none focus:border-brand"
-        />
+        <span className="text-[13px] font-semibold">Email</span>
+        <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.co.uk" className={inputClass} />
       </label>
-      <button
-        type="submit"
-        disabled={state === "sending"}
-        className="btn-primary flex min-h-[50px] items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-70"
-      >
-        {state === "sending" ? "Sending…" : "Email me a login link"}
+      {mode === "password" && (
+        <label className="flex flex-col gap-2">
+          <span className="text-[13px] font-semibold">Password</span>
+          <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
+        </label>
+      )}
+      <button type="submit" disabled={state === "busy"} className="btn-primary flex min-h-[50px] items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-70">
+        {state === "busy" ? "Please wait…" : mode === "password" ? "Log in" : "Email me a login link"}
         <Icon name="arrowRight" size={16} />
       </button>
-      <p className="text-[13px] leading-relaxed text-muted">Invite only. Ask your workspace owner to add you if you don&apos;t have access.</p>
+      <button type="button" onClick={() => { setMode(mode === "password" ? "link" : "password"); setMessage(""); }} className="w-fit text-sm font-semibold text-brand">
+        {mode === "password" ? "Email me a login link instead" : "Log in with a password instead"}
+      </button>
+      <p className="border-t border-line pt-4 text-sm text-muted">
+        New to Scalency OS? <Link href="/signup" className="font-semibold text-brand">Create an account</Link>
+      </p>
     </form>
   );
+}
+
+/** Only allow redirects inside the app, never to another site. */
+function safeNext(value: string | null) {
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
 }
