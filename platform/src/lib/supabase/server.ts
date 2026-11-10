@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseKey, supabaseUrl } from "./env";
 
@@ -9,6 +10,9 @@ import { supabaseKey, supabaseUrl } from "./env";
  * Reading cookies happens at request time, so callers must sit inside a <Suspense> boundary.
  */
 export async function createClient() {
+  // Everything read through this client is per person and per moment (including dates such as "2H AGO"),
+  // so tell Next.js never to prerender it.
+  await connection();
   const cookieStore = await cookies();
 
   return createServerClient(supabaseUrl(), supabaseKey(), {

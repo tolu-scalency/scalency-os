@@ -1,8 +1,14 @@
-# Netlify settings: what to publish and how to serve it.
+# Netlify settings for the scalency-os project (os.scalency.us): build and serve the app in platform/.
+# The public landing site (scalency.us) is a separate Netlify project and uses landing/netlify.toml.
 
 [build]
-  # Only this folder goes live. Everything else in the repo stays private.
-  publish = "public"
+  # The Next.js app lives in platform/. Netlify detects Next.js and serves it with its Next.js runtime.
+  base = "platform"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "26"
 
 [[headers]]
   for = "/*"
