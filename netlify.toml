@@ -7,6 +7,10 @@
   command = "npm run build"
   publish = ".next"
 
+# Use Netlify's Next.js runtime explicitly so pages and logins are served by it.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
 [build.environment]
   NODE_VERSION = "26"
 
