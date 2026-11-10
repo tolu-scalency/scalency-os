@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
-import { Loading } from "@/components/states";
 import { getProfile, getWorkspace } from "@/lib/data";
 import { updateProfile, updateWorkspace } from "./actions";
 
@@ -9,9 +7,7 @@ export const metadata: Metadata = { title: "Settings" };
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<Loading rows={3} />}>
       <General />
-    </Suspense>
   );
 }
 

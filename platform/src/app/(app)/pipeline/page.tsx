@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 import { Icon } from "@/components/icon";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Page, PageHeader } from "@/components/ui";
-import { Loading } from "@/components/states";
 import { formatPence, getPipelineBoard, getWorkspace } from "@/lib/data";
 import { addStage } from "./actions";
 import { Board } from "./board";
@@ -15,9 +13,7 @@ export const metadata: Metadata = { title: "Pipeline" };
 export default function PipelinePage() {
   return (
     <Page wide>
-      <Suspense fallback={<Loading rows={4} />}>
         <PipelineView />
-      </Suspense>
     </Page>
   );
 }

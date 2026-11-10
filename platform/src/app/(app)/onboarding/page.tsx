@@ -1,6 +1,7 @@
-import { redirect } from "next/navigation";
+import { ComingSoon, comingSoonMetadata } from "@/components/coming-soon";
 
-// This feature isn't live yet; it's listed under "Coming soon" in the sidebar.
-export default function ComingSoon() {
-  redirect("/dashboard");
+export const metadata = comingSoonMetadata("onboarding");
+
+export default function Page() {
+  return <ComingSoon feature="onboarding" />;
 }

@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Suspense } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import { Button, Page, Tile, type Tone } from "@/components/ui";
-import { Loading } from "@/components/states";
 import { TaskList } from "@/components/task-list";
 import { formatPence, getDashboard, getWorkspace, timeAgo } from "@/lib/data";
 
@@ -12,9 +10,7 @@ export const metadata: Metadata = { title: "Home" };
 export default function HomePage() {
   return (
     <Page>
-      <Suspense fallback={<Loading rows={5} />}>
         <Home />
-      </Suspense>
     </Page>
   );
 }
@@ -151,6 +147,32 @@ async function Home() {
           )}
         </section>
       </div>
+
+      <section className="relative overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#0a3fa6,#0a5fe3_60%,#29b0f8)] p-5 text-white shadow-[var(--shadow-card)] sm:p-6">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgba(85,227,236,0.45),transparent)]" />
+        <div className="relative flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#a8f3f7]">Coming to Scalency</div>
+            <h2 className="mt-1 text-[20px] font-semibold tracking-[-0.02em]">Follow-ups that run themselves</h2>
+          </div>
+        </div>
+        <div className="relative mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { href: "/workflows", icon: "zap" as const, title: "Workflows", text: "Texts and emails on autopilot" },
+            { href: "/ai-builder", icon: "spark" as const, title: "AI builder", text: "Describe it, we build it" },
+            { href: "/inbox", icon: "inbox" as const, title: "Inbox", text: "Every conversation in one place" },
+            { href: "/chat", icon: "hash" as const, title: "Team chat", text: "Lead alerts for the whole team" },
+          ].map((f) => (
+            <Link key={f.href} href={f.href} className="flex items-center gap-3 rounded-xl bg-white/10 p-3 ring-1 ring-white/15 transition-colors hover:bg-white/15">
+              <span className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-white text-brand"><Icon name={f.icon} size={17} /></span>
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-semibold">{f.title}</span>
+                <span className="block truncate text-[12px] text-white/75">{f.text}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <section className="card p-5">
         <h2 className="mb-2 text-[16px] font-semibold">Recent activity</h2>

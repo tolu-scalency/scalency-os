@@ -14,6 +14,8 @@ const STEPS: { title: string; text: string; icon: IconName }[] = [
 const goalIcons: IconName[] = ["form", "zap", "calendar", "hash", "spark", "chart"];
 
 // Three short steps after sign-up. All fields stay in one form; only the current step is shown.
+// The form uses noValidate because the browser would otherwise refuse to move on while
+// required fields on later (hidden) steps are still empty. Each step is checked by stepIsValid().
 export function WelcomeForm({ defaultName, email }: { defaultName: string; email: string }) {
   const [step, setStep] = useState(0);
   const [hint, setHint] = useState("");
@@ -26,7 +28,10 @@ export function WelcomeForm({ defaultName, email }: { defaultName: string; email
     if (!box) return true;
     for (const el of Array.from(box.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select"))) {
       if (!el.checkValidity()) {
-        el.reportValidity();
+        // Show our own message next to the form (the browser's bubble can't point at the tap-to-choose buttons).
+        const label = el.closest<HTMLElement>("[data-label]")?.dataset.label ?? "this field";
+        setHint(el.validity.valueMissing ? `Please fill in: ${label}.` : `Please check: ${label}.`);
+        el.focus();
         return false;
       }
     }
@@ -41,6 +46,7 @@ export function WelcomeForm({ defaultName, email }: { defaultName: string; email
   return (
     <form
       action={action}
+      noValidate
       onSubmit={(e) => {
         if (step < last) {
           e.preventDefault();
@@ -158,7 +164,7 @@ export function WelcomeForm({ defaultName, email }: { defaultName: string; email
 
 function Field({ label, optional, children }: { label: string; optional?: boolean; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div data-label={label} className="flex flex-col gap-2">
       <span className="text-[13.5px] font-semibold">
         {label} {optional && <span className="font-normal text-faint">(optional)</span>}
       </span>
