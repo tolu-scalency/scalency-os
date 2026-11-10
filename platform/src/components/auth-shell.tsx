@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Icon, type IconName } from "@/components/icon";
+import { Logo } from "@/components/logo";
 
 // The two-panel layout shared by the log in and sign up pages.
 
@@ -14,9 +15,8 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
   return (
     <main className="flex min-h-screen flex-wrap">
       <div className="flex min-w-0 flex-[1_1_480px] flex-col px-6 py-8 sm:px-12 sm:py-10">
-        <Link href="/" className="inline-flex w-fit items-center gap-2.5">
-          <span className="tile h-[34px] w-[34px] rounded-[10px]"><Icon name="logoArrow" size={17} strokeWidth={2.4} /></span>
-          <span className="text-lg font-bold tracking-[-0.035em]">Scalency <span className="text-brand">OS</span></span>
+        <Link href="/" className="inline-flex w-fit">
+          <Logo height={28} />
         </Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <div className="flex w-full max-w-[400px] flex-col gap-6">
