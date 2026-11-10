@@ -61,6 +61,8 @@ export async function addContact(_prev: ActionResult, fd: FormData): Promise<Act
     summary: `Added by ${ws.fullName ?? ws.userEmail}`,
   });
 
+  // Run any workflow steps this contact just triggered, so follow-ups start straight away.
+  await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
   redirect(`/contacts/${contact.id}`);
 }
 

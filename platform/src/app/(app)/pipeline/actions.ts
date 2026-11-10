@@ -61,6 +61,7 @@ export async function moveCard(opportunityId: string, stageId: string): Promise<
     type: "stage.changed",
     summary: `Moved to ${stage.name}`,
   });
+  await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
   return {};
 }
 

@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,13 +9,19 @@ import { createClient } from "@/lib/supabase/server";
 
 export type Role = "owner" | "admin" | "member";
 
+export type WorkspaceSummary = { id: string; name: string; role: Role };
+
 export type Workspace = {
   userId: string;
   userEmail: string;
   fullName: string | null;
   firstName: string;
   account: { id: string; name: string; testMode: boolean; role: Role };
+  workspaces: WorkspaceSummary[];
 };
+
+/** The cookie that remembers which workspace someone is in. */
+export const WORKSPACE_COOKIE = "scalency_ws";
 
 export type ContactRow = {
   id: string;
@@ -105,19 +112,20 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
   if (!session) redirect("/login");
   const { supabase, userId, email } = session;
 
-  const [membership, profile] = await Promise.all([
-    supabase
-      .from("account_members")
-      .select("role, created_at, accounts(id, name, test_mode)")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+  const [memberships, profile, jar] = await Promise.all([
+    supabase.from("account_members").select("role, created_at, accounts(id, name, test_mode)").eq("user_id", userId).order("created_at", { ascending: true }),
     supabase.from("profiles").select("full_name").eq("user_id", userId).maybeSingle(),
+    cookies(),
   ]);
 
-  const acc = membership.data?.accounts as unknown as { id: string; name: string; test_mode: boolean } | null;
-  if (!acc) redirect("/welcome");
+  const rows = (memberships.data ?? [])
+    .map((m) => ({ role: m.role as Role, acc: m.accounts as unknown as { id: string; name: string; test_mode: boolean } | null }))
+    .filter((m): m is { role: Role; acc: { id: string; name: string; test_mode: boolean } } => Boolean(m.acc));
+  if (!rows.length) redirect("/welcome");
+
+  // Use the workspace they picked last; otherwise the first one they joined.
+  const chosen = jar.get(WORKSPACE_COOKIE)?.value;
+  const current = rows.find((r) => r.acc.id === chosen) ?? rows[0];
 
   const name = profile.data?.full_name ?? null;
   const first = name?.split(/\s+/)[0] || email.split("@")[0] || "there";
@@ -126,7 +134,8 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
     userEmail: email,
     fullName: name,
     firstName: first.charAt(0).toUpperCase() + first.slice(1),
-    account: { id: acc.id, name: acc.name, testMode: acc.test_mode, role: membership.data!.role as Role },
+    account: { id: current.acc.id, name: current.acc.name, testMode: current.acc.test_mode, role: current.role },
+    workspaces: rows.map((r) => ({ id: r.acc.id, name: r.acc.name, role: r.role })),
   };
 });
 
@@ -402,4 +411,172 @@ export async function leadsThisWeek(accountId: string) {
     .eq("account_id", accountId)
     .gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString());
   return count ?? 0;
+}
+
+// ---------------------------------------------------------------------------
+// Invitations, workflows, chat and inbox
+// ---------------------------------------------------------------------------
+
+export type PendingInvite = { id: string; workspace: string; role: string };
+
+/** Invites waiting for the signed-in person. */
+export async function myPendingInvites(): Promise<PendingInvite[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("my_pending_invites");
+  return ((data ?? []) as { invite_id: string; account_name: string; role: string }[]).map((r) => ({ id: r.invite_id, workspace: r.account_name, role: r.role }));
+}
+
+export type WorkflowStep =
+  | { type: "wait"; amount: number; unit: "minutes" | "hours" | "days" }
+  | { type: "email"; subject: string; body: string }
+  | { type: "sms"; body: string }
+  | { type: "task"; title: string; due_in_days: number }
+  | { type: "move_stage"; stage_id: string }
+  | { type: "note"; text: string }
+  | { type: "notify_team"; text: string };
+
+export type WorkflowTrigger = { type: "contact_created" } | { type: "stage_entered"; stage_id: string } | { type: "manual" };
+
+export type WorkflowRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  trigger: WorkflowTrigger;
+  steps: WorkflowStep[];
+  status: "draft" | "active" | "paused" | "archived";
+  approvedBy: string | null;
+  updatedAt: string;
+  activeCount: number;
+  totalCount: number;
+};
+
+export async function listWorkflows(accountId: string): Promise<WorkflowRow[]> {
+  const supabase = await createClient();
+  const [{ data }, { data: enr }] = await Promise.all([
+    supabase.from("workflows").select("id, name, description, trigger, steps, status, client_approved_by, updated_at").eq("account_id", accountId).neq("status", "archived").order("updated_at", { ascending: false }),
+    supabase.from("workflow_enrollments").select("workflow_id, status").eq("account_id", accountId).limit(5000),
+  ]);
+  return (data ?? []).map((w) => ({
+    id: w.id,
+    name: w.name,
+    description: w.description,
+    trigger: w.trigger as WorkflowTrigger,
+    steps: (w.steps ?? []) as WorkflowStep[],
+    status: w.status,
+    approvedBy: w.client_approved_by,
+    updatedAt: w.updated_at,
+    activeCount: (enr ?? []).filter((e) => e.workflow_id === w.id && (e.status === "active" || e.status === "waiting")).length,
+    totalCount: (enr ?? []).filter((e) => e.workflow_id === w.id).length,
+  }));
+}
+
+export async function getWorkflow(id: string, accountId: string) {
+  const supabase = await createClient();
+  const { data: w } = await supabase.from("workflows").select("id, name, description, trigger, steps, status, client_approved_by, client_approved_at, updated_at").eq("id", id).eq("account_id", accountId).maybeSingle();
+  if (!w) return null;
+  const { data: enr } = await supabase
+    .from("workflow_enrollments")
+    .select("id, status, current_step, next_run_at, entered_at, finished_at, exit_reason, contact_id, contacts(first_name, last_name, email, phone), workflow_step_runs(step_key, action, outcome, detail, ran_at)")
+    .eq("workflow_id", id)
+    .order("entered_at", { ascending: false })
+    .limit(50);
+  return {
+    id: w.id as string,
+    name: w.name as string,
+    description: (w.description as string | null) ?? "",
+    trigger: w.trigger as WorkflowTrigger,
+    steps: (w.steps ?? []) as WorkflowStep[],
+    status: w.status as WorkflowRow["status"],
+    approvedBy: w.client_approved_by as string | null,
+    approvedAt: w.client_approved_at as string | null,
+    enrollments: (enr ?? []).map((e) => {
+      const c = e.contacts as unknown as { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
+      const runs = ((e.workflow_step_runs ?? []) as { step_key: string; action: string; outcome: string; detail: Record<string, unknown>; ran_at: string }[]).sort((a, b) => a.ran_at.localeCompare(b.ran_at));
+      return {
+        id: e.id as string,
+        status: e.status as string,
+        nextRunAt: e.next_run_at as string | null,
+        enteredAt: e.entered_at as string,
+        exitReason: e.exit_reason as string | null,
+        contactId: e.contact_id as string,
+        contactName: c ? fullName(c.first_name, c.last_name, c.email ?? c.phone ?? "Contact") : "Contact",
+        runs,
+      };
+    }),
+  };
+}
+
+export type Channel = { id: string; name: string; topic: string | null };
+export type ChatMessage = { id: number; body: string; authorId: string | null; authorName: string; createdAt: string; contactId: string | null };
+
+/** Chat channels, creating #general and #leads the first time. */
+export async function listChannels(accountId: string): Promise<Channel[]> {
+  const supabase = await createClient();
+  let { data } = await supabase.from("chat_channels").select("id, name, topic").eq("account_id", accountId).order("created_at");
+  if (!data?.length) {
+    await supabase.from("chat_channels").insert([
+      { account_id: accountId, name: "general", topic: "Anything and everything." },
+      { account_id: accountId, name: "leads", topic: "New leads and bookings, posted automatically." },
+    ]);
+    ({ data } = await supabase.from("chat_channels").select("id, name, topic").eq("account_id", accountId).order("created_at"));
+  }
+  return (data ?? []) as Channel[];
+}
+
+/** Names for everyone in the workspace, by login id. */
+export async function memberNames(accountId: string) {
+  const supabase = await createClient();
+  const { data: members } = await supabase.from("account_members").select("user_id").eq("account_id", accountId);
+  const ids = (members ?? []).map((m) => m.user_id);
+  const { data: profiles } = ids.length ? await supabase.from("profiles").select("user_id, full_name, email").in("user_id", ids) : { data: [] };
+  const map: Record<string, string> = {};
+  for (const p of profiles ?? []) map[p.user_id] = p.full_name ?? p.email ?? "Teammate";
+  return map;
+}
+
+export async function listChatMessages(accountId: string, channelId: string, names: Record<string, string>, limit = 100): Promise<ChatMessage[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("chat_messages").select("id, body, author_id, created_at, contact_id").eq("account_id", accountId).eq("channel_id", channelId).order("created_at", { ascending: false }).limit(limit);
+  return (data ?? [])
+    .reverse()
+    .map((m) => ({ id: m.id, body: m.body, authorId: m.author_id, authorName: m.author_id ? (names[m.author_id] ?? "Teammate") : "Scalency", createdAt: m.created_at, contactId: m.contact_id }));
+}
+
+export type Thread = { contactId: string; name: string; initials: string; last: string; lastAt: string; channel: string; count: number };
+export type InboxMessage = { id: string; channel: "email" | "sms"; direction: "outbound" | "inbound"; subject: string | null; body: string; status: string; toAddress: string; createdAt: string };
+
+/** Conversations grouped by contact, latest first. */
+export async function listThreads(accountId: string): Promise<Thread[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("messages")
+    .select("contact_id, channel, subject, body, created_at, contacts(first_name, last_name, email, phone)")
+    .eq("account_id", accountId)
+    .not("contact_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  const threads = new Map<string, Thread>();
+  for (const m of data ?? []) {
+    const t = threads.get(m.contact_id);
+    if (t) {
+      t.count += 1;
+      continue;
+    }
+    const c = m.contacts as unknown as { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
+    const name = c ? fullName(c.first_name, c.last_name, c.email ?? c.phone ?? "Contact") : "Contact";
+    threads.set(m.contact_id, { contactId: m.contact_id, name, initials: initialsOf(name), last: m.subject ?? m.body, lastAt: m.created_at, channel: m.channel, count: 1 });
+  }
+  return [...threads.values()];
+}
+
+export async function listThreadMessages(accountId: string, contactId: string): Promise<InboxMessage[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("messages")
+    .select("id, channel, direction, subject, body, status, to_address, created_at")
+    .eq("account_id", accountId)
+    .eq("contact_id", contactId)
+    .order("created_at", { ascending: true })
+    .limit(300);
+  return (data ?? []).map((m) => ({ id: m.id, channel: m.channel, direction: m.direction, subject: m.subject, body: m.body, status: m.status, toAddress: m.to_address, createdAt: m.created_at }));
 }

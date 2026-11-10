@@ -48,6 +48,7 @@ export async function setStage(_prev: ActionResult, fd: FormData): Promise<Actio
     type: "stage.changed",
     summary: `Moved to ${stage.name}`,
   });
+  await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
   refresh();
   return {};
 }

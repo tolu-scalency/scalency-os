@@ -5,8 +5,21 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
+import { ActionForm, SubmitButton } from "@/components/action-form";
+import { acceptInvite, createWorkspace, switchWorkspace } from "@/app/(app)/workspace-actions";
+import { CommandBar } from "./command";
 
-export type ShellUser = { name: string; email: string; initials: string; workspace: string; role: string; leadsThisWeek: number };
+export type ShellUser = {
+  name: string;
+  email: string;
+  initials: string;
+  workspace: string;
+  workspaceId: string;
+  role: string;
+  leadsThisWeek: number;
+  workspaces: { id: string; name: string; role: string }[];
+  invites: { id: string; workspace: string; role: string }[];
+};
 
 type Item = { href: string; label: string; icon: IconName; soon?: boolean };
 type Section = { title?: string; items: Item[] };
@@ -16,7 +29,7 @@ const sections: Section[] = [
   {
     items: [
       { href: "/dashboard", label: "Home", icon: "home" },
-      { href: "/inbox", label: "Inbox", icon: "inbox", soon: true },
+      { href: "/inbox", label: "Inbox", icon: "inbox" },
       { href: "/tasks", label: "Tasks", icon: "tasks" },
       { href: "/calendar", label: "Calendar", icon: "calendar", soon: true },
     ],
@@ -50,7 +63,7 @@ const sections: Section[] = [
   {
     title: "Automation",
     items: [
-      { href: "/workflows", label: "Workflows", icon: "zap", soon: true },
+      { href: "/workflows", label: "Workflows", icon: "zap" },
       { href: "/ai-builder", label: "AI builder", icon: "spark", soon: true },
       { href: "/agents", label: "AI agents", icon: "user", soon: true },
     ],
@@ -58,7 +71,7 @@ const sections: Section[] = [
   {
     title: "Team",
     items: [
-      { href: "/chat", label: "Team chat", icon: "hash", soon: true },
+      { href: "/chat", label: "Team chat", icon: "hash" },
       { href: "/settings/team", label: "Members", icon: "team" },
       { href: "/settings", label: "Settings", icon: "settings" },
     ],
@@ -76,6 +89,19 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
+
+  // Ctrl+K or Cmd+K opens the command bar from anywhere.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCommandOpen((o) => !o);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Remember the sidebar choice in this browser.
   useEffect(() => {
@@ -115,7 +141,8 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar user={user} onMenu={() => setMobileOpen(true)} />
+        <TopBar user={user} onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
+        <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} />
         <div className="flex-1">{children}</div>
       </div>
     </div>
@@ -147,15 +174,7 @@ function Sidebar({ pathname, user, collapsed, onToggle, mobile = false }: { path
       </div>
 
       <div className="flex-none px-3">
-        <div className={`flex items-center gap-2.5 rounded-xl bg-white/[0.09] ring-1 ring-white/15 ${collapsed ? "justify-center p-1.5" : "p-2"}`} title={user.workspace}>
-          <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-white text-[13px] font-bold text-brand">{user.workspace.charAt(0).toUpperCase()}</span>
-          {!collapsed && (
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold">{user.workspace}</div>
-              <div className="text-[11px] capitalize text-white/70">{user.role}</div>
-            </div>
-          )}
-        </div>
+        <WorkspaceSwitcher user={user} collapsed={collapsed} />
 
         {/* Live counter of new leads this week */}
         <Link
@@ -232,7 +251,7 @@ function Sidebar({ pathname, user, collapsed, onToggle, mobile = false }: { path
   );
 }
 
-function TopBar({ user, onMenu }: { user: ShellUser; onMenu: () => void }) {
+function TopBar({ user, onMenu, onCommand }: { user: ShellUser; onMenu: () => void; onCommand: () => void }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<"account" | "alerts" | null>(null);
@@ -264,6 +283,15 @@ function TopBar({ user, onMenu }: { user: ShellUser; onMenu: () => void }) {
       </form>
 
       <div className="ml-auto flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={onCommand}
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-[linear-gradient(135deg,#eef2ff,#e7f1fe)] px-3 text-[13.5px] font-semibold text-[#3b3fd8] ring-1 ring-[#c7d2fe] transition hover:ring-[#a5b4fc]"
+        >
+          <Icon name="spark" size={16} />
+          <span className="hidden sm:inline">Ask AI</span>
+          <kbd className="hidden rounded border border-[#c7d2fe] bg-white px-1 font-mono text-[10.5px] text-[#6366f1] md:inline">Ctrl K</kbd>
+        </button>
         <div className="relative">
           <button
             type="button"
@@ -334,5 +362,96 @@ function MenuLink({ href, icon, children, onClick }: { href: string; icon: IconN
       <Icon name={icon} size={16} className="text-muted" />
       {children}
     </Link>
+  );
+}
+
+function WorkspaceSwitcher({ user, collapsed }: { user: ShellUser; collapsed: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        title={user.workspace}
+        className={`flex w-full items-center gap-2.5 rounded-xl bg-white/[0.09] text-left ring-1 ring-white/15 transition-colors hover:bg-white/[0.14] ${collapsed ? "justify-center p-1.5" : "p-2"}`}
+      >
+        <span className="relative inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-white text-[13px] font-bold text-brand">
+          {user.workspace.charAt(0).toUpperCase()}
+          {user.invites.length > 0 && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-[#0a47b8] bg-turquoise" />}
+        </span>
+        {!collapsed && (
+          <>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-semibold">{user.workspace}</span>
+              <span className="block text-[11px] capitalize text-white/70">{user.role}</span>
+            </span>
+            <Icon name="chevronDown" size={15} className="text-white/70" />
+          </>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <button type="button" aria-label="Close" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
+          <div className="rise absolute left-0 top-12 z-50 w-[268px] rounded-2xl border border-line bg-white p-1.5 text-navy shadow-[var(--shadow-pop)]">
+            <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-medium text-faint">Your workspaces</div>
+            <ul className="max-h-64 overflow-y-auto">
+              {user.workspaces.map((w) => (
+                <li key={w.id}>
+                  <form action={switchWorkspace}>
+                    <input type="hidden" name="id" value={w.id} />
+                    <button type="submit" className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13.5px] hover:bg-surface ${w.id === user.workspaceId ? "bg-chip" : ""}`}>
+                      <span className="inline-flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-[linear-gradient(135deg,#55e3ec,#0a5fe3)] text-[12px] font-bold text-white">{w.name.charAt(0).toUpperCase()}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{w.name}</span>
+                        <span className="block text-[11.5px] capitalize text-muted">{w.role}</span>
+                      </span>
+                      {w.id === user.workspaceId && <Icon name="check" size={15} className="text-brand" />}
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+
+            {user.invites.length > 0 && (
+              <>
+                <div className="my-1 h-px bg-line" />
+                <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-medium text-faint">Invitations</div>
+                {user.invites.map((i) => (
+                  <form key={i.id} action={acceptInvite} className="flex items-center gap-2 rounded-xl px-2.5 py-2">
+                    <input type="hidden" name="id" value={i.id} />
+                    <span className="min-w-0 flex-1 truncate text-[13px]">Join <strong>{i.workspace}</strong></span>
+                    <button type="submit" className="btn-primary rounded-lg px-2.5 py-1 text-[12px] font-semibold">Join</button>
+                  </form>
+                ))}
+              </>
+            )}
+
+            <div className="my-1 h-px bg-line" />
+            {creating ? (
+              <ActionForm action={createWorkspace} className="flex flex-col gap-2 p-1.5">
+                <input name="name" required autoFocus placeholder="Workspace name, e.g. a client" className="field h-10 min-h-0" />
+                <div className="flex justify-end gap-1.5">
+                  <button type="button" onClick={() => setCreating(false)} className="rounded-lg px-3 text-[12.5px] font-medium text-muted hover:text-navy">Cancel</button>
+                  <SubmitButton pendingText="Creating…" className="min-h-9 px-3">Create</SubmitButton>
+                </div>
+              </ActionForm>
+            ) : (
+              <button type="button" onClick={() => setCreating(true)} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13.5px] font-medium text-brand hover:bg-surface">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-sky/60"><Icon name="plus" size={14} /></span>
+                New workspace
+              </button>
+            )}
+            <a href="/settings/team" className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13.5px] text-navy hover:bg-surface">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-surface text-muted"><Icon name="team" size={14} /></span>
+              Invite people
+            </a>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
