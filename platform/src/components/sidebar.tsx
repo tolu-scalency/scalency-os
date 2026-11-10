@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
@@ -67,14 +68,8 @@ export function Sidebar() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.10)_1px,transparent_1px)] bg-[length:18px_18px]" />
       <div className="pointer-events-none absolute -right-28 -top-36 h-72 w-80 bg-[radial-gradient(closest-side,rgba(100,231,239,0.35),transparent)]" />
 
-      <Link href="/dashboard" className="relative flex items-center gap-2.5 px-2 pb-[18px] pt-1">
-        <span className="inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-white text-brand shadow-[0_6px_18px_rgba(2,40,90,0.35)]">
-          <Icon name="logoArrow" size={17} strokeWidth={2.4} />
-        </span>
-        <span className="text-[17px] font-bold tracking-[-0.03em]">
-          Scalency
-          <span className="ml-1.5 rounded-md bg-white/20 px-1.5 py-0.5 align-[2px] font-mono text-[10.5px] font-semibold tracking-wider">OS</span>
-        </span>
+      <Link href="/dashboard" className="relative flex items-center px-2 pb-[18px] pt-1">
+        <Logo variant="white" height={24} />
       </Link>
 
       <div className="relative mb-3 flex items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 p-2.5">
