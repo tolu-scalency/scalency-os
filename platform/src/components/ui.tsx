@@ -80,13 +80,13 @@ type ButtonProps = {
 
 /** A button, or a link styled as one when `href` is given. */
 export function Button({ children, href, variant = "secondary", icon, iconRight, size = "md", className = "", label }: ButtonProps) {
-  const base = `inline-flex items-center gap-2 whitespace-nowrap rounded-[11px] font-medium transition-[filter,border-color] ${
+  const base = `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold ${
     size === "sm" ? "min-h-9 px-3 text-[13px]" : "min-h-10 px-4 text-[13.5px]"
   }`;
   const look =
     variant === "primary"
-      ? "btn-primary hover:brightness-110"
-      : "border border-line-strong bg-surface text-navy hover:border-brand hover:text-brand";
+      ? "btn-primary"
+      : "btn-ghost";
   const content = (
     <>
       {icon && <Icon name={icon} size={15} />}
@@ -112,14 +112,19 @@ export function Button({ children, href, variant = "secondary", icon, iconRight,
 export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
-      <div>
-        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
-        <h1 className="mt-2.5 text-[30px] font-semibold leading-tight tracking-[-0.035em]">{title}</h1>
-        {subtitle && <div className="mt-1.5 text-sm text-muted">{subtitle}</div>}
+      <div className="min-w-0">
+        {eyebrow && <div className="eyebrow mb-2">{eyebrow}</div>}
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.03em] sm:text-[28px]">{title}</h1>
+        {subtitle && <div className="mt-1 text-[14px] text-muted">{subtitle}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
+}
+
+/** The padded column every page sits in. */
+export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+  return <main className={`fade-in mx-auto flex w-full flex-col gap-6 px-4 pb-14 pt-6 sm:px-7 sm:pt-8 ${wide ? "" : "max-w-[1240px]"}`}>{children}</main>;
 }
 
 /** Segmented control. Visual only for now. */

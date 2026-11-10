@@ -1,22 +1,32 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { NavProgress } from "@/components/shell/nav-progress";
 import "./globals.css";
 
-// Geist for the interface, Geist Mono for small labels, dates and numbers.
-// The fonts are bundled with the app (the "geist" package), so nothing is fetched from Google at build time.
-// docs/brand.md confirms Montserrat for Scalency's public brand. Using Geist in the app needs Tolu's OK.
+// Geist for the interface, Geist Mono for small labels and numbers. Bundled with the app, so nothing loads from Google.
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://os.scalency.us"),
   title: { default: "Scalency OS", template: "%s · Scalency OS" },
-  description: "Scalency's internal operating system.",
-  robots: { index: false, follow: false },
+  description: "Leads, pipeline, tasks and your team in one place. Every enquiry answered, followed up and booked.",
+  applicationName: "Scalency OS",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a5fe3",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en-GB" className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <Suspense fallback={null}>
+          <NavProgress />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

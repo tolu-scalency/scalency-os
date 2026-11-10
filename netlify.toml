@@ -17,8 +17,6 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    # Keep this internal tool out of search engines.
-    X-Robots-Tag = "noindex, nofollow"
     # Standard browser safety settings.
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"

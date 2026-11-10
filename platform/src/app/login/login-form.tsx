@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { Notice, inputClass } from "@/components/auth-shell";
 import { createClient } from "@/lib/supabase/browser";
@@ -22,14 +22,22 @@ function plain(message: string) {
 
 // Log in with email and password, or ask for a one-time login link by email.
 export function LoginForm() {
-  const params = useSearchParams();
   const router = useRouter();
-  const next = safeNext(params.get("next"));
+  const [next, setNext] = useState("/dashboard");
   const [mode, setMode] = useState<"password" | "link">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
-  const [message, setMessage] = useState(errors[params.get("error") ?? ""] ?? "");
+  const [message, setMessage] = useState("");
+
+  // Read ?next= and ?error= after the page shows, so the form appears straight away instead of a blank box.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNext(safeNext(params.get("next")));
+    const error = errors[params.get("error") ?? ""];
+    if (error) setMessage(error);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

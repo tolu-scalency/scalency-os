@@ -1,22 +1,45 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Sidebar } from "@/components/sidebar";
-import { Topbar } from "@/components/topbar";
+import { AppShell } from "@/components/shell/app-shell";
+import { getWorkspace, initialsOf } from "@/lib/data";
 
-// Every signed-in screen shares the blue sidebar and the top bar.
-// Both read the current address, so they sit behind <Suspense> for pages with ids in the address (e.g. a contact).
+// Signed-in screens are private, so keep them out of search engines.
+export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+// Every signed-in screen shares the sidebar and top bar. The workspace is loaded once per request.
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-wrap bg-white">
-      <div className="flex-[1_1_256px] lg:max-w-[256px]">
-        <Suspense fallback={<div className="sidebar-blue min-h-screen" />}>
-          <Sidebar />
-        </Suspense>
-      </div>
-      <div className="flex min-w-0 flex-[999_1_640px] flex-col">
-        <Suspense fallback={<div className="min-h-[68px] border-b border-line" />}>
-          <Topbar />
-        </Suspense>
-        <div className="flex-1">{children}</div>
+    <Suspense fallback={<ShellSkeleton />}>
+      <Shell>{children}</Shell>
+    </Suspense>
+  );
+}
+
+async function Shell({ children }: { children: React.ReactNode }) {
+  const ws = await getWorkspace();
+  const name = ws.fullName ?? ws.firstName;
+  return (
+    <AppShell user={{ name, email: ws.userEmail, initials: initialsOf(name), workspace: ws.account.name, role: ws.account.role }}>
+      {children}
+    </AppShell>
+  );
+}
+
+function ShellSkeleton() {
+  return (
+    <div className="flex min-h-screen bg-canvas">
+      <div className="sidebar-blue hidden h-screen w-[248px] flex-none lg:block" />
+      <div className="flex flex-1 flex-col">
+        <div className="h-16 border-b border-line bg-white" />
+        <div className="flex flex-col gap-4 p-6">
+          <div className="skeleton h-9 w-64" />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="skeleton h-28" />
+            <div className="skeleton h-28" />
+            <div className="skeleton h-28" />
+          </div>
+          <div className="skeleton h-72" />
+        </div>
       </div>
     </div>
   );

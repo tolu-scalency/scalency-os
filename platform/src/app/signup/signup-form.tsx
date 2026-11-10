@@ -43,6 +43,12 @@ export function SignupForm() {
       );
       return;
     }
+    // Supabase hides whether an email is taken: it returns a user with no identities instead of an error.
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setState("idle");
+      setMessage("There's already an account with that email. Log in instead, with your password or an email link.");
+      return;
+    }
     // With email confirmation on, Supabase returns no session until the email link is opened.
     if (!data.session) {
       setState("confirm");
