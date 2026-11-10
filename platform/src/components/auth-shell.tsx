@@ -52,8 +52,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
   );
 }
 
-export const inputClass =
-  "min-h-[50px] w-full rounded-xl border border-line-strong bg-white px-3.5 text-[15px] outline-none focus:border-brand";
+export const inputClass = "field h-12 text-[15px]";
 
 export function Notice({ tone = "warn", children }: { tone?: "warn" | "bad" | "ok"; children: ReactNode }) {
   const tones = {

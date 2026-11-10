@@ -94,6 +94,18 @@ Migration `20261110120000_self_signup` lets anyone create an account from os.sca
 
 The flow: **/signup** (name, email, password), then **/welcome** (about you, your business, your goals), then the dashboard.
 
+## Launch
+
+Migration `20261111090000_launch` gets the app ready for public use.
+
+| Part | What it does |
+|---|---|
+| `create_my_workspace` (updated) | New workspaces start empty. The owner builds their own pipeline in the app, from a template or their own stages. |
+| `tasks` table | To-dos with an optional due date and contact. Members of the workspace can see and change them. |
+| `account_invites` table | An owner or admin adds an email. `accept_my_invites()` joins that person to the workspace when they sign up or log in. |
+| `profiles.email` and `is_teammate()` | Teammates can see each other's names and emails on the Team page. |
+| `remove_account_member()` | Owners can remove someone from their workspace (not themselves). |
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

@@ -1,74 +1,93 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getWorkspace } from "@/lib/data";
+import { EMAIL, PHONE_HELP, normalisePhone, parsePounds, text, type ActionResult } from "@/lib/forms";
 
-export type AddContactState = { error?: string };
-
-const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const PHONE = /^\+[1-9][0-9]{6,14}$/;
-
-// Turns "07700 900123" into "+447700900123". Anything else must already start with + and the country code.
-function normalisePhone(raw: string) {
-  const p = raw.replace(/[\s().-]/g, "");
-  if (!p) return null;
-  if (/^07\d{9}$/.test(p)) return "+44" + p.slice(1);
-  if (/^00\d+$/.test(p)) return "+" + p.slice(2);
-  return p;
+function readContact(fd: FormData) {
+  const first = text(fd, "first_name", 80);
+  const last = text(fd, "last_name", 80);
+  const email = text(fd, "email", 200).toLowerCase() || null;
+  const phone = normalisePhone(text(fd, "phone", 30));
+  if (!first) return { error: "Add a first name." } as const;
+  if (!email && !phone) return { error: "Add an email or a phone number." } as const;
+  if (email && !EMAIL.test(email)) return { error: "That email doesn't look right." } as const;
+  if (phone === "invalid") return { error: PHONE_HELP } as const;
+  return { first, last: last || null, email, phone } as const;
 }
 
-/** Adds a contact by hand and puts them in the first stage of the pipeline. Runs as the signed-in person. */
-export async function addContact(_prev: AddContactState, form: FormData): Promise<AddContactState> {
-  const first = String(form.get("first_name") ?? "").trim();
-  const last = String(form.get("last_name") ?? "").trim();
-  const email = String(form.get("email") ?? "").trim().toLowerCase() || null;
-  const phone = normalisePhone(String(form.get("phone") ?? ""));
-  const isTest = form.get("is_test") === "on";
+/** Adds a contact, and puts them in the pipeline if a stage was chosen. */
+export async function addContact(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const c = readContact(fd);
+  if ("error" in c) return { error: c.error };
+  const value = parsePounds(text(fd, "value", 20));
+  if (value === -1) return { error: "Enter the deal value as a number, like 1500." };
+  const stageId = text(fd, "stage_id", 40);
 
-  if (!first) return { error: "Add a first name." };
-  if (!email && !phone) return { error: "Add an email or a phone number." };
-  if (email && !EMAIL.test(email)) return { error: "That email doesn't look right." };
-  if (phone && !PHONE.test(phone)) return { error: "Phone numbers need the country code, e.g. +44 7700 900123." };
-
+  const ws = await getWorkspace();
   const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) redirect("/login");
-
-  const { data: account } = await supabase.from("accounts").select("id").order("created_at").limit(1).maybeSingle();
-  if (!account) return { error: "Your login isn't linked to an account yet." };
 
   const { data: contact, error } = await supabase
     .from("contacts")
-    .insert({ account_id: account.id, first_name: first, last_name: last || null, email, phone, source: "manual", is_test: isTest })
+    .insert({ account_id: ws.account.id, first_name: c.first, last_name: c.last, email: c.email, phone: c.phone, source: "manual" })
     .select("id")
     .single();
   if (error || !contact) {
-    if (error?.code === "23505") return { error: "A contact with this email already exists." };
-    return { error: `Couldn't save the contact: ${error?.message ?? "unknown error"}` };
+    if (error?.code === "23505") return { error: "You already have a contact with this email." };
+    return { error: "We couldn't save the contact. Please try again." };
   }
 
-  // Put them in the first stage of the account's pipeline, if there is one.
-  const { data: pipeline } = await supabase.from("pipelines").select("id").eq("account_id", account.id).order("created_at").limit(1).maybeSingle();
-  if (pipeline) {
-    const { data: stage } = await supabase.from("pipeline_stages").select("id").eq("pipeline_id", pipeline.id).order("position").limit(1).maybeSingle();
+  if (stageId) {
+    const { data: stage } = await supabase.from("pipeline_stages").select("id, pipeline_id").eq("id", stageId).eq("account_id", ws.account.id).maybeSingle();
     if (stage) {
       await supabase.from("opportunities").insert({
-        account_id: account.id,
+        account_id: ws.account.id,
         contact_id: contact.id,
-        pipeline_id: pipeline.id,
+        pipeline_id: stage.pipeline_id,
         stage_id: stage.id,
-        name: [first, last].filter(Boolean).join(" "),
+        name: [c.first, c.last].filter(Boolean).join(" "),
+        value_pence: value,
         source: "manual",
       });
     }
   }
 
   await supabase.from("activity").insert({
-    account_id: account.id,
+    account_id: ws.account.id,
     contact_id: contact.id,
     type: "contact.created",
-    summary: `Added by hand by ${auth.user.email ?? "a team member"}`,
+    summary: `Added by ${ws.fullName ?? ws.userEmail}`,
   });
 
   redirect(`/contacts/${contact.id}`);
+}
+
+/** Saves changes to a contact's name, email and phone. */
+export async function updateContact(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const id = text(fd, "id", 40);
+  const c = readContact(fd);
+  if ("error" in c) return { error: c.error };
+  const ws = await getWorkspace();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("contacts")
+    .update({ first_name: c.first, last_name: c.last, email: c.email, phone: c.phone })
+    .eq("id", id)
+    .eq("account_id", ws.account.id);
+  if (error) return { error: error.code === "23505" ? "Another contact already has this email." : "We couldn't save the changes." };
+  await supabase.from("opportunities").update({ name: [c.first, c.last].filter(Boolean).join(" ") }).eq("contact_id", id);
+  refresh();
+  return { ok: "Saved." };
+}
+
+/** Deletes a contact and everything linked to them. */
+export async function deleteContact(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const id = text(fd, "id", 40);
+  const ws = await getWorkspace();
+  const supabase = await createClient();
+  const { error } = await supabase.from("contacts").delete().eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't delete this contact." };
+  redirect("/contacts");
 }

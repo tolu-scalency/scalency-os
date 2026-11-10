@@ -58,6 +58,7 @@ export async function finishOnboarding(_prev: OnboardingState, fd: FormData): Pr
     full_name: fullName,
     job_title: role,
     phone,
+    email: auth.user.email,
   });
   if (profileError) return { error: "We couldn't save your details. Please try again." };
 
