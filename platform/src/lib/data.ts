@@ -58,7 +58,7 @@ export function countRecent(rows: { createdAt: string }[], days: number) {
   return rows.filter((r) => new Date(r.createdAt).getTime() > since).length;
 }
 
-/** The signed-in person and the account they work in. Sends them to /login if they aren't signed in. */
+/** The signed-in person and the account they work in. Sends them to /login if they aren't signed in, or to /welcome if they have no workspace yet. */
 export async function getWorkspace(): Promise<Workspace> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -71,6 +71,9 @@ export async function getWorkspace(): Promise<Workspace> {
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+
+  // Signed up but not set up yet: finish the onboarding steps first.
+  if (!account) redirect("/welcome");
 
   return {
     userEmail: auth.user.email ?? "",

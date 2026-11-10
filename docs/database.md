@@ -82,6 +82,18 @@ Migration `20261109120000_account_setup` adds two helpers that are run by hand i
 
 The login must exist first: invite the person in Supabase under Authentication > Users. Step-by-step instructions are in `docs/setup-dev.md`.
 
+## Sign-up and onboarding
+
+Migration `20261110120000_self_signup` lets anyone create an account from os.scalency.us/signup and set up their own workspace.
+
+| Part | What it does |
+|---|---|
+| `profiles` table | One row per login: full name, role and mobile number. People can only see and edit their own row. |
+| `accounts.onboarding` | What the business told us when it signed up: website, industry, team size, goals, leads each month and how they heard about us. |
+| `create_my_workspace(business_name, details)` | Called by the app at the end of onboarding, as the signed-in person. Creates their account in test mode (their email is the test inbox), makes them the **owner** and adds the **Lead gen** pipeline with its 10 stages. If they already own an account it returns that one. Signed-out visitors can't call it. |
+
+The flow: **/signup** (name, email, password), then **/welcome** (about you, your business, your goals), then the dashboard.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
