@@ -1,27 +1,136 @@
 @import "tailwindcss";
 
-/* Brand colours from docs/brand.md (measured from the logo). White and blue only, so no dark theme. */
+/*
+  Scalency OS design tokens.
+  Colours come from docs/brand.md (measured from the logo). The app is white with a brand-blue sidebar.
+  Status colours (ok, warn, bad) and the accent tile colours are for the app only, never for public copy.
+*/
 @theme inline {
   --color-white: #ffffff;
   --color-turquoise: #64e7ef;
   --color-sky: #2fa8eb;
   --color-bright: #077ddc;
   --color-brand: #0465c7;
+  --color-brand-dark: #03539f;
   --color-navy: #0b2447;
+  --color-ink: #061a3a;
   --color-muted: #52627a;
   --color-tint: #eef6fd;
-  --color-line: #d9e6f2;
-  --font-sans: var(--font-montserrat), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-chip: #e8f3fd;
+  --color-surface: #f5f8fc;
+  --color-line: #e1e9f3;
+  --color-line-strong: #cfdcea;
+  --color-ok: #0f7b4f;
+  --color-ok-bg: #e4f5ec;
+  --color-warn: #8a5a00;
+  --color-warn-bg: #fff3d6;
+  --color-bad: #b42318;
+  --color-bad-bg: #fdecea;
+
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 :root {
   color-scheme: light;
   --gradient: linear-gradient(90deg, #64e7ef 0%, #2fa8eb 50%, #0465c7 100%);
+  --shadow-card: 0 1px 2px rgba(11, 36, 71, 0.05), 0 16px 36px -12px rgba(11, 36, 71, 0.12);
 }
 
 body {
-  background: var(--color-tint);
+  background: #ffffff;
   color: var(--color-navy);
   font-family: var(--font-sans);
-  line-height: 1.6;
+  line-height: 1.5;
+  letter-spacing: -0.005em;
+}
+
+/* A white card with a hairline border and a soft shadow. */
+@utility card {
+  background: #ffffff;
+  border: 1px solid var(--color-line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Small uppercase label in the mono font, used above headings and for metadata. */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* Faint dotted grid behind hero areas and canvases. */
+@utility dots {
+  background-image: radial-gradient(rgba(11, 36, 71, 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* The sidebar's brand-blue background. */
+@utility sidebar-blue {
+  background: linear-gradient(180deg, #0571d9 0%, #0465c7 45%, #03539f 100%);
+}
+
+/* Primary button: brand blue with a soft glow. */
+@utility btn-primary {
+  background: linear-gradient(180deg, #2b93ee, #0465c7);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 8px 24px -6px rgba(4, 101, 199, 0.6);
+}
+
+/* Gradient icon tiles. One colour per kind of thing, so screens are easy to scan. */
+@utility tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: #ffffff;
+  background: linear-gradient(135deg, #64e7ef, #0465c7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px -6px rgba(47, 168, 235, 0.6);
+}
+@utility tile-violet {
+  background: linear-gradient(135deg, #a5b4fc, #4f46e5);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px -6px rgba(79, 70, 229, 0.55);
+}
+@utility tile-orange {
+  background: linear-gradient(135deg, #fdba74, #ea580c);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px -6px rgba(234, 88, 12, 0.5);
+}
+@utility tile-green {
+  background: linear-gradient(135deg, #6ee7b7, #059669);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px -6px rgba(5, 150, 105, 0.5);
+}
+@utility tile-pink {
+  background: linear-gradient(135deg, #f0abfc, #c026d3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px -6px rgba(192, 38, 211, 0.45);
+}
+@utility tile-red {
+  background: linear-gradient(135deg, #fca5a5, #dc2626);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px -6px rgba(220, 38, 38, 0.45);
+}
+@utility tile-grey {
+  background: linear-gradient(135deg, #94a3b8, #475569);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 20px -6px rgba(71, 85, 105, 0.45);
+}
+
+/* Moving dashes on workflow connectors. */
+@keyframes flow-down {
+  from { background-position: 0 0; }
+  to { background-position: 0 8px; }
+}
+@utility connector {
+  width: 2px;
+  height: 24px;
+  margin: 0 auto;
+  background: repeating-linear-gradient(to bottom, #2fa8eb 0, #2fa8eb 4px, transparent 4px, transparent 8px);
+  background-size: 2px 8px;
+  animation: flow-down 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connector { animation: none; }
 }
