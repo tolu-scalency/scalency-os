@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/browser";
 import { Icon, type IconName } from "./icon";
 
 type Item = { href: string; label: string; icon: IconName; badge?: string; isNew?: boolean };
@@ -11,7 +13,7 @@ const sections: { title: string; items: Item[] }[] = [
     title: "Workspace",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
-      { href: "/inbox", label: "Conversations", icon: "inbox", badge: "4" },
+      { href: "/inbox", label: "Conversations", icon: "inbox" },
       { href: "/contacts", label: "Contacts", icon: "users" },
       { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
       { href: "/calendar", label: "Calendar", icon: "calendar" },
@@ -35,7 +37,7 @@ const sections: { title: string; items: Item[] }[] = [
   {
     title: "Team",
     items: [
-      { href: "/chat", label: "Team chat", icon: "hash", badge: "3" },
+      { href: "/chat", label: "Team chat", icon: "hash" },
       { href: "/settings", label: "Settings", icon: "settings" },
     ],
   },
@@ -50,6 +52,15 @@ function activeHref(pathname: string) {
 export function Sidebar() {
   const pathname = usePathname();
   const current = activeHref(pathname);
+  const [email, setEmail] = useState<string | null>(null);
+
+  // Show who is signed in. The page itself is already protected on the server.
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => setEmail(data.user?.email ?? null));
+  }, []);
+  const initials = (email ?? "?").slice(0, 2).toUpperCase();
 
   return (
     <nav aria-label="Main" className="sidebar-blue relative flex h-full min-h-screen flex-col gap-0.5 overflow-hidden px-3.5 py-5 text-white">
@@ -116,24 +127,19 @@ export function Sidebar() {
       <div className="relative mt-auto flex flex-col gap-2.5 pt-4">
         <div className="rounded-[14px] border border-white/20 bg-white/10 p-3.5">
           <div className="flex items-center gap-2 text-[13px] font-semibold">
-            <Icon name="spark" size={15} />
-            AI usage
+            <Icon name="shield" size={15} />
+            Test mode is on
           </div>
-          <div className="my-2.5 h-1.5 overflow-hidden rounded-full bg-white/20">
-            <div className="h-full w-[38%] rounded-full bg-gradient-to-r from-[#a8f3f7] to-white" />
-          </div>
-          <div className="font-mono text-[10.5px] text-white/85">380 / 1,000 RUNS THIS MONTH</div>
+          <p className="mt-1.5 text-[11.5px] leading-snug text-white/85">Messages only reach the test inbox and phone until the owner switches this off.</p>
         </div>
         <div className="flex items-center gap-2.5 p-2">
-          <span className="relative inline-flex h-[34px] w-[34px] items-center justify-center rounded-full bg-white text-xs font-bold text-brand">
-            TA
-            <span className="absolute -bottom-px -right-px h-2.5 w-2.5 rounded-full border-2 border-brand bg-[#34d399]" />
-          </span>
+          <span className="inline-flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full bg-white text-xs font-bold text-brand">{initials}</span>
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold">Tolu</div>
-            <div className="text-[11.5px] text-white/80">Owner</div>
+            <div className="truncate text-[13px] font-semibold">{email ?? "Signed in"}</div>
+            <form action="/auth/signout" method="post">
+              <button type="submit" className="text-[11.5px] text-white/85 underline-offset-2 hover:underline">Sign out</button>
+            </form>
           </div>
-          <Icon name="more" size={16} className="text-white/80" />
         </div>
       </div>
     </nav>

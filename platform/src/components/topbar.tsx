@@ -61,7 +61,6 @@ export function Topbar() {
         </Link>
         <button type="button" aria-label="Notifications" className="relative inline-flex h-10 w-10 items-center justify-center rounded-[11px] border border-line bg-surface">
           <Icon name="bell" size={17} />
-          <span className="absolute right-[9px] top-2 h-[7px] w-[7px] rounded-full bg-brand shadow-[0_0_8px_#2fa8eb]" />
         </button>
         <button type="button" aria-label="Help" className="inline-flex h-10 w-10 items-center justify-center rounded-[11px] border border-line bg-surface">
           <Icon name="help" size={17} />

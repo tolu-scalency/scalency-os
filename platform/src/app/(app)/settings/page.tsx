@@ -1,9 +1,22 @@
 import type { Metadata } from "next";
 import { Icon, type IconName } from "@/components/icon";
-import { Button, Pill, Tile } from "@/components/ui";
-import { integrations } from "@/lib/sample-data";
+import { Pill, Tile, type PillTone, type Tone } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Settings" };
+
+
+// Honest status for each service. Only Supabase is connected so far.
+const integrations: { name: string; what: string; icon: IconName; tone: Tone; status: string; statusTone: PillTone; when: string }[] = [
+  { name: "Supabase", what: "Database, logins and the workflow clock.", icon: "database", tone: "green", status: "Connected", statusTone: "green", when: "Now" },
+  { name: "Resend", what: "Emails sent from send.scalency.us.", icon: "mail", tone: "blue", status: "Not connected", statusTone: "neutral", when: "Step 4" },
+  { name: "Twilio", what: "Texts to and from leads on a UK number.", icon: "inbox", tone: "red", status: "Not connected", statusTone: "neutral", when: "Step 4" },
+  { name: "Claude AI", what: "Powers the AI builder, summaries and scoring.", icon: "spark", tone: "pink", status: "Not connected", statusTone: "neutral", when: "Step 6" },
+  { name: "Google Calendar", what: "Busy times and bookings for each closer.", icon: "calendar", tone: "violet", status: "Not connected", statusTone: "neutral", when: "Later" },
+  { name: "Meta Lead Ads", what: "Instant-form leads and ad spend, straight in.", icon: "megaphone", tone: "blue", status: "Not connected", statusTone: "neutral", when: "Later" },
+  { name: "WhatsApp Business", what: "Two-way WhatsApp in the same inbox.", icon: "inbox", tone: "green", status: "Not connected", statusTone: "neutral", when: "Later" },
+  { name: "Stripe", what: "Mark deals as won when a client pays.", icon: "card", tone: "grey", status: "Not connected", statusTone: "neutral", when: "Later" },
+  { name: "Webhooks", what: "Send or receive events from any other tool.", icon: "link", tone: "orange", status: "Not connected", statusTone: "neutral", when: "Later" },
+];
 
 const sections: { label: string; icon: IconName; on?: boolean }[] = [
   { label: "Business profile", icon: "building" },
@@ -64,7 +77,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-line pt-3.5">
                 <Pill tone={a.statusTone}>{a.status}</Pill>
-                <Button size="sm">{a.action}</Button>
+                <span className="font-mono text-[10.5px] text-muted">{a.when === "Now" ? "ACTIVE" : a.when.toUpperCase()}</span>
               </div>
             </section>
           ))}

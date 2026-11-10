@@ -71,6 +71,17 @@ These are rules the database itself enforces, so a mistake in the app can't brea
 - **One at a time:** a contact can't be in the same workflow twice at once.
 - **Clean data:** phone numbers must include the country code, emails must look like emails, and every contact needs an email or a phone.
 
+## Setting up an account
+
+Migration `20261109120000_account_setup` adds two helpers that are run by hand in the Supabase SQL editor. The app and the public can't call them.
+
+| Helper | What it does |
+|---|---|
+| `setup_account(name, slug, owner_email, test_phone)` | Creates the account (in test mode, with the owner's email as the test inbox), makes that login its **owner**, and adds the **Lead gen** pipeline with its 10 stages. |
+| `add_account_member(slug, email, role)` | Gives another login access to an account, as owner, admin or member. |
+
+The login must exist first: invite the person in Supabase under Authentication > Users. Step-by-step instructions are in `docs/setup-dev.md`.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

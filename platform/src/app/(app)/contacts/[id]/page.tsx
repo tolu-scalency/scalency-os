@@ -1,29 +1,24 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { Icon, type IconName } from "@/components/icon";
-import { Button, Pill, Tile, type Tone } from "@/components/ui";
-import { contacts, findContact } from "@/lib/sample-data";
+import { Pill, Tile, type Tone } from "@/components/ui";
+import { Loading } from "@/components/states";
+import { formatPence, getContactDetail, timeAgo } from "@/lib/data";
+import { addNote, moveStage } from "./actions";
 
-// Every sample contact gets its own page at build time.
-export function generateStaticParams() {
-  return contacts.map((c) => ({ id: c.id }));
-}
+export const metadata: Metadata = { title: "Contact" };
 
-export async function generateMetadata(props: PageProps<"/contacts/[id]">) {
-  const { id } = await props.params;
-  return { title: findContact(id)?.name ?? "Contact" };
-}
-
-const stages = ["Started", "Qualified", "Call booked", "Confirmed", "Showed up", "Follow-up", "Closed"];
-
-const timeline: { icon: IconName; tone: Tone; title: string; when: string; text: string }[] = [
-  { icon: "inbox", tone: "green", title: "Replied YES by text", when: "14:49", text: "Call marked confirmed. George told in #booked-calls." },
-  { icon: "mail", tone: "blue", title: "Email: Your call on Tuesday", when: "14:50", text: "Opened at 14:52. Sent to the test inbox (test mode)." },
-  { icon: "inbox", tone: "blue", title: "Text: booking confirmation", when: "14:41", text: "From L4 Booked Call. Delivered to the test phone." },
-  { icon: "calendar", tone: "violet", title: "Call booked with George", when: "14:40", text: "Tue 10 November, 10:00 to 10:45, Google Meet." },
-  { icon: "zap", tone: "orange", title: "Moved to Qualified", when: "14:31", text: "Application finished. All answers qualify." },
-  { icon: "form", tone: "pink", title: "Application started", when: "14:28", text: "Step 1 from the book-a-call page. UTM meta / clinics-a." },
-];
+// How each kind of timeline entry looks.
+const kinds: Record<string, { icon: IconName; tone: Tone }> = {
+  "contact.created": { icon: "user", tone: "blue" },
+  "stage.changed": { icon: "pipeline", tone: "violet" },
+  note: { icon: "edit", tone: "orange" },
+  "form.started": { icon: "form", tone: "pink" },
+  "form.completed": { icon: "checkCircle", tone: "green" },
+  "message.sent": { icon: "inbox", tone: "blue" },
+};
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -34,19 +29,35 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export default async function ContactPage(props: PageProps<"/contacts/[id]">) {
-  const { id } = await props.params;
-  const c = findContact(id);
-  if (!c) notFound();
+function labelFor(key: string) {
+  return key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+}
 
-  const currentStage = 3; // "Confirmed" in the sample data
-
+export default function ContactPage(props: PageProps<"/contacts/[id]">) {
   return (
     <main className="flex flex-col gap-4 px-7 pb-10 pt-6">
       <Link href="/contacts" className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted hover:text-brand">
         <Icon name="arrowLeft" size={13} /> ALL CONTACTS
       </Link>
+      <Suspense fallback={<Loading rows={5} />}>
+        <ContactRecord params={props.params} />
+      </Suspense>
+    </main>
+  );
+}
 
+async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  // Contact ids are UUIDs. Anything else can't exist, so skip the database call.
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const c = await getContactDetail(id);
+  if (!c) notFound();
+
+  const currentIndex = c.opportunity ? c.stages.findIndex((s) => s.id === c.opportunity!.stageId) : -1;
+  const answers = Object.entries(c.answers).filter(([, v]) => v !== null && v !== "" && typeof v !== "object");
+
+  return (
+    <>
       <section className="card relative overflow-hidden">
         <div className="dots pointer-events-none absolute inset-0 [mask-image:linear-gradient(90deg,transparent,#000_60%)]" />
         <div className="relative flex flex-wrap items-center gap-5 p-6">
@@ -54,115 +65,132 @@ export default async function ContactPage(props: PageProps<"/contacts/[id]">) {
           <div className="min-w-0 flex-[1_1_260px]">
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-[28px] font-semibold tracking-[-0.035em]">{c.name}</h1>
-              <Pill tone={c.stageTone}>{c.stage}</Pill>
-              <Pill tone="neutral" mono>TEST CONTACT</Pill>
+              {currentIndex >= 0 && <Pill>{c.stages[currentIndex].name}</Pill>}
+              {c.isTest && <Pill tone="neutral" mono>TEST CONTACT</Pill>}
             </div>
-            <div className="mt-1.5 text-[13.5px] text-muted">{c.business} · {c.source}</div>
-          </div>
-          <div className="flex items-center gap-3.5 rounded-2xl border border-line bg-surface py-2.5 pl-2.5 pr-4">
-            <svg viewBox="0 0 44 44" width={52} height={52} aria-hidden>
-              <circle cx={22} cy={22} r={18} fill="none" stroke="#cfdcea" strokeWidth={4} />
-              <circle cx={22} cy={22} r={18} fill="none" stroke="#0465c7" strokeWidth={4} strokeLinecap="round" strokeDasharray={`${(c.score / 100) * 113} 113`} transform="rotate(-90 22 22)" />
-            </svg>
-            <div>
-              <div className="eyebrow">AI lead score</div>
-              <div className="text-[22px] font-semibold tracking-[-0.03em]">{c.score}<span className="text-[13px] text-muted"> / 100</span></div>
-            </div>
+            <div className="mt-1.5 text-[13.5px] text-muted">Added {timeAgo(c.createdAt).toLowerCase()} · source: {c.source ?? "unknown"}</div>
           </div>
           <div className="flex gap-2">
-            <Button icon="phone" label="Call">Call</Button>
-            <Button href="/inbox" icon="inbox">Text</Button>
-            <Button href="/inbox" variant="primary" icon="mail">Email</Button>
+            {c.phone && (
+              <a href={`tel:${c.phone}`} className="inline-flex min-h-10 items-center gap-2 rounded-[11px] border border-line-strong bg-surface px-4 text-[13.5px] font-medium hover:border-brand hover:text-brand">
+                <Icon name="phone" size={15} />Call
+              </a>
+            )}
+            {c.email && (
+              <a href={`mailto:${c.email}`} className="btn-primary inline-flex min-h-10 items-center gap-2 rounded-[11px] px-4 text-[13.5px] font-medium">
+                <Icon name="mail" size={15} />Email
+              </a>
+            )}
           </div>
         </div>
-        <ol className="relative flex overflow-x-auto border-t border-line px-6 pb-5 pt-[18px]">
-          {stages.map((s, i) => (
-            <li key={s} className={`relative flex min-w-20 flex-1 flex-col items-center gap-2 text-xs ${i === currentStage ? "font-semibold text-navy" : "text-muted"}`}>
-              {i > 0 && <span className={`absolute right-1/2 top-[6px] h-0.5 w-full ${i <= currentStage ? "bg-sky" : "bg-line-strong"}`} />}
-              <span
-                className={`relative z-[1] h-3.5 w-3.5 rounded-full border-2 ${
-                  i < currentStage ? "border-sky bg-sky" : i === currentStage ? "border-brand bg-brand shadow-[0_0_0_5px_rgba(4,101,199,0.15)]" : "border-line-strong bg-white"
-                }`}
-              />
-              {s}
-            </li>
-          ))}
-        </ol>
+
+        {c.stages.length > 0 && (
+          <div className="relative border-t border-line px-6 pb-5 pt-[18px]">
+            <ol className="flex overflow-x-auto">
+              {c.stages.map((s, i) => (
+                <li key={s.id} className={`relative flex min-w-20 flex-1 flex-col items-center gap-2 text-center text-xs ${i === currentIndex ? "font-semibold text-navy" : "text-muted"}`}>
+                  {i > 0 && <span className={`absolute right-1/2 top-[6px] h-0.5 w-full ${i <= currentIndex ? "bg-sky" : "bg-line-strong"}`} />}
+                  <span
+                    className={`relative z-[1] h-3.5 w-3.5 rounded-full border-2 ${
+                      i < currentIndex ? "border-sky bg-sky" : i === currentIndex ? "border-brand bg-brand shadow-[0_0_0_5px_rgba(4,101,199,0.15)]" : "border-line-strong bg-white"
+                    }`}
+                  />
+                  {s.name}
+                </li>
+              ))}
+            </ol>
+            <form action={moveStage} className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <input type="hidden" name="contact_id" value={c.id} />
+              <label className="flex items-center gap-2 text-[13px] text-muted">
+                Move to
+                <select name="stage_id" defaultValue={c.opportunity?.stageId} className="min-h-9 rounded-[10px] border border-line-strong bg-white px-2.5 text-[13px] text-navy">
+                  {c.stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+              <button type="submit" className="min-h-9 rounded-[10px] border border-line-strong bg-surface px-3 text-[13px] font-medium hover:border-brand hover:text-brand">Update stage</button>
+            </form>
+          </div>
+        )}
       </section>
 
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[1_1_270px] flex-col gap-4">
           <section className="card p-[18px]">
             <div className="eyebrow mb-2">Contact</div>
-            <Row label="Email">{c.email}</Row>
-            <Row label="Phone"><span className="font-mono">{c.phone}</span></Row>
-            <Row label="Time zone"><span className="font-mono">EUROPE/LONDON</span></Row>
-            <Row label="Consent">Email, SMS</Row>
-            <Row label="Source">{c.source}</Row>
+            <Row label="Email">{c.email ?? "—"}</Row>
+            <Row label="Phone"><span className="font-mono">{c.phone ?? "—"}</span></Row>
+            <Row label="Time zone"><span className="font-mono">{c.timezone.toUpperCase()}</span></Row>
+            <Row label="Consent">{c.consent}</Row>
+            <Row label="Source">{c.source ?? "—"}</Row>
           </section>
           <section className="card p-[18px]">
             <div className="eyebrow mb-2">Application answers</div>
-            <Row label="Business type">{c.business}</Row>
-            <Row label="Sites"><span className="font-mono">3–6</span></Row>
-            <Row label="Answers enquiries">Receptionist</Row>
-            <Row label="Monthly revenue"><span className="font-mono">£25–50K</span></Row>
-            <Row label="Role">Owner</Row>
+            {answers.length ? (
+              answers.map(([k, v]) => <Row key={k} label={labelFor(k)}>{String(v)}</Row>)
+            ) : (
+              <p className="text-[13px] text-muted">No answers yet. They appear when this person fills in an application form.</p>
+            )}
           </section>
         </div>
 
-        <section className="card min-w-0 flex-[2_1_440px] px-[22px] pb-2.5 pt-1">
-          <div className="mb-[18px] flex flex-wrap border-b border-line">
-            {["Activity", "Messages", "Notes", "Tasks", "Files"].map((t, i) => (
-              <span key={t} className={`mr-5 border-b-2 px-0.5 py-2.5 text-[13px] ${i === 0 ? "border-brand text-navy" : "border-transparent text-muted"}`}>{t}</span>
-            ))}
-          </div>
-          <div className="mb-[18px] rounded-[14px] border border-brand/20 bg-gradient-to-br from-chip to-transparent p-3.5">
-            <div className="flex items-center gap-2 text-[13px] font-semibold"><Icon name="spark" size={15} className="text-brand" />AI summary</div>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-              Booked within 12 minutes of applying and confirmed by text. Runs 3+ clinics with a front desk, which matches the multi-site profile. Suggested next step: prepare the Tier 2 pitch for Tuesday.
-            </p>
-          </div>
-          <ol>
-            {timeline.map((e, i) => (
-              <li key={e.title} className="relative flex gap-3.5 pb-5">
-                {i < timeline.length - 1 && <span className="absolute bottom-0 left-4 top-9 w-px bg-line-strong" />}
-                <Tile icon={e.icon} tone={e.tone} size={34} />
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="flex justify-between gap-3 text-[13.5px]">
-                    <strong className="font-semibold">{e.title}</strong>
-                    <span className="whitespace-nowrap font-mono text-[11px] text-muted">{e.when}</span>
-                  </div>
-                  <div className="mt-1 text-[12.5px] leading-snug text-muted">{e.text}</div>
-                </div>
-              </li>
-            ))}
-          </ol>
+        <section className="card min-w-0 flex-[2_1_440px] p-[22px]">
+          <div className="eyebrow mb-3">Activity</div>
+          <form action={addNote} className="mb-5 flex flex-col gap-2">
+            <input type="hidden" name="contact_id" value={c.id} />
+            <label>
+              <span className="sr-only">Add a note</span>
+              <textarea name="note" rows={2} required placeholder="Add a note for the team…" className="w-full resize-none rounded-[12px] border border-line-strong px-3 py-2.5 text-[13.5px] outline-none focus:border-brand" />
+            </label>
+            <button type="submit" className="btn-primary min-h-9 self-end rounded-[10px] px-3.5 text-[13px] font-medium">Add note</button>
+          </form>
+          {c.activity.length === 0 ? (
+            <p className="text-[13px] text-muted">Nothing has happened yet.</p>
+          ) : (
+            <ol>
+              {c.activity.map((e, i) => {
+                const k = kinds[e.type] ?? { icon: "activity" as const, tone: "grey" as const };
+                return (
+                  <li key={e.id} className="relative flex gap-3.5 pb-5">
+                    {i < c.activity.length - 1 && <span className="absolute bottom-0 left-4 top-9 w-px bg-line-strong" />}
+                    <Tile icon={k.icon} tone={k.tone} size={34} />
+                    <div className="min-w-0 flex-1 pt-0.5">
+                      <div className="flex justify-between gap-3 text-[13.5px]">
+                        <span className="whitespace-pre-wrap">{e.summary}</span>
+                        <span className="whitespace-nowrap font-mono text-[11px] text-muted">{timeAgo(e.createdAt)}</span>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </section>
 
         <div className="flex min-w-0 flex-[1_1_270px] flex-col gap-4">
           <section className="card p-[18px]">
             <div className="eyebrow">Opportunity</div>
-            <div className="mt-2 text-[30px] font-semibold tracking-[-0.04em]">£5,000<span className="text-sm font-normal text-muted"> / mo</span></div>
-            <div className="mt-2.5">
-              <Row label="Pipeline">Lead gen</Row>
-              <Row label="Closer">George</Row>
-              <Row label="Call"><span className="font-mono">TUE 10 NOV · 10:00</span></Row>
-            </div>
+            {c.opportunity ? (
+              <>
+                <div className="mt-2 text-[30px] font-semibold tracking-[-0.04em]">{formatPence(c.opportunity.valuePence)}<span className="text-sm font-normal text-muted"> / mo</span></div>
+                <div className="mt-2.5">
+                  <Row label="Status"><span className="capitalize">{c.opportunity.status}</span></Row>
+                  <Row label="Stage">{currentIndex >= 0 ? c.stages[currentIndex].name : "—"}</Row>
+                </div>
+              </>
+            ) : (
+              <p className="mt-2 text-[13px] text-muted">Not in a pipeline yet.</p>
+            )}
           </section>
           <section className="card p-[18px]">
-            <div className="eyebrow mb-3">Workflows</div>
-            <div className="mb-2.5 flex items-center gap-2.5 text-[13px]"><span className="h-[7px] w-[7px] rounded-full bg-sky shadow-[0_0_8px_#2fa8eb]" /><span className="flex-1">L4 Booked Call</span><span className="font-mono text-[10.5px] text-muted">RUNNING</span></div>
-            <div className="flex items-center gap-2.5 text-[13px]"><span className="h-[7px] w-[7px] rounded-full bg-line-strong" /><span className="flex-1">L1 Application Started</span><span className="font-mono text-[10.5px] text-muted">EXITED</span></div>
-          </section>
-          <section className="card p-[18px]">
-            <div className="eyebrow mb-3">Tasks</div>
-            <div className="flex items-start gap-2.5 text-[13px]">
-              <span className="mt-px h-4 w-4 flex-none rounded-[5px] border-[1.5px] border-line-strong" />
-              <div><div>Prepare Tier 2 pitch</div><div className="mt-0.5 font-mono text-[10.5px] text-muted">GEORGE · DUE MON</div></div>
-            </div>
+            <div className="eyebrow mb-3">Tags</div>
+            {c.tags.length ? (
+              <div className="flex flex-wrap gap-1.5">{c.tags.map((t) => <Pill key={t}>{t}</Pill>)}</div>
+            ) : (
+              <p className="text-[13px] text-muted">No tags yet.</p>
+            )}
           </section>
         </div>
       </div>
-    </main>
+    </>
   );
 }
