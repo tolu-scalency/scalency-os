@@ -207,18 +207,19 @@ export async function getContactDetail(id: string, accountId: string) {
   const supabase = await createClient();
   const { data: c } = await supabase
     .from("contacts")
-    .select("id, account_id, first_name, last_name, email, phone, source, created_at, custom")
+    .select("id, account_id, first_name, last_name, email, phone, source, created_at, custom, owner_id, email_unsubscribed_at, sms_unsubscribed_at")
     .eq("id", id)
     .eq("account_id", accountId)
     .maybeSingle();
   if (!c) return null;
 
-  const [opps, submissions, activity, tasks, pipeline] = await Promise.all([
+  const [opps, submissions, activity, tasks, pipeline, tagRows] = await Promise.all([
     supabase.from("opportunities").select("id, pipeline_id, stage_id, status, value_pence, custom, updated_at").eq("contact_id", id).order("updated_at", { ascending: false }).limit(1),
     supabase.from("form_submissions").select("answers").eq("contact_id", id).order("started_at", { ascending: false }).limit(1),
     supabase.from("activity").select("id, type, summary, created_at, contact_id").eq("contact_id", id).order("created_at", { ascending: false }).limit(50),
     supabase.from("tasks").select("id, title, due_on, done_at, contact_id, created_at").eq("contact_id", id).order("done_at", { ascending: true, nullsFirst: true }).order("due_on", { ascending: true, nullsFirst: false }),
     getPipeline(accountId),
+    supabase.from("contact_tags").select("tags(id, name)").eq("contact_id", id),
   ]);
 
   const opp = opps.data?.[0] ?? null;
@@ -237,6 +238,13 @@ export async function getContactDetail(id: string, accountId: string) {
     createdAt: c.created_at as string,
     opportunity: opp ? { id: opp.id as string, status: opp.status as string, valuePence: opp.value_pence as number | null, stageId: opp.stage_id as string } : null,
     pipeline,
+    ownerId: (c.owner_id as string | null) ?? null,
+    emailUnsubscribed: Boolean(c.email_unsubscribed_at),
+    smsUnsubscribed: Boolean(c.sms_unsubscribed_at),
+    tags: ((tagRows.data ?? []) as unknown as { tags: { id: string; name: string } | null }[])
+      .map((r) => r.tags)
+      .filter((t): t is { id: string; name: string } => Boolean(t))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     answers,
     activity: (activity.data ?? []).map((a) => ({ id: a.id, type: a.type, summary: a.summary, createdAt: a.created_at, contactId: a.contact_id })) as Activity[],
     tasks: (tasks.data ?? []).map((t) => ({ id: t.id, title: t.title, dueOn: t.due_on, doneAt: t.done_at, contactId: t.contact_id, contactName: name, createdAt: t.created_at })) as TaskRow[],
@@ -426,16 +434,44 @@ export async function myPendingInvites(): Promise<PendingInvite[]> {
   return ((data ?? []) as { invite_id: string; account_name: string; role: string }[]).map((r) => ({ id: r.invite_id, workspace: r.account_name, role: r.role }));
 }
 
-export type WorkflowStep =
-  | { type: "wait"; amount: number; unit: "minutes" | "hours" | "days" }
-  | { type: "email"; subject: string; body: string }
-  | { type: "sms"; body: string }
-  | { type: "task"; title: string; due_in_days: number }
-  | { type: "move_stage"; stage_id: string }
-  | { type: "note"; text: string }
-  | { type: "notify_team"; text: string };
+export type WaitUnit = "minutes" | "hours" | "days";
+export type ConditionField = "has_tag" | "has_email" | "has_phone" | "replied" | "in_stage" | "deal_status" | "source_is" | "has_owner";
+export type Condition = { field: ConditionField; value?: string; negate?: boolean };
 
-export type WorkflowTrigger = { type: "contact_created" } | { type: "stage_entered"; stage_id: string } | { type: "manual" };
+type StepBase = { id?: string };
+export type WorkflowStep = StepBase &
+  (
+    | { type: "wait"; amount: number; unit: WaitUnit }
+    | { type: "wait_until"; hour: number; minute: number; weekdays_only: boolean }
+    | { type: "wait_for_reply"; amount: number; unit: WaitUnit }
+    | { type: "email"; subject: string; body: string }
+    | { type: "sms"; body: string }
+    | { type: "task"; title: string; due_in_days: number }
+    | { type: "move_stage"; stage_id: string }
+    | { type: "set_status"; status: "open" | "won" | "lost" }
+    | { type: "note"; text: string }
+    | { type: "notify_team"; text: string }
+    | { type: "add_tag"; tag: string }
+    | { type: "remove_tag"; tag: string }
+    | { type: "assign"; user_id: string }
+    | { type: "if_else"; condition: Condition; else: string }
+    | { type: "add_to_workflow"; workflow_id: string }
+    | { type: "remove_from_workflow"; workflow_id: string }
+    | { type: "webhook"; url: string }
+    | { type: "end" }
+  );
+export type StepType = WorkflowStep["type"];
+
+export type WorkflowTrigger =
+  | { type: "contact_created" }
+  | { type: "stage_entered"; stage_id: string }
+  | { type: "tag_added"; tag: string }
+  | { type: "tag_removed"; tag: string }
+  | { type: "deal_won" }
+  | { type: "deal_lost" }
+  | { type: "message_received"; channel: "any" | "sms" | "email" }
+  | { type: "webhook"; token: string }
+  | { type: "manual" };
 
 export type WorkflowRow = {
   id: string;
@@ -472,7 +508,7 @@ export async function listWorkflows(accountId: string): Promise<WorkflowRow[]> {
 
 export async function getWorkflow(id: string, accountId: string) {
   const supabase = await createClient();
-  const { data: w } = await supabase.from("workflows").select("id, name, description, trigger, steps, status, client_approved_by, client_approved_at, updated_at").eq("id", id).eq("account_id", accountId).maybeSingle();
+  const { data: w } = await supabase.from("workflows").select("id, name, description, trigger, steps, status, stop_on_reply, client_approved_by, client_approved_at, updated_at").eq("id", id).eq("account_id", accountId).maybeSingle();
   if (!w) return null;
   const { data: enr } = await supabase
     .from("workflow_enrollments")
@@ -487,6 +523,7 @@ export async function getWorkflow(id: string, accountId: string) {
     trigger: w.trigger as WorkflowTrigger,
     steps: (w.steps ?? []) as WorkflowStep[],
     status: w.status as WorkflowRow["status"],
+    stopOnReply: w.stop_on_reply as boolean,
     approvedBy: w.client_approved_by as string | null,
     approvedAt: w.client_approved_at as string | null,
     enrollments: (enr ?? []).map((e) => {
@@ -530,6 +567,7 @@ export async function memberNames(accountId: string) {
   const ids = (members ?? []).map((m) => m.user_id);
   const { data: profiles } = ids.length ? await supabase.from("profiles").select("user_id, full_name, email").in("user_id", ids) : { data: [] };
   const map: Record<string, string> = {};
+  for (const id of ids) map[id] = "Teammate";
   for (const p of profiles ?? []) map[p.user_id] = p.full_name ?? p.email ?? "Teammate";
   return map;
 }
@@ -579,4 +617,11 @@ export async function listThreadMessages(accountId: string, contactId: string): 
     .order("created_at", { ascending: true })
     .limit(300);
   return (data ?? []).map((m) => ({ id: m.id, channel: m.channel, direction: m.direction, subject: m.subject, body: m.body, status: m.status, toAddress: m.to_address, createdAt: m.created_at, sentAt: m.sent_at, error: m.error }));
+}
+
+/** Every tag name in the workspace, for pickers. */
+export async function listTags(accountId: string): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("tags").select("name").eq("account_id", accountId).order("name").limit(500);
+  return (data ?? []).map((t) => t.name as string);
 }

@@ -4,21 +4,40 @@ import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon } from "@/components/icon";
 import { Page, Pill } from "@/components/ui";
-import { getPipeline, getWorkflow, getWorkspace, timeAgo } from "@/lib/data";
+import { headers } from "next/headers";
+import { getPipeline, getWorkflow, getWorkspace, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
 import { runDueNow, setWorkflowStatus } from "../actions";
+import { actionLabel } from "../labels";
 import { WorkflowEditor } from "./editor";
 
 export const metadata: Metadata = { title: "Workflow" };
 
 const outcomeTone = { done: "green", skipped: "amber", failed: "red", waiting: "blue" } as const;
-const actionLabel: Record<string, string> = { wait: "Wait", email: "Email", sms: "Text", task: "Task", move_stage: "Move stage", note: "Note", notify_team: "Team alert" };
+
+function runText(detail: Record<string, unknown>) {
+  if (typeof detail.reason === "string") return detail.reason;
+  if (detail.result === "yes") return "Condition met";
+  if (detail.result === "no") return "Condition not met";
+  if (typeof detail.until === "string") return `Until ${new Date(detail.until).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+  if (typeof detail.to === "string") return `To ${detail.to}${detail.test_mode ? " (test mode)" : ""}`;
+  return "";
+}
 
 export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) {
   const { id } = await props.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await getWorkspace();
-  const [wf, pipeline] = await Promise.all([getWorkflow(id, ws.account.id), getPipeline(ws.account.id)]);
+  const [wf, pipeline, names, flows, tags, h] = await Promise.all([
+    getWorkflow(id, ws.account.id),
+    getPipeline(ws.account.id),
+    memberNames(ws.account.id),
+    listWorkflows(ws.account.id),
+    listTags(ws.account.id),
+    headers(),
+  ]);
   if (!wf) notFound();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "os.scalency.us";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
 
   return (
     <Page>
@@ -57,8 +76,12 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
 
       <WorkflowEditor
         key={wf.id}
-        workflow={{ id: wf.id, name: wf.name, description: wf.description, trigger: wf.trigger, steps: wf.steps }}
+        workflow={{ id: wf.id, name: wf.name, description: wf.description, trigger: wf.trigger, steps: wf.steps, stopOnReply: wf.stopOnReply }}
         stages={pipeline?.stages ?? []}
+        members={Object.entries(names).map(([mid, name]) => ({ id: mid, name }))}
+        workflows={flows.map((f) => ({ id: f.id, name: f.name }))}
+        tags={tags}
+        hookBase={`${proto}://${host}`}
         locked={wf.status === "active"}
       />
 
@@ -94,7 +117,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
                 {e.runs.length > 0 && (
                   <ol className="mt-2.5 flex flex-wrap gap-1.5">
                     {e.runs.map((r, i) => (
-                      <li key={i} title={JSON.stringify(r.detail)}>
+                      <li key={i} title={runText(r.detail)}>
                         <Pill tone={outcomeTone[r.outcome as keyof typeof outcomeTone] ?? "neutral"}>
                           {Number(r.step_key) + 1}. {actionLabel[r.action] ?? r.action}
                           {r.outcome !== "done" ? ` · ${r.outcome}` : ""}

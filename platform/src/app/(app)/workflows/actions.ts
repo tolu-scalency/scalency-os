@@ -10,33 +10,65 @@ import { text, type ActionResult } from "@/lib/forms";
 const TEMPLATES: Record<string, { name: string; description: string; trigger: WorkflowTrigger; steps: WorkflowStep[] }> = {
   speed: {
     name: "Speed to lead",
-    description: "Reply to every new lead within minutes and tell the team.",
+    description: "Reply to every new lead within minutes, tell the team, and follow up if they go quiet.",
     trigger: { type: "contact_created" },
     steps: [
-      { type: "sms", body: "Hi {{first_name}}, thanks for getting in touch with {{workspace}}. When's a good time for a quick call?" },
-      { type: "email", subject: "Thanks for your enquiry, {{first_name}}", body: "Hi {{first_name}},\n\nThanks for reaching out. We'll be in touch shortly to book a quick call.\n\n{{workspace}}" },
-      { type: "notify_team", text: "New lead: {{name}} ({{phone}})" },
-      { type: "task", title: "Call {{first_name}}", due_in_days: 0 },
-      { type: "wait", amount: 1, unit: "days" },
-      { type: "sms", body: "Hi {{first_name}}, just checking you saw our message. Reply here and we'll find a time." },
+      { id: "s1", type: "assign", user_id: "round_robin" },
+      { id: "s2", type: "sms", body: "Hi {{first_name}}, thanks for getting in touch with {{workspace}}. When's a good time for a quick call?" },
+      { id: "s3", type: "email", subject: "Thanks for your enquiry, {{first_name}}", body: "Hi {{first_name}},\n\nThanks for reaching out. We'll be in touch shortly to book a quick call.\n\n{{workspace}}" },
+      { id: "s4", type: "notify_team", text: "New lead: {{name}} ({{phone}})" },
+      { id: "s5", type: "task", title: "Call {{first_name}}", due_in_days: 0 },
+      { id: "s6", type: "wait_for_reply", amount: 1, unit: "days" },
+      { id: "s7", type: "if_else", condition: { field: "replied", negate: true }, else: "end" },
+      { id: "s8", type: "sms", body: "Hi {{first_name}}, just checking you saw our message. Reply here and we'll find a time." },
+    ],
+  },
+  reply: {
+    name: "Lead replied",
+    description: "When a lead replies, tag them, alert the team and create a task to answer.",
+    trigger: { type: "message_received", channel: "any" },
+    steps: [
+      { id: "r1", type: "add_tag", tag: "Replied" },
+      { id: "r2", type: "notify_team", text: "{{name}} just replied. Open their conversation in the Inbox." },
+      { id: "r3", type: "task", title: "Reply to {{first_name}}", due_in_days: 0 },
     ],
   },
   noshow: {
     name: "No-show follow-up",
-    description: "Win back people who miss their call.",
-    trigger: { type: "manual" },
+    description: "Win back people who miss their call. Add the tag “No show” to start it.",
+    trigger: { type: "tag_added", tag: "No show" },
     steps: [
-      { type: "sms", body: "Hi {{first_name}}, sorry we missed you today. Would you like to rebook?" },
-      { type: "wait", amount: 1, unit: "days" },
-      { type: "email", subject: "Shall we find another time?", body: "Hi {{first_name}},\n\nWe missed you on our call. Reply to this email and we'll find a time that suits you.\n\n{{workspace}}" },
-      { type: "task", title: "Try calling {{first_name}} again", due_in_days: 2 },
+      { id: "n1", type: "sms", body: "Hi {{first_name}}, sorry we missed you today. Would you like to rebook?" },
+      { id: "n2", type: "wait_for_reply", amount: 1, unit: "days" },
+      { id: "n3", type: "if_else", condition: { field: "replied", negate: true }, else: "end" },
+      { id: "n4", type: "email", subject: "Shall we find another time?", body: "Hi {{first_name}},\n\nWe missed you on our call. Reply to this email and we'll find a time that suits you.\n\n{{workspace}}" },
+      { id: "n5", type: "task", title: "Try calling {{first_name}} again", due_in_days: 2 },
+    ],
+  },
+  won: {
+    name: "Deal won",
+    description: "Thank new customers, tag them and tell the team.",
+    trigger: { type: "deal_won" },
+    steps: [
+      { id: "w1", type: "add_tag", tag: "Customer" },
+      { id: "w2", type: "email", subject: "Welcome aboard, {{first_name}}", body: "Hi {{first_name}},\n\nThank you for choosing {{workspace}}. We'll be in touch with your next steps shortly.\n\n{{workspace}}" },
+      { id: "w3", type: "notify_team", text: "Deal won: {{name}}" },
+    ],
+  },
+  hook: {
+    name: "Leads from another app",
+    description: "Send leads in from your website, Zapier, Make or an ad platform using a webhook link.",
+    trigger: { type: "webhook", token: "" },
+    steps: [
+      { id: "h1", type: "add_tag", tag: "Webhook" },
+      { id: "h2", type: "notify_team", text: "New lead from {{source}}: {{name}}" },
     ],
   },
   alert: {
     name: "New lead alert",
     description: "Post every new lead in #leads so nobody misses one.",
     trigger: { type: "contact_created" },
-    steps: [{ type: "notify_team", text: "New lead: {{name}} · {{email}} · {{phone}}" }],
+    steps: [{ id: "a1", type: "notify_team", text: "New lead: {{name}} · {{email}} · {{phone}}" }],
   },
   blank: { name: "Untitled workflow", description: "", trigger: { type: "manual" }, steps: [] },
 };
@@ -53,82 +85,213 @@ export async function createWorkflow(fd: FormData) {
     if (!count) break;
     name = `${t.name} ${i}`;
   }
-  const { data, error } = await supabase.from("workflows").insert({ account_id: ws.account.id, name, description: t.description, trigger: t.trigger, steps: t.steps }).select("id").single();
+  const trigger = t.trigger.type === "webhook" ? { type: "webhook", token: newToken() } : t.trigger;
+  const { data, error } = await supabase.from("workflows").insert({ account_id: ws.account.id, name, description: t.description, trigger, steps: t.steps }).select("id").single();
   if (error || !data) redirect("/workflows?error=1");
   redirect(`/workflows/${data.id}`);
 }
 
-const STEP_TYPES = new Set(["wait", "email", "sms", "task", "move_stage", "note", "notify_team"]);
+const STEP_TYPES = new Set([
+  "wait", "wait_until", "wait_for_reply", "email", "sms", "task", "move_stage", "set_status", "note", "notify_team",
+  "add_tag", "remove_tag", "assign", "if_else", "add_to_workflow", "remove_from_workflow", "webhook", "end",
+]);
+const CONDITIONS = new Set(["has_tag", "has_email", "has_phone", "replied", "in_stage", "deal_status", "source_is", "has_owner"]);
+const UNITS = ["minutes", "hours", "days"];
 
-function cleanSteps(raw: unknown): WorkflowStep[] | string {
+function stepId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+/** Only public https addresses, so a workflow can't be pointed at internal systems. */
+function safeUrl(raw: string) {
+  try {
+    const u = new URL(raw.trim());
+    if (u.protocol !== "https:") return null;
+    const h = u.hostname.toLowerCase();
+    if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal") || /^[\d.]+$/.test(h) || h.includes(":")) return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+type Ctx = { stageIds: Set<string>; memberIds: Set<string>; workflowIds: Set<string>; selfId: string };
+
+function cleanSteps(raw: unknown, ctx: Ctx): WorkflowStep[] | string {
   if (!Array.isArray(raw)) return "Steps are missing.";
   if (raw.length > 50) return "Keep it to 50 steps or fewer.";
   const out: WorkflowStep[] = [];
+  const seen = new Set<string>();
   for (const [i, s] of raw.entries()) {
     const n = i + 1;
     if (!s || typeof s !== "object" || !STEP_TYPES.has((s as { type: string }).type)) return `Step ${n} isn't valid.`;
     const st = s as Record<string, unknown>;
     const str = (k: string, max: number) => String(st[k] ?? "").slice(0, max);
+    let id = str("id", 20).replace(/[^a-z0-9]/gi, "");
+    if (!id || seen.has(id)) id = stepId();
+    seen.add(id);
+    const amount = Math.round(Number(st.amount));
+    const unit = (UNITS.includes(String(st.unit)) ? st.unit : "hours") as "hours";
     switch (st.type) {
-      case "wait": {
-        const amount = Math.round(Number(st.amount));
+      case "wait":
+      case "wait_for_reply":
         if (!(amount >= 1 && amount <= 365)) return `Step ${n}: wait between 1 and 365.`;
-        const unit = ["minutes", "hours", "days"].includes(String(st.unit)) ? (st.unit as "minutes") : "hours";
-        out.push({ type: "wait", amount, unit });
+        out.push({ id, type: st.type, amount, unit });
+        break;
+      case "wait_until": {
+        const hour = Math.round(Number(st.hour));
+        const minute = Math.round(Number(st.minute) || 0);
+        if (!(hour >= 0 && hour <= 23) || !(minute >= 0 && minute <= 59)) return `Step ${n}: choose a time.`;
+        out.push({ id, type: "wait_until", hour, minute, weekdays_only: Boolean(st.weekdays_only) });
         break;
       }
       case "email":
         if (!str("subject", 200).trim() || !str("body", 5000).trim()) return `Step ${n}: the email needs a subject and a message.`;
-        out.push({ type: "email", subject: str("subject", 200), body: str("body", 5000) });
+        out.push({ id, type: "email", subject: str("subject", 200), body: str("body", 5000) });
         break;
       case "sms":
         if (!str("body", 640).trim()) return `Step ${n}: the text needs a message.`;
-        out.push({ type: "sms", body: str("body", 640) });
+        out.push({ id, type: "sms", body: str("body", 640) });
         break;
       case "task":
         if (!str("title", 200).trim()) return `Step ${n}: the task needs a title.`;
-        out.push({ type: "task", title: str("title", 200), due_in_days: Math.max(0, Math.min(365, Math.round(Number(st.due_in_days) || 0))) });
+        out.push({ id, type: "task", title: str("title", 200), due_in_days: Math.max(0, Math.min(365, Math.round(Number(st.due_in_days) || 0))) });
         break;
       case "move_stage":
-        if (!str("stage_id", 40)) return `Step ${n}: choose a stage.`;
-        out.push({ type: "move_stage", stage_id: str("stage_id", 40) });
+        if (!ctx.stageIds.has(str("stage_id", 40))) return `Step ${n}: choose a stage.`;
+        out.push({ id, type: "move_stage", stage_id: str("stage_id", 40) });
         break;
+      case "set_status": {
+        const status = str("status", 10);
+        if (!["open", "won", "lost"].includes(status)) return `Step ${n}: choose won, lost or open.`;
+        out.push({ id, type: "set_status", status: status as "won" });
+        break;
+      }
       case "note":
         if (!str("text", 2000).trim()) return `Step ${n}: the note is empty.`;
-        out.push({ type: "note", text: str("text", 2000) });
+        out.push({ id, type: "note", text: str("text", 2000) });
         break;
       case "notify_team":
-        out.push({ type: "notify_team", text: str("text", 1000) || "New lead: {{name}}" });
+        out.push({ id, type: "notify_team", text: str("text", 1000) || "New lead: {{name}}" });
+        break;
+      case "add_tag":
+      case "remove_tag": {
+        const tag = str("tag", 40).trim();
+        if (!tag) return `Step ${n}: type a tag.`;
+        out.push({ id, type: st.type, tag });
+        break;
+      }
+      case "assign": {
+        const user = str("user_id", 40);
+        if (user !== "round_robin" && !ctx.memberIds.has(user)) return `Step ${n}: choose who to assign.`;
+        out.push({ id, type: "assign", user_id: user });
+        break;
+      }
+      case "if_else": {
+        const c = (st.condition ?? {}) as Record<string, unknown>;
+        const field = String(c.field ?? "");
+        if (!CONDITIONS.has(field)) return `Step ${n}: choose a condition.`;
+        const value = String(c.value ?? "").slice(0, 60).trim();
+        if (["has_tag", "source_is", "in_stage", "deal_status"].includes(field) && !value) return `Step ${n}: finish the condition.`;
+        if (field === "in_stage" && !ctx.stageIds.has(value)) return `Step ${n}: choose a stage.`;
+        out.push({ id, type: "if_else", condition: { field: field as "has_tag", value: value || undefined, negate: Boolean(c.negate) }, else: str("else", 20) || "end" });
+        break;
+      }
+      case "add_to_workflow":
+      case "remove_from_workflow": {
+        const wf = str("workflow_id", 40);
+        if (!ctx.workflowIds.has(wf) || wf === ctx.selfId) return `Step ${n}: choose another workflow.`;
+        out.push({ id, type: st.type, workflow_id: wf });
+        break;
+      }
+      case "webhook": {
+        const url = safeUrl(str("url", 500));
+        if (!url) return `Step ${n}: enter a web address starting with https://`;
+        out.push({ id, type: "webhook", url });
+        break;
+      }
+      case "end":
+        out.push({ id, type: "end" });
         break;
     }
+  }
+  // "Otherwise" in an if/else may only jump forward to a step that exists.
+  for (const [i, s] of out.entries()) {
+    if (s.type !== "if_else" || s.else === "end") continue;
+    const j = out.findIndex((x) => x.id === s.else);
+    if (j <= i) return `Step ${i + 1}: choose a later step for "otherwise".`;
   }
   return out;
 }
 
+function newToken() {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return Buffer.from(bytes).toString("base64url");
+}
+
 /** Saves the workflow from the editor. */
-export async function saveWorkflow(id: string, input: { name: string; description: string; trigger: WorkflowTrigger; steps: unknown }): Promise<ActionResult> {
+export async function saveWorkflow(
+  id: string,
+  input: { name: string; description: string; trigger: WorkflowTrigger; steps: unknown; stopOnReply?: boolean },
+): Promise<ActionResult & { token?: string }> {
   const name = String(input.name ?? "").trim().slice(0, 80);
   if (!name) return { error: "Give the workflow a name." };
-  const steps = cleanSteps(input.steps);
-  if (typeof steps === "string") return { error: steps };
   const ws = await getWorkspace();
-  let trigger: WorkflowTrigger = { type: "manual" };
-  if (input.trigger?.type === "contact_created") trigger = { type: "contact_created" };
-  if (input.trigger?.type === "stage_entered") {
-    const pipeline = await getPipeline(ws.account.id);
-    const stageId = (input.trigger as { stage_id?: string }).stage_id ?? "";
-    if (!pipeline?.stages.some((s) => s.id === stageId)) return { error: "Choose the stage that starts this workflow." };
-    trigger = { type: "stage_entered", stage_id: stageId };
-  }
   const supabase = await createClient();
+  const [pipeline, { data: members }, { data: flows }, { data: current }] = await Promise.all([
+    getPipeline(ws.account.id),
+    supabase.from("account_members").select("user_id").eq("account_id", ws.account.id),
+    supabase.from("workflows").select("id").eq("account_id", ws.account.id).neq("status", "archived"),
+    supabase.from("workflows").select("trigger").eq("id", id).eq("account_id", ws.account.id).maybeSingle(),
+  ]);
+  if (!current) return { error: "This workflow no longer exists." };
+  const stageIds = new Set((pipeline?.stages ?? []).map((s) => s.id));
+  const steps = cleanSteps(input.steps, {
+    stageIds,
+    memberIds: new Set((members ?? []).map((m) => m.user_id as string)),
+    workflowIds: new Set((flows ?? []).map((f) => f.id as string)),
+    selfId: id,
+  });
+  if (typeof steps === "string") return { error: steps };
+
+  const t = (input.trigger ?? { type: "manual" }) as Record<string, unknown>;
+  let trigger: WorkflowTrigger = { type: "manual" };
+  switch (t.type) {
+    case "contact_created":
+    case "deal_won":
+    case "deal_lost":
+      trigger = { type: t.type };
+      break;
+    case "stage_entered":
+      if (!stageIds.has(String(t.stage_id ?? ""))) return { error: "Choose the stage that starts this workflow." };
+      trigger = { type: "stage_entered", stage_id: String(t.stage_id) };
+      break;
+    case "tag_added":
+    case "tag_removed": {
+      const tag = String(t.tag ?? "").trim().slice(0, 40);
+      if (!tag) return { error: "Type the tag that starts this workflow." };
+      trigger = { type: t.type, tag };
+      break;
+    }
+    case "message_received":
+      trigger = { type: "message_received", channel: (["sms", "email"].includes(String(t.channel)) ? t.channel : "any") as "any" };
+      break;
+    case "webhook": {
+      const old = current.trigger as { type?: string; token?: string };
+      trigger = { type: "webhook", token: old?.type === "webhook" && old.token ? old.token : newToken() };
+      break;
+    }
+  }
+
   const { error } = await supabase
     .from("workflows")
-    .update({ name, description: String(input.description ?? "").slice(0, 300) || null, trigger, steps })
+    .update({ name, description: String(input.description ?? "").slice(0, 300) || null, trigger, steps, stop_on_reply: input.stopOnReply !== false })
     .eq("id", id)
     .eq("account_id", ws.account.id);
   if (error) return { error: error.code === "23505" ? "You already have a workflow with that name." : "We couldn't save the workflow." };
   refresh();
-  return { ok: "Saved." };
+  return { ok: "Saved.", token: trigger.type === "webhook" ? trigger.token : undefined };
 }
 
 /** Approve and turn on, pause, or archive. Turning on records who approved it. */

@@ -124,6 +124,27 @@ Migration `20261112090000_workspaces_workflows_chat`.
 
 **Test mode.** Emails and texts are saved in `messages` addressed to the workspace's test email or phone, with status `held_test_mode`. Nothing is delivered until Resend and Twilio are connected.
 
+## Workflow pack
+
+Migration `20261113090000_workflow_pack`.
+
+| Part | What it does |
+|---|---|
+| `contacts.owner_id` | Who looks after the contact. Set on the contact page or by an "Assign" step. |
+| `workflows.stop_on_reply` | On by default. A reply from the lead takes them out of the workflow, unless it is in a "Wait for a reply" step. |
+| `outbound_webhooks` | Webhooks queued by workflows. The app's clock posts them (secret key only) and records the answer. |
+| `sms_window_opens()`, `next_local_time()` | Texting hours and "wait until 9am" in the workspace's time zone (`accounts.timezone`, `sms_window_start`, `sms_window_end`). Texting hours apply in live mode only. |
+| `wf_condition()` | Checks an if/else condition. |
+| Triggers on `contact_tags`, `opportunities.status`, `messages` | Tag added or removed, deal won or lost, and lead replied start matching workflows. A reply also wakes "Wait for a reply" steps. |
+
+**New triggers.** `{"type": "tag_added", "tag": "Hot"}`, `tag_removed`, `{"type": "deal_won"}`, `deal_lost`, `{"type": "message_received", "channel": "any|sms|email"}`, `{"type": "webhook", "token": "..."}` (leads posted to `/api/hooks/<token>`).
+
+**New steps.** Every step now has an `id`. `wait_until` (hour, minute, weekdays_only), `wait_for_reply` (amount, unit), `if_else` (condition: field, value, negate; else: a later step id or "end"), `add_tag`/`remove_tag` (tag), `assign` (user_id or "round_robin"), `set_status` (open/won/lost), `add_to_workflow`/`remove_from_workflow` (workflow_id), `webhook` (url, https only), `end`. Conditions: `replied`, `has_tag`, `in_stage`, `deal_status`, `has_email`, `has_phone`, `has_owner`, `source_is`. `{{source}}` is a new merge field.
+
+**Safety.** Unsubscribed contacts are never emailed or texted (STOP replies set `sms_unsubscribed_at`). If/else can only jump forward, so a workflow can never loop.
+
+**Text replies.** Twilio posts replies to `/api/inbound/twilio` (signature checked). The reply is matched to whoever was last texted at that number, saved in `messages` as inbound, and shown in the Inbox.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

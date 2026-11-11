@@ -10,8 +10,11 @@ export const metadata: Metadata = { title: "Workflows" };
 
 const templates: { key: string; title: string; text: string; icon: IconName; tone: Tone }[] = [
   { key: "speed", title: "Speed to lead", text: "Text and email new leads within minutes, alert the team, add a call task.", icon: "zap", tone: "blue" },
+  { key: "reply", title: "Lead replied", text: "Tag, alert the team and create a task the moment a lead replies.", icon: "inbox", tone: "green" },
+  { key: "noshow", title: "No-show follow-up", text: "Rebook people who missed their call, and stop if they reply.", icon: "calendar", tone: "violet" },
+  { key: "won", title: "Deal won", text: "Welcome new customers and tell the team.", icon: "thumbsUp", tone: "green" },
+  { key: "hook", title: "Leads from another app", text: "Bring leads in from your website, Zapier, Make or ads.", icon: "link", tone: "blue" },
   { key: "alert", title: "New lead alert", text: "Post every new lead in team chat.", icon: "hash", tone: "orange" },
-  { key: "noshow", title: "No-show follow-up", text: "Rebook people who missed their call.", icon: "calendar", tone: "violet" },
   { key: "blank", title: "Start from scratch", text: "Pick a trigger and add your own steps.", icon: "plus", tone: "grey" },
 ];
 
