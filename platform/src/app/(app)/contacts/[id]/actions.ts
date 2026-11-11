@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { deliverPending } from "@/lib/deliver";
 import { getWorkspace } from "@/lib/data";
 import { parsePounds, text, type ActionResult } from "@/lib/forms";
 
@@ -49,6 +50,7 @@ export async function setStage(_prev: ActionResult, fd: FormData): Promise<Actio
     summary: `Moved to ${stage.name}`,
   });
   await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
+  await deliverPending(supabase, ws.account.id);
   refresh();
   return {};
 }

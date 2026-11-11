@@ -28,11 +28,15 @@ function canManage(role: string) {
 export async function updateWorkspace(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   const name = text(fd, "name", 80);
   const testMode = fd.get("test_mode") === "on";
+  const testEmail = text(fd, "test_email", 200).toLowerCase() || null;
+  const testPhone = normalisePhone(text(fd, "test_phone", 30));
   if (name.length < 2) return { error: "The workspace name needs at least 2 characters." };
+  if (testEmail && !EMAIL.test(testEmail)) return { error: "The test email doesn't look right." };
+  if (testPhone === "invalid") return { error: PHONE_HELP };
   const ws = await getWorkspace();
   if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change workspace settings." };
   const supabase = await createClient();
-  const { error } = await supabase.from("accounts").update({ name, test_mode: testMode }).eq("id", ws.account.id);
+  const { error } = await supabase.from("accounts").update({ name, test_mode: testMode, test_email: testEmail, test_phone: testPhone }).eq("id", ws.account.id);
   if (error) return { error: "We couldn't save the workspace." };
   refresh();
   return { ok: "Workspace saved." };

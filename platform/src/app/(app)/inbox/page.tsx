@@ -9,7 +9,7 @@ import { ChannelPicker } from "./channel-picker";
 
 export const metadata: Metadata = { title: "Inbox" };
 
-const statusLabel: Record<string, string> = { held_test_mode: "Test mode", queued: "Queued", sent: "Sent", delivered: "Delivered", failed: "Failed", received: "Received" };
+const statusLabel: Record<string, string> = { held_test_mode: "Test mode, not sent yet", queued: "Queued", sent: "Sent", delivered: "Delivered", failed: "Failed", received: "Received" };
 
 export default async function InboxPage(props: PageProps<"/inbox">) {
   const params = await props.searchParams;
@@ -84,7 +84,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
                     <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{m.body}</p>
                     <div className={`mt-2 flex items-center gap-1.5 text-[11px] ${m.direction === "outbound" ? "text-white/75" : "text-faint"}`}>
                       <Icon name={m.channel === "sms" ? "phone" : "mail"} size={11} />
-                      {statusLabel[m.status] ?? m.status} · to {m.toAddress} · {timeAgo(m.createdAt)}
+                      {m.status === "held_test_mode" && m.sentAt ? "Sent to test inbox" : (statusLabel[m.status] ?? m.status)}{m.error ? ` (${m.error})` : ""} · to {m.toAddress} · {timeAgo(m.createdAt)}
                     </div>
                   </div>
                 </li>

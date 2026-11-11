@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { deliverPending } from "@/lib/deliver";
 import { getPipeline, getWorkspace } from "@/lib/data";
 import { text, type ActionResult } from "@/lib/forms";
 
@@ -62,6 +63,7 @@ export async function moveCard(opportunityId: string, stageId: string): Promise<
     summary: `Moved to ${stage.name}`,
   });
   await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
+  await deliverPending(supabase, ws.account.id);
   return {};
 }
 

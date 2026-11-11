@@ -543,7 +543,7 @@ export async function listChatMessages(accountId: string, channelId: string, nam
 }
 
 export type Thread = { contactId: string; name: string; initials: string; last: string; lastAt: string; channel: string; count: number };
-export type InboxMessage = { id: string; channel: "email" | "sms"; direction: "outbound" | "inbound"; subject: string | null; body: string; status: string; toAddress: string; createdAt: string };
+export type InboxMessage = { id: string; channel: "email" | "sms"; direction: "outbound" | "inbound"; subject: string | null; body: string; status: string; toAddress: string; createdAt: string; sentAt: string | null; error: string | null };
 
 /** Conversations grouped by contact, latest first. */
 export async function listThreads(accountId: string): Promise<Thread[]> {
@@ -573,10 +573,10 @@ export async function listThreadMessages(accountId: string, contactId: string): 
   const supabase = await createClient();
   const { data } = await supabase
     .from("messages")
-    .select("id, channel, direction, subject, body, status, to_address, created_at")
+    .select("id, channel, direction, subject, body, status, to_address, created_at, sent_at, error")
     .eq("account_id", accountId)
     .eq("contact_id", contactId)
     .order("created_at", { ascending: true })
     .limit(300);
-  return (data ?? []).map((m) => ({ id: m.id, channel: m.channel, direction: m.direction, subject: m.subject, body: m.body, status: m.status, toAddress: m.to_address, createdAt: m.created_at }));
+  return (data ?? []).map((m) => ({ id: m.id, channel: m.channel, direction: m.direction, subject: m.subject, body: m.body, status: m.status, toAddress: m.to_address, createdAt: m.created_at, sentAt: m.sent_at, error: m.error }));
 }
