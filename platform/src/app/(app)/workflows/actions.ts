@@ -3,6 +3,7 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { deliverPending } from "@/lib/deliver";
 import { getPipeline, getWorkspace, type WorkflowStep, type WorkflowTrigger } from "@/lib/data";
 import { text, type ActionResult } from "@/lib/forms";
 
@@ -167,6 +168,7 @@ export async function enrollContact(_prev: ActionResult, fd: FormData): Promise<
   if (error) return { error: "We couldn't add them." };
   if (!data) return { error: "They're already in this workflow." };
   await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
+  await deliverPending(supabase, ws.account.id);
   refresh();
   return { ok: "Added. The first steps have run." };
 }
@@ -176,5 +178,6 @@ export async function runDueNow(): Promise<void> {
   const ws = await getWorkspace();
   const supabase = await createClient();
   await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
+  await deliverPending(supabase, ws.account.id);
   refresh();
 }

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { getProfile, getWorkspace } from "@/lib/data";
+import { createClient } from "@/lib/supabase/server";
+import { providersReady } from "@/lib/deliver";
 import { updateProfile, updateWorkspace } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -26,6 +28,9 @@ function Section({ title, text, children }: { title: string; text: string; child
 async function General() {
   const ws = await getWorkspace();
   const profile = await getProfile(ws.userId);
+  const supabase = await createClient();
+  const { data: acc } = await supabase.from("accounts").select("test_email, test_phone").eq("id", ws.account.id).single();
+  const ready = providersReady();
   const manager = ws.account.role === "owner" || ws.account.role === "admin";
 
   return (
@@ -54,6 +59,20 @@ async function General() {
         </ActionForm>
       </Section>
 
+      <Section title="Email and texts" text="Sending is set up once for the whole platform.">
+        <ul className="flex flex-col gap-2">
+          {[
+            { name: "Email (Resend)", on: ready.email },
+            { name: "Texts (Twilio)", on: ready.sms },
+          ].map((p) => (
+            <li key={p.name} className="flex items-center justify-between rounded-xl border border-line px-4 py-3 text-[14px]">
+              <span className="font-medium">{p.name}</span>
+              <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${p.on ? "bg-ok-bg text-ok" : "bg-surface text-muted"}`}>{p.on ? "Connected" : "Not connected"}</span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
       <Section title="Workspace" text={manager ? "Your business name and safety settings." : "Only the owner or an admin can change these."}>
         <ActionForm action={updateWorkspace} className="flex flex-col gap-4">
           <fieldset disabled={!manager} className="flex flex-col gap-4">
@@ -74,6 +93,16 @@ async function General() {
                 <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
               </span>
             </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-medium">Test email</span>
+                <input name="test_email" type="email" defaultValue={acc?.test_email ?? ""} placeholder="you@company.co.uk" className="field" />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-medium">Test mobile</span>
+                <input name="test_phone" type="tel" defaultValue={acc?.test_phone ?? ""} placeholder="07700 900123" className="field" />
+              </label>
+            </div>
           </fieldset>
           {manager && (
             <div className="flex justify-end">

@@ -2,6 +2,7 @@
 
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { deliverPending, providersReady } from "@/lib/deliver";
 import { getWorkspace } from "@/lib/data";
 import { text, type ActionResult } from "@/lib/forms";
 
@@ -46,6 +47,10 @@ export async function sendMessage(_prev: ActionResult, fd: FormData): Promise<Ac
     type: `message.${channel}`,
     summary: `${channel === "email" ? `Email: ${subject}` : `Text: ${body.slice(0, 80)}`}${account?.test_mode ? " (test mode)" : ""}`,
   });
+  const sent = await deliverPending(supabase, ws.account.id);
+  const ready = providersReady()[channel];
   refresh();
-  return { ok: account?.test_mode ? "Saved in test mode." : "Queued." };
+  if (!ready) return { ok: `Saved. ${channel === "email" ? "Email" : "Texting"} isn't connected yet, so it will send once it is.` };
+  if (!sent) return { error: "Saved, but it couldn't be sent. Check the message status in the thread." };
+  return { ok: account?.test_mode ? "Sent to your test inbox (test mode)." : "Sent." };
 }

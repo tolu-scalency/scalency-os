@@ -5,7 +5,7 @@ import { createServerClient } from "@supabase/ssr";
 // This is a quick first check only: every data read is also protected by row-level security in the database.
 
 // Pages anyone can open. "/" is the public homepage.
-const PUBLIC_PATHS = ["/login", "/signup", "/auth"];
+const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/api/cron"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
