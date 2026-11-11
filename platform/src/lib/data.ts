@@ -239,6 +239,7 @@ export async function getContactDetail(id: string, accountId: string) {
     opportunity: opp ? { id: opp.id as string, status: opp.status as string, valuePence: opp.value_pence as number | null, stageId: opp.stage_id as string } : null,
     pipeline,
     ownerId: (c.owner_id as string | null) ?? null,
+    custom: ((c.custom as Record<string, unknown>) ?? {}) as Record<string, unknown>,
     emailUnsubscribed: Boolean(c.email_unsubscribed_at),
     smsUnsubscribed: Boolean(c.sms_unsubscribed_at),
     tags: ((tagRows.data ?? []) as unknown as { tags: { id: string; name: string } | null }[])
@@ -444,7 +445,7 @@ export type WorkflowStep = StepBase &
     | { type: "wait"; amount: number; unit: WaitUnit }
     | { type: "wait_until"; hour: number; minute: number; weekdays_only: boolean }
     | { type: "wait_for_reply"; amount: number; unit: WaitUnit }
-    | { type: "email"; subject: string; body: string }
+    | { type: "email"; subject: string; body: string; html?: string; mode?: "text" | "design" | "code" }
     | { type: "sms"; body: string }
     | { type: "task"; title: string; due_in_days: number }
     | { type: "move_stage"; stage_id: string }
@@ -458,6 +459,8 @@ export type WorkflowStep = StepBase &
     | { type: "add_to_workflow"; workflow_id: string }
     | { type: "remove_from_workflow"; workflow_id: string }
     | { type: "webhook"; url: string }
+    | { type: "update_field"; field: string; value: string }
+    | { type: "email_team"; to: string; subject: string; body: string }
     | { type: "end" }
   );
 export type StepType = WorkflowStep["type"];
@@ -624,4 +627,21 @@ export async function listTags(accountId: string): Promise<string[]> {
   const supabase = await createClient();
   const { data } = await supabase.from("tags").select("name").eq("account_id", accountId).order("name").limit(500);
   return (data ?? []).map((t) => t.name as string);
+}
+
+export type CustomField = { id: string; key: string; label: string };
+export type CustomValue = { key: string; value: string };
+
+/** The workspace's own contact fields (like GoHighLevel custom fields). */
+export async function listCustomFields(accountId: string): Promise<CustomField[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("custom_fields").select("id, key, label").eq("account_id", accountId).eq("object", "contact").order("position").order("created_at");
+  return (data ?? []) as CustomField[];
+}
+
+/** Reusable values for messages, like a booking link (like GoHighLevel custom values). */
+export async function listCustomValues(accountId: string): Promise<CustomValue[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("custom_values").select("key, value").eq("account_id", accountId).order("key");
+  return (data ?? []) as CustomValue[];
 }

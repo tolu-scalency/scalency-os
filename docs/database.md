@@ -145,6 +145,19 @@ Migration `20261113090000_workflow_pack`.
 
 **Text replies.** Twilio posts replies to `/api/inbound/twilio` (signature checked). The reply is matched to whoever was last texted at that number, saved in `messages` as inbound, and shown in the Inbox.
 
+## Email designer and custom fields
+
+Migration `20261114090000_email_builder_fields`.
+
+| Part | What it does |
+|---|---|
+| `messages.html` | The designed version of an email (from the Design or HTML code tab). A full HTML document is sent as written; a design is placed in the clean Scalency frame. |
+| `render_template()` | Now also fills `{{contact.<key>}}` (custom fields on the contact), `{{custom_values.<key>}}`, `{{owner_name}}`, `{{owner_first_name}}`, `{{owner_email}}`, `{{owner_phone}}`. Unknown keys become blank. |
+| `preview_template()` | Fills merge fields for one contact, for previews in the app. |
+| New steps | `update_field` (field: first_name, last_name, source or custom:<key>; value) and `email_team` (to: owner, everyone or a user id; subject; body). Team emails go to staff, so test mode doesn't redirect them. |
+
+Custom fields (`custom_fields`, object "contact") and custom values (`custom_values`) are managed in Settings, then Custom fields.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ActionForm, IconSubmit, SubmitButton } from "@/components/action-form";
 import { Avatar, Pill } from "@/components/ui";
 import { getTeam, getWorkspace, initialsOf, timeAgo } from "@/lib/data";
-import { cancelInvite, inviteMember, removeMember } from "../actions";
+import { cancelInvite, inviteMember, removeMember, resendInvite } from "../actions";
 
 export const metadata: Metadata = { title: "Team" };
 
@@ -72,6 +72,12 @@ async function Team() {
                   <div className="truncate text-[14px] font-medium">{i.email}</div>
                   <div className="text-[12.5px] text-muted">Invited {timeAgo(i.createdAt).toLowerCase()} · <span className="capitalize">{i.role}</span></div>
                 </div>
+                {manager && (
+                  <ActionForm action={resendInvite} className="flex flex-wrap items-center justify-end gap-2">
+                    <input type="hidden" name="id" value={i.id} />
+                    <SubmitButton variant="ghost" icon="send" pendingText="Sending…">Send again</SubmitButton>
+                  </ActionForm>
+                )}
                 {manager && (
                   <ActionForm action={cancelInvite}>
                     <input type="hidden" name="id" value={i.id} />

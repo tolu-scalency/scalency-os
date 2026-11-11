@@ -5,7 +5,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // In test mode the message is already addressed to the workspace's test inbox or phone.
 // Each message is "claimed" first, so running this twice never sends anything twice.
 
-type Pending = { id: string; account_id: string; channel: "email" | "sms"; to_address: string; subject: string | null; body: string; status: string };
+type Pending = { id: string; account_id: string; channel: "email" | "sms"; to_address: string; subject: string | null; body: string; html: string | null; status: string };
+
+/** Scalency's own team (PLATFORM_ADMIN_EMAILS in Netlify, comma separated). Customers never see platform settings. */
+export function isPlatformAdmin(email: string | null | undefined) {
+  const list = (process.env.PLATFORM_ADMIN_EMAILS ?? "").toLowerCase().split(",").map((e) => e.trim()).filter(Boolean);
+  return Boolean(email && list.includes(email.toLowerCase()));
+}
 
 export function providersReady() {
   return { email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM), sms: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM) };
@@ -22,6 +28,20 @@ export function emailHtml(body: string, workspace: string, test: boolean) {
     .map((p) => p.replace(/\n/g, "<br>").replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0A5FE3;">$1</a>'))
     .map((p) => `<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#1F2D45;">${p}</p>`)
     .join("");
+  return emailShell(paragraphs, workspace, test);
+}
+
+/** Designed emails: a full HTML document is sent as written; a design from the editor goes inside the clean frame. */
+export function designedHtml(html: string, workspace: string, test: boolean) {
+  if (/<html[\s>]/i.test(html)) {
+    if (!test) return html;
+    const banner = '<div style="padding:10px 16px;background:#FFF7E6;color:#8A5300;font:12px Arial,sans-serif;text-align:center;">Test mode: this was sent to the workspace test inbox, not to the lead.</div>';
+    return /<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, (m) => m + banner) : banner + html;
+  }
+  return emailShell(`<div style="font-size:15px;line-height:24px;color:#1F2D45;">${html}</div>`, workspace, test);
+}
+
+function emailShell(paragraphs: string, workspace: string, test: boolean) {
   const banner = test
     ? '<tr><td style="padding:10px 16px;background-color:#FFF7E6;color:#8A5300;font-size:12px;text-align:center;">Test mode: this was sent to the workspace test inbox, not to the lead.</td></tr>'
     : "";
@@ -44,7 +64,7 @@ async function sendEmail(m: Pending, workspace: string) {
       to: [m.to_address],
       subject: (m.status === "held_test_mode" ? "[TEST] " : "") + (m.subject ?? "(no subject)"),
       text: m.body,
-      html: emailHtml(m.body, workspace, m.status === "held_test_mode"),
+      html: m.html ? designedHtml(m.html, workspace, m.status === "held_test_mode") : emailHtml(m.body, workspace, m.status === "held_test_mode"),
     }),
   });
   const data = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
@@ -76,7 +96,7 @@ export async function deliverPending(supabase: SupabaseClient, accountId?: strin
 
   let query = supabase
     .from("messages")
-    .select("id, account_id, channel, to_address, subject, body, status")
+    .select("id, account_id, channel, to_address, subject, body, html, status")
     .in("status", ["queued", "held_test_mode"])
     .is("sent_at", null)
     .is("provider", null)
