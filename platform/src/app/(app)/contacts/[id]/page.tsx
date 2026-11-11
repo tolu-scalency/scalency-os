@@ -6,9 +6,9 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Page, Tile, type Tone } from "@/components/ui";
 import { TaskList } from "@/components/task-list";
 import { addTask } from "@/app/(app)/tasks/actions";
-import { formatPence, getContactDetail, getWorkspace, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
+import { formatPence, getContactDetail, getWorkspace, listCustomFields, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
 import { enrollContact } from "@/app/(app)/workflows/actions";
-import { addNote, addTag, removeTag, setDealStatus, setOwner, setStage, setValue } from "./actions";
+import { addNote, addTag, removeTag, saveCustomFields, setDealStatus, setOwner, setStage, setValue } from "./actions";
 import { ContactEditor } from "./contact-editor";
 
 export const metadata: Metadata = { title: "Contact" };
@@ -45,7 +45,13 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await getWorkspace();
-  const [c, workflows, names, allTags] = await Promise.all([getContactDetail(id, ws.account.id), listWorkflows(ws.account.id), memberNames(ws.account.id), listTags(ws.account.id)]);
+  const [c, workflows, names, allTags, customFields] = await Promise.all([
+    getContactDetail(id, ws.account.id),
+    listWorkflows(ws.account.id),
+    memberNames(ws.account.id),
+    listTags(ws.account.id),
+    listCustomFields(ws.account.id),
+  ]);
   if (!c) notFound();
   const liveWorkflows = workflows.filter((w) => w.status === "active");
 
@@ -276,6 +282,24 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
               </ActionForm>
             )}
           </section>
+
+          {customFields.length > 0 && (
+            <section className="card p-5">
+              <h2 className="mb-3 text-[16px] font-semibold">Custom fields</h2>
+              <ActionForm action={saveCustomFields} className="flex flex-col gap-2.5">
+                <input type="hidden" name="contact_id" value={c.id} />
+                {customFields.map((f) => (
+                  <label key={f.key} className="flex flex-col gap-1">
+                    <span className="text-[12.5px] font-medium text-muted">{f.label}</span>
+                    <input name={`cf_${f.key}`} defaultValue={c.custom[f.key] != null ? String(c.custom[f.key]) : ""} maxLength={500} className="field" />
+                  </label>
+                ))}
+                <div className="flex justify-end">
+                  <SubmitButton variant="ghost" pendingText="Saving…">Save fields</SubmitButton>
+                </div>
+              </ActionForm>
+            </section>
+          )}
 
           <section className="card p-5">
             <h2 className="mb-2 text-[16px] font-semibold">Details</h2>

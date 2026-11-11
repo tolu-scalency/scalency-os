@@ -11,3 +11,5 @@ Paste each file into Supabase: Authentication, then Emails, then Templates.
 | Change email address | `change-email.html` | Confirm your new email for Scalency OS |
 | Reset password | `reset-password.html` | Reset your Scalency OS password |
 | Reauthentication | `reauthentication.html` | Your Scalency OS confirmation code |
+
+Links use `{{ .SiteURL }}/auth/confirm?token_hash=...`, so they work on any device. In Supabase, Authentication, then URL Configuration, the Site URL must be `https://os.scalency.us`.

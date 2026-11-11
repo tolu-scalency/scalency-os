@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { getProfile, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import { providersReady } from "@/lib/deliver";
+import { isPlatformAdmin, providersReady } from "@/lib/deliver";
 import { updateProfile, updateWorkspace } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -71,7 +71,8 @@ async function General() {
         </ActionForm>
       </Section>
 
-      <Section title="Email and texts" text="Sending is set up once for the whole platform.">
+      {isPlatformAdmin(ws.userEmail) && (
+      <Section title="Email and texts" text="Only Scalency platform admins see this. Sending is set up once for the whole platform.">
         <ul className="flex flex-col gap-2">
           {[
             { name: "Email (Resend)", on: ready.email },
@@ -88,6 +89,7 @@ async function General() {
           </li>
         </ul>
       </Section>
+      )}
 
       <Section title="Workspace" text={manager ? "Your business name and safety settings." : "Only the owner or an admin can change these."}>
         <ActionForm action={updateWorkspace} className="flex flex-col gap-4">
@@ -100,7 +102,7 @@ async function General() {
               <span>
                 <span className="block text-[14px] font-semibold">Test mode</span>
                 <span className="block text-[13px] text-muted">
-                  When automated texts and emails arrive, they&apos;ll only go to you until this is off.
+                  While on, every email and text (from workflows and the Inbox) goes to the test email and mobile below, never to your contacts. Turn it off when you&apos;re ready to go live.
                 </span>
               </span>
               <span className="relative mt-0.5 inline-flex flex-none">

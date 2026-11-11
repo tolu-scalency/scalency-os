@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { Icon, type IconName } from "@/components/icon";
-import type { Condition, ConditionField, Stage, StepType, WorkflowStep, WorkflowTrigger } from "@/lib/data";
+import type { Condition, ConditionField, CustomField, CustomValue, Stage, StepType, WorkflowStep, WorkflowTrigger } from "@/lib/data";
+import { mergeFields, type MergeField } from "@/lib/merge-fields";
+import { EmailDesigner } from "@/components/editor/email-designer";
+import { MergeText } from "@/components/editor/field-picker";
 import { saveWorkflow } from "../actions";
 
 type Editable = { id: string; name: string; description: string; trigger: WorkflowTrigger; steps: WorkflowStep[]; stopOnReply: boolean };
@@ -13,6 +16,7 @@ const kinds: Kind[] = [
   { type: "sms", label: "Send a text", icon: "phone", tone: "from-[#6ee7b7] to-[#059669]", group: "Messages" },
   { type: "email", label: "Send an email", icon: "mail", tone: "from-[#55e3ec] to-[#0a5fe3]", group: "Messages" },
   { type: "notify_team", label: "Alert the team", icon: "hash", tone: "from-[#fdba74] to-[#ea580c]", group: "Messages" },
+  { type: "email_team", label: "Email the team", icon: "mail", tone: "from-[#fdba74] to-[#ea580c]", group: "Messages" },
   { type: "wait", label: "Wait", icon: "clock", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
   { type: "wait_until", label: "Wait until a time", icon: "calendar", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
   { type: "wait_for_reply", label: "Wait for a reply", icon: "inbox", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
@@ -23,6 +27,7 @@ const kinds: Kind[] = [
   { type: "assign", label: "Assign to someone", icon: "user", tone: "from-[#a5b4fc] to-[#4f46e5]", group: "Contact" },
   { type: "task", label: "Create a task", icon: "tasks", tone: "from-[#a5b4fc] to-[#4f46e5]", group: "Contact" },
   { type: "note", label: "Add a note", icon: "edit", tone: "from-[#fde68a] to-[#d97706]", group: "Contact" },
+  { type: "update_field", label: "Update a field", icon: "database", tone: "from-[#93c5fd] to-[#2563eb]", group: "Contact" },
   { type: "move_stage", label: "Move stage", icon: "pipeline", tone: "from-[#f0abfc] to-[#c026d3]", group: "Pipeline" },
   { type: "set_status", label: "Mark deal won or lost", icon: "thumbsUp", tone: "from-[#86efac] to-[#16a34a]", group: "Pipeline" },
   { type: "add_to_workflow", label: "Add to another workflow", icon: "zap", tone: "from-[#7dd3fc] to-[#0284c7]", group: "Workflows" },
@@ -50,7 +55,9 @@ function blank(type: StepType, stages: Stage[], members: Option[], workflows: Op
     case "wait": return { id, type, amount: 1, unit: "hours" };
     case "wait_until": return { id, type, hour: 9, minute: 0, weekdays_only: true };
     case "wait_for_reply": return { id, type, amount: 1, unit: "days" };
-    case "email": return { id, type, subject: "", body: "" };
+    case "email": return { id, type, subject: "", body: "", html: "", mode: "design" };
+    case "email_team": return { id, type, to: "owner", subject: "Update on {{name}}", body: "{{name}} ({{phone}}) needs a call." };
+    case "update_field": return { id, type, field: "source", value: "" };
     case "sms": return { id, type, body: "" };
     case "task": return { id, type, title: "Follow up with {{first_name}}", due_in_days: 0 };
     case "move_stage": return { id, type, stage_id: stages[0]?.id ?? "" };
@@ -73,7 +80,6 @@ function triggerValue(t: WorkflowTrigger) {
   return t.type === "stage_entered" ? `stage:${t.stage_id}` : t.type;
 }
 
-const fields = ["{{first_name}}", "{{last_name}}", "{{name}}", "{{email}}", "{{phone}}", "{{source}}", "{{workspace}}"];
 
 /** The workflow builder: a trigger, then steps that run from top to bottom. */
 export function WorkflowEditor({
@@ -84,6 +90,8 @@ export function WorkflowEditor({
   tags,
   hookBase,
   locked,
+  customFields,
+  customValues,
 }: {
   workflow: Editable;
   stages: Stage[];
@@ -92,7 +100,10 @@ export function WorkflowEditor({
   tags: string[];
   hookBase: string;
   locked: boolean;
+  customFields: CustomField[];
+  customValues: CustomValue[];
 }) {
+  const fieldsList = mergeFields(customFields, customValues);
   const [name, setName] = useState(workflow.name);
   const [description, setDescription] = useState(workflow.description);
   const [trigger, setTrigger] = useState<WorkflowTrigger>(workflow.trigger);
@@ -295,7 +306,7 @@ export function WorkflowEditor({
                   )}
                 </div>
                 <fieldset disabled={disabled} className="flex flex-col gap-2.5">
-                  <StepFields step={step} index={i} steps={steps} stages={stages} members={members} workflows={others} onChange={(p) => update(i, p)} />
+                  <StepFields step={step} index={i} steps={steps} stages={stages} members={members} workflows={others} fields={fieldsList} customFields={customFields} onChange={(p) => update(i, p)} />
                 </fieldset>
               </div>
               <Connector
@@ -316,7 +327,7 @@ export function WorkflowEditor({
       {!disabled && (
         <div className="sticky bottom-4 z-20 mx-auto flex w-full max-w-[680px] items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 pl-4 shadow-[var(--shadow-pop)] backdrop-blur">
           <span className={`text-[13px] ${message.error ? "text-bad" : message.ok ? "text-ok" : "text-muted"}`}>
-            {message.error ?? message.ok ?? (dirty ? "You have unsaved changes." : `Use ${fields.slice(0, 3).join(", ")} and more in messages.`)}
+            {message.error ?? message.ok ?? (dirty ? "You have unsaved changes." : "Use “Insert field” to personalise messages.")}
           </span>
           <button type="button" onClick={save} disabled={pending} className="btn-primary inline-flex min-h-10 items-center gap-2 rounded-xl px-5 text-[13.5px] font-semibold disabled:opacity-70">
             <Icon name="check" size={15} /> {pending ? "Saving…" : "Save"}
@@ -406,6 +417,8 @@ function StepFields({
   stages,
   members,
   workflows,
+  fields: mf,
+  customFields,
   onChange,
 }: {
   step: WorkflowStep;
@@ -414,6 +427,8 @@ function StepFields({
   stages: Stage[];
   members: Option[];
   workflows: Option[];
+  fields: MergeField[];
+  customFields: CustomField[];
   onChange: (p: Partial<WorkflowStep>) => void;
 }) {
   switch (step.type) {
@@ -454,26 +469,60 @@ function StepFields({
       );
     case "email":
       return (
+        <EmailDesigner
+          value={{ subject: step.subject, body: step.body, html: step.html ?? "", mode: step.mode ?? (step.html ? "design" : "text") }}
+          onChange={(p) => onChange(p as Partial<WorkflowStep>)}
+          fields={mf}
+        />
+      );
+    case "email_team":
+      return (
         <>
-          <input value={step.subject} onChange={(e) => onChange({ subject: e.target.value })} placeholder="Subject, e.g. Thanks {{first_name}}" className="field" aria-label="Subject" />
-          <textarea value={step.body} onChange={(e) => onChange({ body: e.target.value })} rows={4} placeholder="Hi {{first_name}}, …" className="field resize-y py-2.5" aria-label="Email message" />
-          <span className="text-[12px] text-faint">Fields: {fields.join(" ")}</span>
+          <div className="flex flex-wrap items-center gap-2 text-[14px]">
+            Email
+            <select value={step.to} onChange={(e) => onChange({ to: e.target.value })} className="field h-10 min-w-0 flex-1" aria-label="Who to email">
+              <option value="owner">the contact&apos;s owner</option>
+              <option value="everyone">everyone in the workspace</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+          <MergeText value={step.subject} onChange={(subject) => onChange({ subject })} fields={mf} maxLength={200} placeholder="Subject" label="Team email subject" />
+          <MergeText value={step.body} onChange={(body) => onChange({ body })} fields={mf} multiline rows={3} maxLength={5000} placeholder="Message to your team" label="Team email message" />
+          <span className="text-[12px] text-faint">Goes to your team, not the lead, so it sends even in test mode.</span>
         </>
+      );
+    case "update_field":
+      return (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-[14px]">
+            Set
+            <select value={step.field} onChange={(e) => onChange({ field: e.target.value })} className="field h-10 min-w-0 flex-1" aria-label="Field to update">
+              <option value="first_name">First name</option>
+              <option value="last_name">Last name</option>
+              <option value="source">Source</option>
+              {customFields.map((f) => (
+                <option key={f.key} value={`custom:${f.key}`}>{f.label}</option>
+              ))}
+            </select>
+            to
+          </div>
+          <MergeText value={step.value} onChange={(value) => onChange({ value })} fields={mf} maxLength={500} placeholder="New value (leave empty to clear)" label="New value" />
+          {customFields.length === 0 && <span className="text-[12px] text-faint">Add your own fields in Settings, then Custom fields.</span>}
+        </div>
       );
     case "sms":
       return (
         <>
-          <textarea value={step.body} onChange={(e) => onChange({ body: e.target.value })} rows={3} maxLength={640} placeholder="Hi {{first_name}}, …" className="field resize-y py-2.5" aria-label="Text message" />
-          <span className="flex justify-between gap-3 text-[12px] text-faint">
-            <span>Only sends inside your texting hours (Settings).</span>
-            <span>{step.body.length}/640</span>
-          </span>
+          <MergeText value={step.body} onChange={(body) => onChange({ body })} fields={mf} multiline rows={4} maxLength={640} placeholder={"Hi {{first_name}}, …"} label="Text message" />
+          <span className="text-[12px] text-faint">Press Enter for a new line. Only sends inside your texting hours (Settings).</span>
         </>
       );
     case "task":
       return (
         <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          <input value={step.title} onChange={(e) => onChange({ title: e.target.value })} className="field min-w-0 flex-[1_1_220px]" aria-label="Task title" />
+          <MergeText value={step.title} onChange={(title) => onChange({ title })} fields={mf} maxLength={200} label="Task title" className="min-w-0 flex-[1_1_260px]" />
           due in
           <input type="number" min={0} max={365} value={step.due_in_days} onChange={(e) => onChange({ due_in_days: Number(e.target.value) })} className="field h-10 w-20" aria-label="Days" />
           days
@@ -501,11 +550,11 @@ function StepFields({
         </div>
       );
     case "note":
-      return <textarea value={step.text} onChange={(e) => onChange({ text: e.target.value })} rows={2} placeholder="Note to add to the contact" className="field resize-y py-2.5" aria-label="Note" />;
+      return <MergeText value={step.text} onChange={(text) => onChange({ text })} fields={mf} multiline rows={3} maxLength={2000} placeholder="Note to add to the contact" label="Note" />;
     case "notify_team":
       return (
         <>
-          <input value={step.text} onChange={(e) => onChange({ text: e.target.value })} className="field" aria-label="Alert message" />
+          <MergeText value={step.text} onChange={(text) => onChange({ text })} fields={mf} multiline rows={2} maxLength={1000} label="Alert message" />
           <span className="text-[12px] text-faint">Posts in #leads in Team chat.</span>
         </>
       );

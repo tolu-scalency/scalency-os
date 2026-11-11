@@ -94,6 +94,7 @@ export async function createWorkflow(fd: FormData) {
 const STEP_TYPES = new Set([
   "wait", "wait_until", "wait_for_reply", "email", "sms", "task", "move_stage", "set_status", "note", "notify_team",
   "add_tag", "remove_tag", "assign", "if_else", "add_to_workflow", "remove_from_workflow", "webhook", "end",
+  "update_field", "email_team",
 ]);
 const CONDITIONS = new Set(["has_tag", "has_email", "has_phone", "replied", "in_stage", "deal_status", "source_is", "has_owner"]);
 const UNITS = ["minutes", "hours", "days"];
@@ -115,7 +116,22 @@ function safeUrl(raw: string) {
   }
 }
 
-type Ctx = { stageIds: Set<string>; memberIds: Set<string>; workflowIds: Set<string>; selfId: string };
+type Ctx = { stageIds: Set<string>; memberIds: Set<string>; workflowIds: Set<string>; fieldKeys: Set<string>; selfId: string };
+
+/** Plain text from HTML, for the text copy sent alongside a designed email. */
+function stripHtml(html: string) {
+  return html
+    .replace(/<(style|script)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 
 function cleanSteps(raw: unknown, ctx: Ctx): WorkflowStep[] | string {
   if (!Array.isArray(raw)) return "Steps are missing.";
@@ -145,10 +161,36 @@ function cleanSteps(raw: unknown, ctx: Ctx): WorkflowStep[] | string {
         out.push({ id, type: "wait_until", hour, minute, weekdays_only: Boolean(st.weekdays_only) });
         break;
       }
-      case "email":
-        if (!str("subject", 200).trim() || !str("body", 5000).trim()) return `Step ${n}: the email needs a subject and a message.`;
-        out.push({ id, type: "email", subject: str("subject", 200), body: str("body", 5000) });
+      case "email": {
+        const mode = ["text", "design", "code"].includes(String(st.mode)) ? (st.mode as "text") : st.html ? "design" : "text";
+        const subject = str("subject", 200);
+        if (!subject.trim()) return `Step ${n}: the email needs a subject.`;
+        if (mode === "text") {
+          if (!str("body", 5000).trim()) return `Step ${n}: the email needs a message.`;
+          out.push({ id, type: "email", subject, body: str("body", 5000), mode });
+        } else {
+          const html = String(st.html ?? "");
+          if (html.length > 200000) return `Step ${n}: the design is too big. Keep it under 200 KB.`;
+          const body = stripHtml(html).slice(0, 5000);
+          if (!body.trim() && !/<img/i.test(html)) return `Step ${n}: the email design is empty.`;
+          out.push({ id, type: "email", subject, body: body || " ", html, mode });
+        }
         break;
+      }
+      case "email_team": {
+        const to = str("to", 40);
+        if (to !== "owner" && to !== "everyone" && !ctx.memberIds.has(to)) return `Step ${n}: choose who to email.`;
+        if (!str("subject", 200).trim() || !str("body", 5000).trim()) return `Step ${n}: the team email needs a subject and a message.`;
+        out.push({ id, type: "email_team", to, subject: str("subject", 200), body: str("body", 5000) });
+        break;
+      }
+      case "update_field": {
+        const field = str("field", 60);
+        const ok = ["first_name", "last_name", "source"].includes(field) || (field.startsWith("custom:") && ctx.fieldKeys.has(field.slice(7)));
+        if (!ok) return `Step ${n}: choose a field to update.`;
+        out.push({ id, type: "update_field", field, value: str("value", 500) });
+        break;
+      }
       case "sms":
         if (!str("body", 640).trim()) return `Step ${n}: the text needs a message.`;
         out.push({ id, type: "sms", body: str("body", 640) });
@@ -239,11 +281,12 @@ export async function saveWorkflow(
   if (!name) return { error: "Give the workflow a name." };
   const ws = await getWorkspace();
   const supabase = await createClient();
-  const [pipeline, { data: members }, { data: flows }, { data: current }] = await Promise.all([
+  const [pipeline, { data: members }, { data: flows }, { data: current }, { data: cf }] = await Promise.all([
     getPipeline(ws.account.id),
     supabase.from("account_members").select("user_id").eq("account_id", ws.account.id),
     supabase.from("workflows").select("id").eq("account_id", ws.account.id).neq("status", "archived"),
     supabase.from("workflows").select("trigger").eq("id", id).eq("account_id", ws.account.id).maybeSingle(),
+    supabase.from("custom_fields").select("key").eq("account_id", ws.account.id).eq("object", "contact"),
   ]);
   if (!current) return { error: "This workflow no longer exists." };
   const stageIds = new Set((pipeline?.stages ?? []).map((s) => s.id));
@@ -251,6 +294,7 @@ export async function saveWorkflow(
     stageIds,
     memberIds: new Set((members ?? []).map((m) => m.user_id as string)),
     workflowIds: new Set((flows ?? []).map((f) => f.id as string)),
+    fieldKeys: new Set((cf ?? []).map((f) => f.key as string)),
     selfId: id,
   });
   if (typeof steps === "string") return { error: steps };

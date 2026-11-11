@@ -5,7 +5,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon } from "@/components/icon";
 import { Page, Pill } from "@/components/ui";
 import { headers } from "next/headers";
-import { getPipeline, getWorkflow, getWorkspace, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
+import { getPipeline, getWorkflow, getWorkspace, listCustomFields, listCustomValues, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
 import { runDueNow, setWorkflowStatus } from "../actions";
 import { actionLabel } from "../labels";
 import { WorkflowEditor } from "./editor";
@@ -27,13 +27,15 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
   const { id } = await props.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await getWorkspace();
-  const [wf, pipeline, names, flows, tags, h] = await Promise.all([
+  const [wf, pipeline, names, flows, tags, h, customFields, customValues] = await Promise.all([
     getWorkflow(id, ws.account.id),
     getPipeline(ws.account.id),
     memberNames(ws.account.id),
     listWorkflows(ws.account.id),
     listTags(ws.account.id),
     headers(),
+    listCustomFields(ws.account.id),
+    listCustomValues(ws.account.id),
   ]);
   if (!wf) notFound();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "os.scalency.us";
@@ -82,6 +84,8 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
         workflows={flows.map((f) => ({ id: f.id, name: f.name }))}
         tags={tags}
         hookBase={`${proto}://${host}`}
+        customFields={customFields}
+        customValues={customValues}
         locked={wf.status === "active"}
       />
 
