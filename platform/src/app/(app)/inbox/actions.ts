@@ -21,10 +21,12 @@ export async function sendMessage(_prev: ActionResult, fd: FormData): Promise<Ac
   const ws = await getWorkspace();
   const supabase = await createClient();
   const [{ data: contact }, { data: account }] = await Promise.all([
-    supabase.from("contacts").select("email, phone").eq("id", contactId).eq("account_id", ws.account.id).maybeSingle(),
+    supabase.from("contacts").select("email, phone, email_unsubscribed_at, sms_unsubscribed_at").eq("id", contactId).eq("account_id", ws.account.id).maybeSingle(),
     supabase.from("accounts").select("test_mode, test_email, test_phone").eq("id", ws.account.id).single(),
   ]);
   if (!contact) return { error: "That contact no longer exists." };
+  if (channel === "sms" && contact.sms_unsubscribed_at) return { error: "This contact replied STOP, so texts to them are blocked." };
+  if (channel === "email" && contact.email_unsubscribed_at) return { error: "This contact unsubscribed from emails." };
   const real = channel === "email" ? contact.email : contact.phone;
   if (!real) return { error: channel === "email" ? "This contact has no email." : "This contact has no phone number." };
   const to = account?.test_mode ? (channel === "email" ? account.test_email : account.test_phone) : real;

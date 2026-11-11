@@ -6,9 +6,9 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Page, Tile, type Tone } from "@/components/ui";
 import { TaskList } from "@/components/task-list";
 import { addTask } from "@/app/(app)/tasks/actions";
-import { formatPence, getContactDetail, getWorkspace, listWorkflows, timeAgo } from "@/lib/data";
+import { formatPence, getContactDetail, getWorkspace, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
 import { enrollContact } from "@/app/(app)/workflows/actions";
-import { addNote, setStage, setValue } from "./actions";
+import { addNote, addTag, removeTag, setDealStatus, setOwner, setStage, setValue } from "./actions";
 import { ContactEditor } from "./contact-editor";
 
 export const metadata: Metadata = { title: "Contact" };
@@ -18,6 +18,12 @@ const kinds: Record<string, { icon: IconName; tone: Tone }> = {
   "stage.changed": { icon: "pipeline", tone: "violet" },
   note: { icon: "edit", tone: "orange" },
   "form.completed": { icon: "checkCircle", tone: "green" },
+  "tag.added": { icon: "tag", tone: "blue" },
+  "tag.removed": { icon: "tag", tone: "grey" },
+  "deal.status": { icon: "thumbsUp", tone: "green" },
+  "message.email": { icon: "mail", tone: "blue" },
+  "message.sms": { icon: "phone", tone: "green" },
+  "message.received": { icon: "inbox", tone: "orange" },
 };
 
 export default function ContactPage(props: PageProps<"/contacts/[id]">) {
@@ -39,7 +45,7 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await getWorkspace();
-  const [c, workflows] = await Promise.all([getContactDetail(id, ws.account.id), listWorkflows(ws.account.id)]);
+  const [c, workflows, names, allTags] = await Promise.all([getContactDetail(id, ws.account.id), listWorkflows(ws.account.id), memberNames(ws.account.id), listTags(ws.account.id)]);
   if (!c) notFound();
   const liveWorkflows = workflows.filter((w) => w.status === "active");
 
@@ -138,7 +144,29 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
               })}
             </ol>
             {currentIndex < 0 && <p className="mt-3 text-[13px] text-muted">Not in the pipeline yet. Click a stage to add them.</p>}
-            {c.opportunity && <p className="mt-3 text-[13px] text-muted">Value: <strong className="text-navy">{formatPence(c.opportunity.valuePence)}</strong></p>}
+            {c.opportunity && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[13px] text-muted">
+                  Value: <strong className="text-navy">{formatPence(c.opportunity.valuePence)}</strong>
+                  {c.opportunity.status !== "open" && (
+                    <span className={`ml-2 rounded-full px-2 py-0.5 text-[12px] font-semibold ${c.opportunity.status === "won" ? "bg-ok-bg text-ok" : "bg-bad-bg text-bad"}`}>
+                      Deal {c.opportunity.status}
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {(c.opportunity.status === "open" ? (["won", "lost"] as const) : (["open"] as const)).map((st) => (
+                    <ActionForm key={st} action={setDealStatus}>
+                      <input type="hidden" name="opportunity_id" value={c.opportunity!.id} />
+                      <input type="hidden" name="status" value={st} />
+                      <SubmitButton variant="ghost" icon={st === "won" ? "thumbsUp" : st === "lost" ? "x" : "refresh"} pendingText="Saving…">
+                        {st === "won" ? "Mark won" : st === "lost" ? "Mark lost" : "Reopen deal"}
+                      </SubmitButton>
+                    </ActionForm>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </section>
@@ -179,6 +207,47 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
 
         <div className="flex flex-col gap-4">
           <section className="card p-5">
+            <h2 className="mb-2 text-[16px] font-semibold">Tags</h2>
+            {c.tags.length > 0 && (
+              <ul className="mb-3 flex flex-wrap gap-1.5">
+                {c.tags.map((t) => (
+                  <li key={t.id}>
+                    <ActionForm action={removeTag} className="inline-flex items-center gap-1 rounded-full bg-chip py-1 pl-3 pr-1 text-[12.5px] font-medium text-brand">
+                      <input type="hidden" name="contact_id" value={c.id} />
+                      <input type="hidden" name="tag_id" value={t.id} />
+                      {t.name}
+                      <button type="submit" aria-label={`Remove ${t.name}`} title="Remove" className="inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-white">
+                        <Icon name="x" size={11} />
+                      </button>
+                    </ActionForm>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <ActionForm action={addTag} resetOnOk className="flex flex-wrap gap-2">
+              <input type="hidden" name="contact_id" value={c.id} />
+              <input name="tag" list="contact-tags" required maxLength={40} placeholder="Add a tag…" aria-label="Tag" className="field min-w-0 flex-1" />
+              <datalist id="contact-tags">
+                {allTags.filter((t) => !c.tags.some((x) => x.name === t)).map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+              <SubmitButton icon="plus" pendingText="Adding…">Add</SubmitButton>
+            </ActionForm>
+            <h2 className="mb-2 mt-5 text-[16px] font-semibold">Owner</h2>
+            <ActionForm action={setOwner} className="flex flex-wrap gap-2">
+              <input type="hidden" name="contact_id" value={c.id} />
+              <select name="owner_id" defaultValue={c.ownerId ?? ""} aria-label="Owner" className="field min-w-0 flex-1">
+                <option value="">Nobody yet</option>
+                {Object.entries(names).map(([uid, n]) => (
+                  <option key={uid} value={uid}>{uid === ws.userId ? `${n} (you)` : n}</option>
+                ))}
+              </select>
+              <SubmitButton variant="ghost" pendingText="Saving…">Save</SubmitButton>
+            </ActionForm>
+          </section>
+
+          <section className="card p-5">
             <h2 className="mb-2 text-[16px] font-semibold">Tasks</h2>
             <ActionForm action={addTask} resetOnOk className="mb-2 flex flex-wrap gap-2">
               <input type="hidden" name="contact_id" value={c.id} />
@@ -214,6 +283,9 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
               <Row label="Email">{c.email ?? "—"}</Row>
               <Row label="Phone">{c.phone ?? "—"}</Row>
               <Row label="Source"><span className="capitalize">{c.source ?? "—"}</span></Row>
+              {(c.smsUnsubscribed || c.emailUnsubscribed) && (
+                <Row label="Unsubscribed">{[c.smsUnsubscribed && "Texts", c.emailUnsubscribed && "Emails"].filter(Boolean).join(" and ")}</Row>
+              )}
               <Row label="Added">{new Date(c.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</Row>
               {answers.map(([k, v]) => (
                 <Row key={k} label={labelFor(k)}>{String(v)}</Row>

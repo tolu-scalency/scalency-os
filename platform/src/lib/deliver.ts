@@ -11,6 +11,29 @@ export function providersReady() {
   return { email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM), sms: Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM) };
 }
 
+function escapeHtml(t: string) {
+  return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** A clean HTML version of a plain-text message, with links made clickable. */
+export function emailHtml(body: string, workspace: string, test: boolean) {
+  const paragraphs = escapeHtml(body)
+    .split(/\n{2,}/)
+    .map((p) => p.replace(/\n/g, "<br>").replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#0A5FE3;">$1</a>'))
+    .map((p) => `<p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#1F2D45;">${p}</p>`)
+    .join("");
+  const banner = test
+    ? '<tr><td style="padding:10px 16px;background-color:#FFF7E6;color:#8A5300;font-size:12px;text-align:center;">Test mode: this was sent to the workspace test inbox, not to the lead.</td></tr>'
+    : "";
+  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background-color:#F4F7FB;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F4F7FB;"><tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#FFFFFF;border-radius:16px;overflow:hidden;">
+${banner}
+<tr><td style="padding:32px 32px 16px;">${paragraphs}</td></tr>
+<tr><td style="padding:0 32px 28px;font-size:12px;color:#8592A6;">${escapeHtml(workspace)}</td></tr>
+</table></td></tr></table></body></html>`;
+}
+
 async function sendEmail(m: Pending, workspace: string) {
   const from = process.env.EMAIL_FROM!; // e.g. hello@send.scalency.us
   const res = await fetch("https://api.resend.com/emails", {
@@ -21,6 +44,7 @@ async function sendEmail(m: Pending, workspace: string) {
       to: [m.to_address],
       subject: (m.status === "held_test_mode" ? "[TEST] " : "") + (m.subject ?? "(no subject)"),
       text: m.body,
+      html: emailHtml(m.body, workspace, m.status === "held_test_mode"),
     }),
   });
   const data = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
@@ -85,6 +109,35 @@ export async function deliverPending(supabase: SupabaseClient, accountId?: strin
       sent += 1;
     } catch (e) {
       await supabase.from("messages").update({ status: "failed", error: String(e instanceof Error ? e.message : e).slice(0, 500) }).eq("id", m.id);
+    }
+  }
+  return sent;
+}
+
+type Hook = { id: string; url: string; payload: unknown };
+
+/** Posts queued outgoing webhooks. Needs the server (secret key) client, so it only runs from the clock. */
+export async function deliverWebhooks(admin: SupabaseClient, limit = 50) {
+  const { data } = await admin.from("outbound_webhooks").select("id, url, payload").eq("status", "queued").order("created_at").limit(limit);
+  let sent = 0;
+  for (const h of (data ?? []) as Hook[]) {
+    const { data: claimed } = await admin.from("outbound_webhooks").update({ status: "sending" }).eq("id", h.id).eq("status", "queued").select("id");
+    if (!claimed?.length) continue;
+    try {
+      const res = await fetch(h.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "user-agent": "Scalency-OS-Webhook/1.0" },
+        body: JSON.stringify(h.payload),
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
+      });
+      await admin
+        .from("outbound_webhooks")
+        .update({ status: res.ok ? "sent" : "failed", response_status: res.status, sent_at: new Date().toISOString(), error: res.ok ? null : `The other app answered ${res.status}` })
+        .eq("id", h.id);
+      if (res.ok) sent += 1;
+    } catch (e) {
+      await admin.from("outbound_webhooks").update({ status: "failed", error: String(e instanceof Error ? e.message : e).slice(0, 300) }).eq("id", h.id);
     }
   }
   return sent;

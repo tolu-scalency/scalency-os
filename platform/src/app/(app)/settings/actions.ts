@@ -33,10 +33,23 @@ export async function updateWorkspace(_prev: ActionResult, fd: FormData): Promis
   if (name.length < 2) return { error: "The workspace name needs at least 2 characters." };
   if (testEmail && !EMAIL.test(testEmail)) return { error: "The test email doesn't look right." };
   if (testPhone === "invalid") return { error: PHONE_HELP };
+  const timezone = text(fd, "timezone", 60) || "Europe/London";
+  const from = text(fd, "sms_window_start", 5);
+  const until = text(fd, "sms_window_end", 5);
+  const timeOk = (t: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+  if (!timeOk(from) || !timeOk(until) || from >= until) return { error: "Texting hours need a start time before the end time." };
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
+  } catch {
+    return { error: "Choose a time zone." };
+  }
   const ws = await getWorkspace();
   if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change workspace settings." };
   const supabase = await createClient();
-  const { error } = await supabase.from("accounts").update({ name, test_mode: testMode, test_email: testEmail, test_phone: testPhone }).eq("id", ws.account.id);
+  const { error } = await supabase
+    .from("accounts")
+    .update({ name, test_mode: testMode, test_email: testEmail, test_phone: testPhone, timezone, sms_window_start: from, sms_window_end: until })
+    .eq("id", ws.account.id);
   if (error) return { error: "We couldn't save the workspace." };
   refresh();
   return { ok: "Workspace saved." };

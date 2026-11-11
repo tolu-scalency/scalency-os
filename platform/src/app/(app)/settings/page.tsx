@@ -7,6 +7,18 @@ import { updateProfile, updateWorkspace } from "./actions";
 
 export const metadata: Metadata = { title: "Settings" };
 
+const TIMEZONES = [
+  { value: "Europe/London", label: "UK (London)" },
+  { value: "Europe/Dublin", label: "Ireland (Dublin)" },
+  { value: "Africa/Lagos", label: "Nigeria (Lagos)" },
+  { value: "Europe/Paris", label: "Central Europe (Paris)" },
+  { value: "America/New_York", label: "US Eastern (New York)" },
+  { value: "America/Chicago", label: "US Central (Chicago)" },
+  { value: "America/Los_Angeles", label: "US Pacific (Los Angeles)" },
+  { value: "Asia/Dubai", label: "UAE (Dubai)" },
+  { value: "Australia/Sydney", label: "Australia (Sydney)" },
+];
+
 export default function SettingsPage() {
   return (
       <General />
@@ -29,7 +41,7 @@ async function General() {
   const ws = await getWorkspace();
   const profile = await getProfile(ws.userId);
   const supabase = await createClient();
-  const { data: acc } = await supabase.from("accounts").select("test_email, test_phone").eq("id", ws.account.id).single();
+  const { data: acc } = await supabase.from("accounts").select("test_email, test_phone, timezone, sms_window_start, sms_window_end").eq("id", ws.account.id).single();
   const ready = providersReady();
   const manager = ws.account.role === "owner" || ws.account.role === "admin";
 
@@ -70,6 +82,10 @@ async function General() {
               <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${p.on ? "bg-ok-bg text-ok" : "bg-surface text-muted"}`}>{p.on ? "Connected" : "Not connected"}</span>
             </li>
           ))}
+          <li className="rounded-xl bg-surface px-4 py-3 text-[13px] text-muted">
+            For text replies to reach the Inbox, the Twilio number&apos;s “A message comes in” webhook should be{" "}
+            <code className="rounded bg-white px-1.5 py-0.5 text-[12px] text-navy ring-1 ring-line">https://os.scalency.us/api/inbound/twilio</code>
+          </li>
         </ul>
       </Section>
 
@@ -102,6 +118,27 @@ async function General() {
                 <span className="text-[13px] font-medium">Test mobile</span>
                 <input name="test_phone" type="tel" defaultValue={acc?.test_phone ?? ""} placeholder="07700 900123" className="field" />
               </label>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-medium">Time zone</span>
+                <select name="timezone" defaultValue={acc?.timezone ?? "Europe/London"} className="field">
+                  {TIMEZONES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-medium">Texts from</span>
+                <input name="sms_window_start" type="time" required defaultValue={(acc?.sms_window_start ?? "08:00").slice(0, 5)} className="field" />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[13px] font-medium">Texts until</span>
+                <input name="sms_window_end" type="time" required defaultValue={(acc?.sms_window_end ?? "20:00").slice(0, 5)} className="field" />
+              </label>
+              <p className="text-[12.5px] text-muted sm:col-span-3">
+                Automated texts outside these hours wait until the morning. In test mode they send any time so you can test.
+              </p>
             </div>
           </fieldset>
           {manager && (

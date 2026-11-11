@@ -86,3 +86,74 @@ export async function addNote(_prev: ActionResult, fd: FormData): Promise<Action
   refresh();
   return { ok: "Note added." };
 }
+
+async function runNow(supabase: Awaited<ReturnType<typeof createClient>>, accountId: string) {
+  await supabase.rpc("run_due_workflows", { target_account: accountId });
+  await deliverPending(supabase, accountId);
+}
+
+/** Adds a tag to a contact, creating the tag if it's new. Tag workflows start straight away. */
+export async function addTag(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const contactId = text(fd, "contact_id", 40);
+  const name = text(fd, "tag", 40);
+  if (!name) return { error: "Type a tag." };
+  const ws = await getWorkspace();
+  const supabase = await createClient();
+  const { data: existing } = await supabase.from("tags").select("id, name").eq("account_id", ws.account.id).ilike("name", name.replace(/[%_\\]/g, "\\$&")).maybeSingle();
+  let tagId = existing?.id as string | undefined;
+  if (!tagId) {
+    const { data, error } = await supabase.from("tags").insert({ account_id: ws.account.id, name }).select("id").single();
+    if (error || !data) return { error: "We couldn't create that tag." };
+    tagId = data.id;
+  }
+  const { error } = await supabase.from("contact_tags").upsert({ account_id: ws.account.id, contact_id: contactId, tag_id: tagId }, { onConflict: "contact_id,tag_id", ignoreDuplicates: true });
+  if (error) return { error: "We couldn't add the tag." };
+  await runNow(supabase, ws.account.id);
+  refresh();
+  return { ok: "Tag added." };
+}
+
+/** Removes a tag from a contact. */
+export async function removeTag(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const contactId = text(fd, "contact_id", 40);
+  const tagId = text(fd, "tag_id", 40);
+  const ws = await getWorkspace();
+  const supabase = await createClient();
+  const { error } = await supabase.from("contact_tags").delete().eq("contact_id", contactId).eq("tag_id", tagId).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't remove the tag." };
+  await runNow(supabase, ws.account.id);
+  refresh();
+  return {};
+}
+
+/** Sets who looks after a contact (and their open deal). */
+export async function setOwner(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const contactId = text(fd, "contact_id", 40);
+  const owner = text(fd, "owner_id", 40) || null;
+  const ws = await getWorkspace();
+  const supabase = await createClient();
+  if (owner) {
+    const { data: m } = await supabase.from("account_members").select("user_id").eq("account_id", ws.account.id).eq("user_id", owner).maybeSingle();
+    if (!m) return { error: "That person isn't in this workspace." };
+  }
+  const { error } = await supabase.from("contacts").update({ owner_id: owner }).eq("id", contactId).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't save the owner." };
+  await supabase.from("opportunities").update({ assigned_to: owner }).eq("contact_id", contactId).eq("account_id", ws.account.id).eq("status", "open");
+  refresh();
+  return { ok: "Saved." };
+}
+
+/** Marks the contact's deal won, lost or open again. Won and lost start matching workflows. */
+export async function setDealStatus(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const oppId = text(fd, "opportunity_id", 40);
+  const status = text(fd, "status", 10);
+  if (!["open", "won", "lost"].includes(status)) return { error: "Choose won, lost or open." };
+  const ws = await getWorkspace();
+  const supabase = await createClient();
+  const { data: opp, error } = await supabase.from("opportunities").update({ status }).eq("id", oppId).eq("account_id", ws.account.id).select("contact_id").maybeSingle();
+  if (error || !opp) return { error: "We couldn't update the deal." };
+  await supabase.from("activity").insert({ account_id: ws.account.id, contact_id: opp.contact_id, opportunity_id: oppId, type: "deal.status", summary: status === "open" ? "Deal reopened" : `Deal marked ${status}` });
+  await runNow(supabase, ws.account.id);
+  refresh();
+  return {};
+}
