@@ -7,6 +7,7 @@ const tabs = [
   { href: "/settings", label: "General" },
   { href: "/settings/pipeline", label: "Pipeline" },
   { href: "/settings/team", label: "Members" },
+  { href: "/settings/fields", label: "Custom fields" },
   { href: "/settings/notifications", label: "Notifications", soon: true },
   { href: "/settings/integrations", label: "Integrations", soon: true },
   { href: "/settings/billing", label: "Billing", soon: true },

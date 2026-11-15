@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ActionForm, IconSubmit, SubmitButton } from "@/components/action-form";
 import { Avatar, Pill } from "@/components/ui";
 import { getTeam, getWorkspace, initialsOf, timeAgo } from "@/lib/data";
-import { cancelInvite, inviteMember, removeMember } from "../actions";
+import { cancelInvite, inviteMember, removeMember, resendInvite } from "../actions";
 
 export const metadata: Metadata = { title: "Team" };
 
@@ -68,10 +68,16 @@ async function Team() {
             {team.invites.map((i) => (
               <li key={i.id} className="flex flex-wrap items-center gap-3 py-3">
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-dashed border-line-strong text-[12px] font-semibold text-faint">?</span>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-[1_1_170px]">
                   <div className="truncate text-[14px] font-medium">{i.email}</div>
                   <div className="text-[12.5px] text-muted">Invited {timeAgo(i.createdAt).toLowerCase()} · <span className="capitalize">{i.role}</span></div>
                 </div>
+                {manager && (
+                  <ActionForm action={resendInvite} className="flex flex-wrap items-center justify-end gap-2">
+                    <input type="hidden" name="id" value={i.id} />
+                    <SubmitButton variant="ghost" icon="send" pendingText="Sending…">Send again</SubmitButton>
+                  </ActionForm>
+                )}
                 {manager && (
                   <ActionForm action={cancelInvite}>
                     <input type="hidden" name="id" value={i.id} />

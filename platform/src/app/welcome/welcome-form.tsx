@@ -19,6 +19,7 @@ const goalIcons: IconName[] = ["form", "zap", "calendar", "hash", "spark", "char
 export function WelcomeForm({ defaultName, email }: { defaultName: string; email: string }) {
   const [step, setStep] = useState(0);
   const [hint, setHint] = useState("");
+  const [industry, setIndustry] = useState("");
   const [state, action, pending] = useActionState<OnboardingState, FormData>(finishOnboarding, {});
   const steps = useRef<(HTMLFieldSetElement | null)[]>([]);
   const last = STEPS.length - 1;
@@ -95,7 +96,7 @@ export function WelcomeForm({ defaultName, email }: { defaultName: string; email
             <input name="full_name" required maxLength={120} defaultValue={defaultName} autoComplete="name" className="field h-12" />
           </Field>
           <Field label="Your role">
-            <Chips name="role" options={ROLES} required />
+            <Chips name="role" options={ROLES} required otherName="role_other" otherPlaceholder="Your role, e.g. Practice manager" />
           </Field>
           <Field label="Mobile number" optional>
             <input name="phone" type="tel" autoComplete="tel" placeholder="07700 900123" className="field h-12" />
@@ -111,10 +112,13 @@ export function WelcomeForm({ defaultName, email }: { defaultName: string; email
             <input name="website" autoComplete="url" placeholder="acme.co.uk" className="field h-12" />
           </Field>
           <Field label="Industry">
-            <select name="industry" required defaultValue="" className="field h-12">
+            <select name="industry" required value={industry} onChange={(e) => setIndustry(e.target.value)} className="field h-12">
               <option value="" disabled>Choose…</option>
               {INDUSTRIES.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
+            {industry === "Other" && (
+              <input name="industry_other" required maxLength={60} autoFocus placeholder="Your industry, e.g. Pet grooming" className="field mt-2.5 h-12" />
+            )}
           </Field>
           <Field label="Team size">
             <Chips name="team_size" options={TEAM_SIZES} required />
@@ -140,7 +144,7 @@ export function WelcomeForm({ defaultName, email }: { defaultName: string; email
             <Chips name="monthly_leads" options={MONTHLY_LEADS} required />
           </Field>
           <Field label="How did you hear about us?" optional>
-            <Chips name="heard_from" options={HEARD_FROM} />
+            <Chips name="heard_from" options={HEARD_FROM} otherName="heard_from_other" otherPlaceholder="Where did you hear about us?" />
           </Field>
         </fieldset>
       </div>
@@ -174,9 +178,17 @@ function Field({ label, optional, children }: { label: string; optional?: boolea
 }
 
 /** One-tap choices instead of a dropdown. */
-function Chips({ name, options, required }: { name: string; options: readonly string[]; required?: boolean }) {
+function Chips({ name, options, required, otherName, otherPlaceholder }: { name: string; options: readonly string[]; required?: boolean; otherName?: string; otherPlaceholder?: string }) {
+  const [other, setOther] = useState(false);
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-2.5">
+    <div
+      className="flex flex-wrap gap-2"
+      onChange={(e) => {
+        const t = e.target as HTMLInputElement;
+        if (t.name === name) setOther(t.value === "Other");
+      }}
+    >
       {options.map((o, i) => (
         <label
           key={o}
@@ -186,6 +198,10 @@ function Chips({ name, options, required }: { name: string; options: readonly st
           {o}
         </label>
       ))}
+    </div>
+    {otherName && other && (
+      <input name={otherName} required maxLength={60} autoFocus placeholder={otherPlaceholder ?? "Tell us"} className="field h-12" />
+    )}
     </div>
   );
 }

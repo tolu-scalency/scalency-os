@@ -41,7 +41,7 @@ async function PipelineView() {
         }
       />
       <Board key={board.columns.map((c) => c.id + c.name).join("|")} columns={board.columns}>
-        <ActionForm action={addStage} resetOnOk className="flex w-[280px] flex-none flex-col gap-2 rounded-2xl border border-dashed border-line-strong p-3">
+        <ActionForm action={addStage} resetOnOk className="flex w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col sm:w-[280px] gap-2 rounded-2xl border border-dashed border-line-strong p-3">
           <input name="name" placeholder="New stage name" required className="field bg-white" />
           <SubmitButton variant="ghost" icon="plus" pendingText="Adding…">Add stage</SubmitButton>
         </ActionForm>

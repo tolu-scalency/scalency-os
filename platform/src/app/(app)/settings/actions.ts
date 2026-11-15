@@ -1,6 +1,9 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { headers } from "next/headers";
+import { adminClient } from "@/lib/admin";
+import { emailHtml } from "@/lib/deliver";
 import { createClient } from "@/lib/supabase/server";
 import { getPipeline, getWorkspace } from "@/lib/data";
 import { EMAIL, PHONE_HELP, normalisePhone, text, type ActionResult } from "@/lib/forms";
@@ -113,8 +116,56 @@ export async function inviteMember(_prev: ActionResult, fd: FormData): Promise<A
   const supabase = await createClient();
   const { error } = await supabase.from("account_invites").insert({ account_id: ws.account.id, email, role, invited_by: ws.userId });
   if (error) return { error: error.code === "23505" ? "That email is already invited." : "We couldn't save the invite." };
+  const sent = await sendInviteEmail(email, ws.account.name, ws.fullName ?? ws.userEmail);
   refresh();
-  return { ok: `Invite saved. Ask ${email} to sign up at os.scalency.us with this email.` };
+  return sent.ok ? { ok: `Invite sent to ${email}.` } : { ok: `Invite saved, but the email couldn't be sent (${sent.reason}). Ask ${email} to sign up at os.scalency.us with this email.` };
+}
+
+/** Sends the invite email again. */
+export async function resendInvite(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const id = text(fd, "id", 40);
+  const ws = await getWorkspace();
+  if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can invite people." };
+  const supabase = await createClient();
+  const { data: invite } = await supabase.from("account_invites").select("email").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  if (!invite) return { error: "That invite no longer exists." };
+  const sent = await sendInviteEmail(invite.email as string, ws.account.name, ws.fullName ?? ws.userEmail);
+  return sent.ok ? { ok: "Sent again." } : { error: `The email couldn't be sent (${sent.reason}).` };
+}
+
+/**
+ * New people get Supabase's invite email (our branded "Invite user" template), which signs them up.
+ * People who already have a login get a Scalency email through Resend telling them to open the app and join.
+ */
+async function sendInviteEmail(email: string, workspace: string, inviter: string): Promise<{ ok: boolean; reason?: string }> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "os.scalency.us";
+  const origin = `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
+  const admin = adminClient();
+  if (!admin) return { ok: false, reason: "the server key isn't set" };
+
+  const { error } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${origin}/auth/callback?next=/welcome`,
+    data: { invited_to: workspace, invited_by: inviter },
+  });
+  if (!error) return { ok: true };
+  if (!/already|registered|exists/i.test(error.message)) return { ok: false, reason: error.message };
+
+  // They already have a login: email them through Resend instead.
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { ok: false, reason: "email sending isn't connected" };
+  const body = `${inviter} has invited you to join ${workspace} on Scalency OS.\n\nLog in, then open the workspace menu at the top left and click Join.\n\n${origin}/login?next=/dashboard`;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      from: `Scalency <${process.env.EMAIL_FROM}>`,
+      to: [email],
+      subject: `You've been invited to ${workspace} on Scalency OS`,
+      text: body,
+      html: emailHtml(body, "Scalency OS", false),
+    }),
+  }).catch(() => null);
+  return res?.ok ? { ok: true } : { ok: false, reason: "Resend refused it" };
 }
 
 /** Cancels an invite that hasn't been used yet. */
@@ -134,6 +185,62 @@ export async function removeMember(_prev: ActionResult, fd: FormData): Promise<A
   const supabase = await createClient();
   const { error } = await supabase.rpc("remove_account_member", { target_account: ws.account.id, member: userId });
   if (error) return { error: error.message.includes("Only the workspace owner") ? "Only the owner can remove people." : "We couldn't remove them." };
+  refresh();
+  return {};
+}
+
+function keyFrom(label: string) {
+  const k = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^(\d)/, "f_$1").slice(0, 40);
+  return /^[a-z]/.test(k) ? k : "";
+}
+
+/** Adds a contact field, like "Budget" or "Company size". */
+export async function addCustomField(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const label = text(fd, "label", 60);
+  const key = keyFrom(label);
+  if (!label || !key) return { error: "Give the field a name that starts with a letter." };
+  const ws = await getWorkspace();
+  if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change fields." };
+  const supabase = await createClient();
+  const { count } = await supabase.from("custom_fields").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("object", "contact");
+  const { error } = await supabase.from("custom_fields").insert({ account_id: ws.account.id, object: "contact", key, label, type: "text", position: count ?? 0 });
+  if (error) return { error: error.code === "23505" ? "You already have a field with that name." : "We couldn't add the field." };
+  refresh();
+  return { ok: `Added. Use {{contact.${key}}} in messages.` };
+}
+
+export async function deleteCustomField(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const id = text(fd, "id", 40);
+  const ws = await getWorkspace();
+  if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change fields." };
+  const supabase = await createClient();
+  await supabase.from("custom_fields").delete().eq("id", id).eq("account_id", ws.account.id);
+  refresh();
+  return {};
+}
+
+/** Adds or updates a custom value, like a booking link used in many messages. */
+export async function saveCustomValue(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const name = text(fd, "name", 60);
+  const key = text(fd, "key", 40) || keyFrom(name);
+  const value = text(fd, "value", 1000);
+  if (!key || !/^[a-z][a-z0-9_]*$/.test(key)) return { error: "Give it a name that starts with a letter." };
+  if (!value) return { error: "Add the value." };
+  const ws = await getWorkspace();
+  if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change custom values." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("custom_values").upsert({ account_id: ws.account.id, key, value, updated_at: new Date().toISOString() }, { onConflict: "account_id,key" });
+  if (error) return { error: "We couldn't save it." };
+  refresh();
+  return { ok: `Saved. Use {{custom_values.${key}}} in messages.` };
+}
+
+export async function deleteCustomValue(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const key = text(fd, "key", 40);
+  const ws = await getWorkspace();
+  if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change custom values." };
+  const supabase = await createClient();
+  await supabase.from("custom_values").delete().eq("key", key).eq("account_id", ws.account.id);
   refresh();
   return {};
 }

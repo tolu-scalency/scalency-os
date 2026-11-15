@@ -24,7 +24,7 @@ function plain(message: string) {
 export function LoginForm() {
   const router = useRouter();
   const [next, setNext] = useState("/dashboard");
-  const [mode, setMode] = useState<"password" | "link">("password");
+  const [mode, setMode] = useState<"password" | "link" | "reset">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
@@ -55,6 +55,18 @@ export function LoginForm() {
       router.refresh();
       return;
     }
+    if (mode === "reset") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      });
+      if (error) {
+        setState("idle");
+        setMessage(plain(error.message));
+        return;
+      }
+      setState("sent");
+      return;
+    }
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
@@ -76,7 +88,7 @@ export function LoginForm() {
         <span className="tile h-10 w-10 rounded-xl"><Icon name="mail" size={18} /></span>
         <h2 className="text-lg font-semibold">Check your email</h2>
         <p className="text-sm text-muted">
-          We sent a login link to <strong className="text-navy">{email}</strong>. Open it on this device. It works once and expires after an hour.
+          We sent {mode === "reset" ? "a link to choose a new password" : "a login link"} to <strong className="text-navy">{email}</strong>. It works once and expires after an hour.
         </p>
         <button type="button" onClick={() => setState("idle")} className="w-fit text-sm font-semibold text-brand">Back to log in</button>
       </div>
@@ -97,12 +109,19 @@ export function LoginForm() {
         </label>
       )}
       <button type="submit" disabled={state === "busy"} className="btn-primary flex min-h-[50px] items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-70">
-        {state === "busy" ? "Please wait…" : mode === "password" ? "Log in" : "Email me a login link"}
+        {state === "busy" ? "Please wait…" : mode === "password" ? "Log in" : mode === "reset" ? "Email me a reset link" : "Email me a login link"}
         <Icon name="arrowRight" size={16} />
       </button>
-      <button type="button" onClick={() => { setMode(mode === "password" ? "link" : "password"); setMessage(""); }} className="w-fit text-sm font-semibold text-brand">
-        {mode === "password" ? "Email me a login link instead" : "Log in with a password instead"}
-      </button>
+      <div className="flex flex-wrap justify-between gap-3">
+        <button type="button" onClick={() => { setMode(mode === "password" ? "link" : "password"); setMessage(""); }} className="w-fit text-sm font-semibold text-brand">
+          {mode === "password" ? "Email me a login link instead" : "Log in with a password instead"}
+        </button>
+        {mode === "password" && (
+          <button type="button" onClick={() => { setMode("reset"); setMessage(""); }} className="w-fit text-sm font-medium text-muted hover:text-brand">
+            Forgot your password?
+          </button>
+        )}
+      </div>
       <p className="border-t border-line pt-4 text-sm text-muted">
         New to Scalency OS? <Link href="/signup" className="font-semibold text-brand">Create an account</Link>
       </p>

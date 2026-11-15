@@ -143,9 +143,61 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
         <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} />
-        <div className="flex-1">{children}</div>
+        <div className="flex-1 pb-[var(--nav-h)]">{children}</div>
       </div>
+      <MobileTabBar pathname={pathname} onMore={() => setMobileOpen(true)} />
     </div>
+  );
+}
+
+const TABS: { href: string; label: string; icon: IconName }[] = [
+  { href: "/dashboard", label: "Home", icon: "home" },
+  { href: "/contacts", label: "Contacts", icon: "users" },
+  { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
+  { href: "/inbox", label: "Inbox", icon: "inbox" },
+];
+
+/** Phone navigation: the main pages one tap away, with "More" opening the full menu. */
+function MobileTabBar({ pathname, onMore }: { pathname: string; onMore: () => void }) {
+  const current = activeHref(pathname);
+  const onTab = TABS.some((t) => t.href === current);
+  return (
+    <nav
+      aria-label="Quick"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+    >
+      <ul className="grid h-16 grid-cols-5">
+        {TABS.map((t) => {
+          const on = current === t.href;
+          return (
+            <li key={t.href}>
+              <Link
+                href={t.href}
+                aria-current={on ? "page" : undefined}
+                className={`flex h-full flex-col items-center justify-center gap-1 text-[11px] font-medium ${on ? "text-brand" : "text-muted"}`}
+              >
+                <span className={`inline-flex h-7 w-12 items-center justify-center rounded-full transition-colors ${on ? "bg-chip" : ""}`}>
+                  <Icon name={t.icon} size={19} />
+                </span>
+                {t.label}
+              </Link>
+            </li>
+          );
+        })}
+        <li>
+          <button
+            type="button"
+            onClick={onMore}
+            className={`flex h-full w-full flex-col items-center justify-center gap-1 text-[11px] font-medium ${!onTab && current ? "text-brand" : "text-muted"}`}
+          >
+            <span className={`inline-flex h-7 w-12 items-center justify-center rounded-full ${!onTab && current ? "bg-chip" : ""}`}>
+              <Icon name="menu" size={19} />
+            </span>
+            More
+          </button>
+        </li>
+      </ul>
+    </nav>
   );
 }
 
@@ -257,7 +309,7 @@ function TopBar({ user, onMenu, onCommand }: { user: ShellUser; onMenu: () => vo
   const [open, setOpen] = useState<"account" | "alerts" | null>(null);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-white/85 px-4 backdrop-blur-md sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-line bg-white/85 px-3 backdrop-blur-md sm:gap-3 sm:px-6">
       <button type="button" onClick={onMenu} aria-label="Open menu" className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-navy hover:bg-surface lg:hidden">
         <Icon name="menu" size={20} />
       </button>
@@ -268,7 +320,7 @@ function TopBar({ user, onMenu, onCommand }: { user: ShellUser; onMenu: () => vo
           e.preventDefault();
           router.push(`/contacts${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`);
         }}
-        className="flex h-10 max-w-[420px] flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface px-3 transition-colors focus-within:border-sky focus-within:bg-white"
+        className="hidden h-10 min-w-0 max-w-[420px] flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface px-3 transition-colors focus-within:border-sky focus-within:bg-white sm:flex"
       >
         <Icon name="search" size={16} className="text-faint" />
         <label className="sr-only" htmlFor="global-search">Search contacts</label>
@@ -282,7 +334,15 @@ function TopBar({ user, onMenu, onCommand }: { user: ShellUser; onMenu: () => vo
         />
       </form>
 
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
+        <button
+          type="button"
+          onClick={onCommand}
+          aria-label="Search"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-surface hover:text-navy sm:hidden"
+        >
+          <Icon name="search" size={18} />
+        </button>
         <button
           type="button"
           onClick={onCommand}
@@ -351,7 +411,7 @@ function Popover({ children, onClose, width }: { children: React.ReactNode; onCl
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-40 cursor-default" onClick={onClose} />
-      <div className={`rise absolute right-0 top-12 z-50 ${width} rounded-2xl border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]`}>{children}</div>
+      <div className={`rise absolute right-0 top-12 z-50 ${width} max-w-[calc(100vw-24px)] rounded-2xl border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]`}>{children}</div>
     </>
   );
 }

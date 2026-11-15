@@ -73,7 +73,30 @@
 
 /* Phones and small tablets: the prototype was drawn for desktop, so tighten it up here. */
 @media (max-width: 760px) {
+  .site { overflow-x: clip; }
   .site .wrap { padding: 0 18px !important; }
+  .site header .wrap { gap: 12px !important; min-height: 64px !important; flex-wrap: nowrap !important; }
+  .site header nav { display: none !important; }
+  .site header img { height: 24px !important; }
+  .site header .bp { min-height: 38px !important; padding: 0 14px !important; font-size: 13.5px !important; }
+  .site .bento { grid-template-columns: minmax(0, 1fr) !important; gap: 14px !important; }
+  .site .b2, .site .b3, .site .b4 { grid-column: auto !important; }
+  .site .bc { min-height: 0 !important; padding: 22px !important; }
+  .site .pain { border-right: none !important; border-bottom: 1px solid #E1E9F3; padding: 24px 22px !important; }
+  .site [style*="flex: 0 0 200px"] { display: none !important; }
+  .site [style*="padding: 4px 60px"] { padding: 4px 12px !important; }
+  .site [style*="flex: 1 1 "], .site [style*="flex: 1.3 1 "], .site [style*="flex: 2 1 "] { flex-basis: 100% !important; min-width: 0 !important; }
+  .site [style*="repeat(4, minmax(0, 1fr))"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .site [style*="min-width: 640px"] { min-width: 0 !important; }
+  .site .cmp { grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr) minmax(0, 1fr) !important; }
+  .site .cmp > span { padding: 12px 10px !important; font-size: 13px !important; }
+  .site .cmp > span span[style*="font-size: 13.5px"] { font-size: 12px !important; }
+  .site [style*="width: 480px; max-width: 100%; height: 480px"] { width: calc(100% - 70px) !important; height: auto !important; aspect-ratio: 1; margin: 36px auto 44px; }
+  .site [style*="inset: 80px"] { inset: 17% !important; }
+  .site [style*="inset: 160px"] { inset: 33% !important; }
+  .site .orb { width: 78px !important; font-size: 11px !important; gap: 5px !important; }
+  .site .orb .tile { width: 42px !important; height: 42px !important; border-radius: 13px !important; }
+  .site [style*="width: 96px; height: 96px; margin: -48px 0 0 -48px"] { width: 72px !important; height: 72px !important; margin: -36px 0 0 -36px !important; }
   .site header .nl:not([href="/login"]) { display: none !important; }
   .site h1 { font-size: 42px !important; letter-spacing: -0.04em !important; }
   .site .h2 { font-size: 34px !important; }
