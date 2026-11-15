@@ -31,21 +31,26 @@ function normaliseWebsite(raw: string) {
 // Saves the person's profile, then creates their workspace with the lead-gen pipeline.
 export async function finishOnboarding(_prev: OnboardingState, fd: FormData): Promise<OnboardingState> {
   const fullName = text(fd, "full_name", 120);
-  const role = oneOf(text(fd, "role"), ROLES);
+  // "Other" comes with the person's own words in a box underneath.
+  const pick = (value: string, otherField: string) => (value === "Other" ? text(fd, otherField, 60) || null : value);
+  const roleChoice = oneOf(text(fd, "role"), ROLES);
+  const role = roleChoice ? pick(roleChoice, "role_other") : null;
   const phone = normalisePhone(text(fd, "phone", 30));
   const businessName = text(fd, "business_name", 80);
   const website = normaliseWebsite(text(fd, "website", 200));
-  const industry = oneOf(text(fd, "industry"), INDUSTRIES);
+  const industryChoice = oneOf(text(fd, "industry"), INDUSTRIES);
+  const industry = industryChoice ? pick(industryChoice, "industry_other") : null;
   const teamSize = oneOf(text(fd, "team_size"), TEAM_SIZES);
   const goals = fd.getAll("goals").map(String).filter((g) => (GOALS as readonly string[]).includes(g));
   const monthlyLeads = oneOf(text(fd, "monthly_leads"), MONTHLY_LEADS);
-  const heardFrom = oneOf(text(fd, "heard_from"), HEARD_FROM);
+  const heardChoice = oneOf(text(fd, "heard_from"), HEARD_FROM);
+  const heardFrom = heardChoice ? pick(heardChoice, "heard_from_other") ?? "Other" : null;
 
-  if (!fullName || !role) return { error: "Add your name and role." };
+  if (!fullName || !role) return { error: roleChoice === "Other" ? "Tell us your role." : "Add your name and role." };
   if (phone === "invalid") return { error: "Enter your phone number like 07700 900123, or with the country code, like +44 7700 900123." };
   if (businessName.length < 2) return { error: "Add your business name." };
   if (website === "invalid") return { error: "That website address doesn't look right." };
-  if (!industry || !teamSize) return { error: "Choose your industry and team size." };
+  if (!industry || !teamSize) return { error: industryChoice === "Other" ? "Tell us your industry." : "Choose your industry and team size." };
   if (goals.length === 0) return { error: "Choose at least one thing you want Scalency OS to help with." };
   if (!monthlyLeads) return { error: "Choose roughly how many leads you get each month." };
 

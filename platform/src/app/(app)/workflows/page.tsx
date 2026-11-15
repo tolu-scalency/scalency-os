@@ -38,9 +38,9 @@ export default async function WorkflowsPage() {
 
       <section>
         <h2 className="mb-3 text-[15px] font-semibold">Start a new workflow</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:snap-none sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-4">
           {templates.map((t) => (
-            <form key={t.key} action={createWorkflow}>
+            <form key={t.key} action={createWorkflow} className="w-[68vw] max-w-[260px] flex-none snap-start sm:w-auto sm:max-w-none">
               <input type="hidden" name="template" value={t.key} />
               <button type="submit" className="card group flex h-full w-full flex-col items-start gap-3 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-sky/60 hover:shadow-[var(--shadow-pop)]">
                 <Tile icon={t.icon} tone={t.tone} size={38} />

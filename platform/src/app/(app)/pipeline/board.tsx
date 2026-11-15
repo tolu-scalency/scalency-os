@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { Icon } from "@/components/icon";
 import type { BoardColumn } from "@/lib/data";
 import { moveCard } from "./actions";
 
@@ -39,7 +40,10 @@ export function Board({ columns: initial, children }: { columns: BoardColumn[]; 
   return (
     <div className="flex flex-col gap-3">
       {error && <p role="alert" className="rounded-xl bg-bad-bg px-3 py-2 text-[13px] text-bad">{error}</p>}
-      <div className="-mx-4 overflow-x-auto px-4 pb-3 sm:-mx-7 sm:px-7">
+      <p className="flex items-center gap-1.5 text-[12.5px] text-muted sm:hidden">
+        <Icon name="arrowRight" size={13} /> Swipe to see every stage. Tap someone to move them.
+      </p>
+      <div className="-mx-4 snap-x snap-mandatory overflow-x-auto scroll-px-4 px-4 pb-3 sm:-mx-7 sm:snap-none sm:px-7">
         <div className="flex min-w-min items-start gap-3">
           {columns.map((col, i) => {
             const total = col.cards.reduce((s, k) => s + (k.valuePence ?? 0), 0);
@@ -59,7 +63,7 @@ export function Board({ columns: initial, children }: { columns: BoardColumn[]; 
                   setDragging(null);
                   if (id) move(id, col.id);
                 }}
-                className={`flex min-h-[420px] w-[280px] flex-none flex-col gap-2 rounded-2xl p-2.5 transition-colors ${
+                className={`flex min-h-[300px] w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col sm:min-h-[420px] sm:w-[280px] gap-2 rounded-2xl p-2.5 transition-colors ${
                   over === col.id ? "bg-chip ring-2 ring-sky/50" : "bg-[#eaeff6]"
                 }`}
               >

@@ -23,10 +23,12 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
     if (c) selected = { contactId: c.id, name: c.name, initials: c.initials, last: "", lastAt: c.createdAt, channel: "email", count: 0 };
   }
   const messages = selected ? await listThreadMessages(ws.account.id, selected.contactId) : [];
+  // On a phone, show the list until someone picks a conversation.
+  const picked = typeof params.c === "string";
 
   return (
-    <div className="flex h-[calc(100vh-64px)] min-h-[520px]">
-      <aside className={`w-full flex-none flex-col border-r border-line bg-white md:flex md:w-[320px] ${selected ? "hidden" : "flex"}`}>
+    <div className="flex h-[var(--app-h)] min-h-[420px]">
+      <aside className={`w-full flex-none flex-col border-r border-line bg-white md:flex md:w-[320px] ${picked && selected ? "hidden" : "flex"}`}>
         <div className="px-5 pb-3 pt-5">
           <h1 className="text-[20px] font-semibold tracking-[-0.02em]">Inbox</h1>
           <p className="text-[12.5px] text-muted">Emails and texts with your contacts.</p>
@@ -61,7 +63,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
         )}
       </aside>
 
-      <section className={`min-w-0 flex-1 flex-col bg-canvas ${selected ? "flex" : "hidden md:flex"}`}>
+      <section className={`min-w-0 flex-1 flex-col bg-canvas ${picked && selected ? "flex" : "hidden md:flex"}`}>
         {!selected ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
             <span className="tile h-12 w-12 rounded-2xl"><Icon name="inbox" size={20} /></span>
@@ -76,10 +78,10 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
               <Link href={`/contacts/${selected.contactId}`} className="text-[15px] font-semibold hover:text-brand">{selected.name}</Link>
               {ws.account.testMode && <span className="ml-auto"><Pill tone="amber">Test mode</Pill></span>}
             </header>
-            <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-5">
+            <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
               {messages.map((m) => (
                 <li key={m.id} className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[560px] rounded-2xl px-4 py-3 shadow-sm ${m.direction === "outbound" ? "rounded-br-md bg-[linear-gradient(135deg,#1a86ee,#0a5fe3)] text-white" : "rounded-bl-md border border-line bg-white"}`}>
+                  <div className={`max-w-[88%] rounded-2xl sm:max-w-[560px] px-4 py-3 shadow-sm ${m.direction === "outbound" ? "rounded-br-md bg-[linear-gradient(135deg,#1a86ee,#0a5fe3)] text-white" : "rounded-bl-md border border-line bg-white"}`}>
                     {m.subject && <div className="mb-1 text-[13px] font-semibold">{m.subject}</div>}
                     <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{m.body}</p>
                     <div className={`mt-2 flex items-center gap-1.5 text-[11px] ${m.direction === "outbound" ? "text-white/75" : "text-faint"}`}>

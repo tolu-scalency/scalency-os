@@ -34,6 +34,9 @@
 }
 
 :root {
+  /* Phone bottom bar height (0 on desktop) and the space left for full-height pages. */
+  --nav-h: calc(64px + env(safe-area-inset-bottom));
+  --app-h: calc(100dvh - 64px - var(--nav-h));
   color-scheme: light;
   --gradient: linear-gradient(90deg, #55e3ec 0%, #29b0f8 50%, #0a5fe3 100%);
   --shadow-card: 0 1px 2px rgba(11, 36, 71, 0.04), 0 8px 24px -12px rgba(11, 36, 71, 0.1);
@@ -229,4 +232,23 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .connector, .skeleton, .rise, .fade-in { animation: none; }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --nav-h: 0px;
+  }
+}
+
+/* Phones: 16px text in form fields stops iPhone zooming in when you tap them,
+   and no grey flash on tap. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+html {
+  -webkit-tap-highlight-color: transparent;
 }

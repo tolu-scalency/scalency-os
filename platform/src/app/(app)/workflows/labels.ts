@@ -44,4 +44,6 @@ export const actionLabel: Record<string, string> = {
   remove_from_workflow: "Remove from workflow",
   webhook: "Webhook",
   end: "End",
+  update_field: "Update field",
+  email_team: "Team email",
 };

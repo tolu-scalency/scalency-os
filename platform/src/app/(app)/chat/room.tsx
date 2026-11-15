@@ -97,7 +97,7 @@ export function ChatRoom({
   }
 
   return (
-    <div className="flex h-[calc(100vh-64px)] min-h-[520px]">
+    <div className="flex h-[var(--app-h)] min-h-[420px]">
       <aside className="hidden w-[250px] flex-none flex-col border-r border-line bg-white md:flex">
         <div className="flex items-center justify-between px-4 pb-2 pt-5">
           <h1 className="text-[18px] font-semibold tracking-[-0.02em]">Team chat</h1>

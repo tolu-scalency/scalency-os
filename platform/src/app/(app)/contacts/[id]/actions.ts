@@ -157,3 +157,25 @@ export async function setDealStatus(_prev: ActionResult, fd: FormData): Promise<
   refresh();
   return {};
 }
+
+/** Saves the workspace's custom fields on a contact. */
+export async function saveCustomFields(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const contactId = text(fd, "contact_id", 40);
+  const ws = await getWorkspace();
+  const supabase = await createClient();
+  const [{ data: fields }, { data: contact }] = await Promise.all([
+    supabase.from("custom_fields").select("key").eq("account_id", ws.account.id).eq("object", "contact"),
+    supabase.from("contacts").select("custom").eq("id", contactId).eq("account_id", ws.account.id).maybeSingle(),
+  ]);
+  if (!contact) return { error: "That contact no longer exists." };
+  const custom = { ...((contact.custom as Record<string, unknown>) ?? {}) };
+  for (const f of fields ?? []) {
+    const v = text(fd, `cf_${f.key}`, 500);
+    if (v) custom[f.key] = v;
+    else delete custom[f.key];
+  }
+  const { error } = await supabase.from("contacts").update({ custom }).eq("id", contactId).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't save the fields." };
+  refresh();
+  return { ok: "Saved." };
+}

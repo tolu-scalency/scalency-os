@@ -92,12 +92,12 @@ async function Home() {
         </section>
       )}
 
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         {stats.map((k) => (
-          <Link key={k.label} href={k.href} className="card group flex items-start justify-between gap-3 p-5 transition-shadow hover:shadow-[var(--shadow-pop)]">
-            <div>
+          <Link key={k.label} href={k.href} className="card group flex flex-col-reverse items-start justify-between gap-3 p-4 transition-shadow hover:shadow-[var(--shadow-pop)] sm:flex-row sm:p-5">
+            <div className="min-w-0">
               <div className="text-[13px] font-medium text-muted">{k.label}</div>
-              <div className="mt-2 text-[30px] font-semibold leading-none tracking-[-0.04em]">{k.value}</div>
+              <div className="mt-2 truncate text-[24px] font-semibold leading-none tracking-[-0.04em] sm:text-[30px]">{k.value}</div>
               <div className="mt-2 text-[12.5px] text-faint">{k.note}</div>
             </div>
             <Tile icon={k.icon} tone={k.tone} size={38} />
@@ -105,7 +105,7 @@ async function Home() {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr] [&>*]:min-w-0">
         <section className="card p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[16px] font-semibold">Pipeline</h2>

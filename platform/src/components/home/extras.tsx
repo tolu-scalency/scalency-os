@@ -52,9 +52,9 @@ const flow: { title: string; text: string; icon: IconName; at: string }[] = [
 
 export function HomeExtras() {
   return (
-    <div className="bg-white font-sans text-navy">
+    <div className="overflow-x-clip bg-white font-sans text-navy">
       {/* The product map */}
-      <section className="relative overflow-hidden py-24">
+      <section className="relative overflow-hidden py-16 sm:py-24">
         <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(85,227,236,0.18),transparent)]" />
         <div className="relative mx-auto max-w-[1200px] px-6 sm:px-8">
           <div className="mx-auto max-w-[680px] text-center">
@@ -95,7 +95,7 @@ export function HomeExtras() {
       </section>
 
       {/* How a lead flows */}
-      <section className="relative overflow-hidden bg-[#061a3a] py-24 text-white">
+      <section className="relative overflow-hidden bg-[#061a3a] py-16 text-white sm:py-24">
         <div className="pointer-events-none absolute -left-40 top-10 h-[420px] w-[420px] rounded-full bg-[radial-gradient(closest-side,rgba(85,227,236,0.25),transparent)]" />
         <div className="pointer-events-none absolute -right-40 bottom-0 h-[420px] w-[420px] rounded-full bg-[radial-gradient(closest-side,rgba(10,95,227,0.45),transparent)]" />
         <div className="relative mx-auto max-w-[1200px] px-6 sm:px-8">
@@ -122,7 +122,7 @@ export function HomeExtras() {
       </section>
 
       {/* Workspaces for agencies */}
-      <section className="py-24">
+      <section className="overflow-hidden py-16 sm:py-24">
         <div className="mx-auto grid max-w-[1200px] items-center gap-12 px-6 sm:px-8 lg:grid-cols-2">
           <div>
             <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-brand">For agencies</span>
@@ -137,13 +137,13 @@ export function HomeExtras() {
               <Link href="/login" className="btn-ghost inline-flex min-h-12 items-center rounded-xl px-6 text-[15px] font-semibold">Log in</Link>
             </div>
           </div>
-          <div aria-hidden className="relative mx-auto h-[360px] w-full max-w-[460px]">
+          <div aria-hidden className="relative mx-auto h-[330px] w-full max-w-[460px] sm:h-[360px]">
             {[
               { name: "Bright Clinics", tone: "from-[#55e3ec] to-[#0a5fe3]", top: 0, left: 40, rot: -4 },
               { name: "Solar North", tone: "from-[#fdba74] to-[#ea580c]", top: 70, left: 0, rot: 2 },
               { name: "Your agency", tone: "from-[#a5b4fc] to-[#4f46e5]", top: 150, left: 60, rot: -1 },
             ].map((w) => (
-              <div key={w.name} className="absolute w-[340px] rounded-2xl border border-line bg-white p-4 shadow-[var(--shadow-pop)]" style={{ top: w.top, left: w.left, transform: `rotate(${w.rot}deg)` }}>
+              <div key={w.name} className="absolute w-[calc(100%-60px)] max-w-[340px] rounded-2xl border border-line bg-white p-4 shadow-[var(--shadow-pop)]" style={{ top: w.top, left: `${(w.left / 460) * 100}%`, transform: `rotate(${w.rot}deg)` }}>
                 <div className="flex items-center gap-3">
                   <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-[15px] font-bold text-white ${w.tone}`}>{w.name[0]}</span>
                   <div className="flex-1">
