@@ -12,6 +12,7 @@ const ACTIONS: Action[] = [
   { label: "New contact", icon: "plus", href: "/contacts?new=1" },
   { label: "New task", icon: "tasks", href: "/tasks" },
   { label: "New workflow", icon: "zap", href: "/workflows" },
+  { label: "Set up with AI", hint: "Pipeline, fields and workflows", icon: "spark", href: "/ai-builder" },
   { label: "Go to Home", icon: "home", href: "/dashboard" },
   { label: "Go to Contacts", icon: "users", href: "/contacts" },
   { label: "Go to Pipeline", icon: "pipeline", href: "/pipeline" },

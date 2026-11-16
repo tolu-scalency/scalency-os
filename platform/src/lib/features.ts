@@ -163,8 +163,8 @@ export const FEATURES: Record<string, Feature> = {
   "ai-builder": {
     key: "ai-builder",
     href: "/ai-builder",
-    title: "AI builder",
-    tagline: "Describe a follow-up in plain English. Scalency builds the workflow.",
+    title: "AI setup",
+    tagline: "Describe your business. Scalency suggests your pipeline, fields, tags and workflows.",
     icon: "spark",
     tone: "violet",
     points: [

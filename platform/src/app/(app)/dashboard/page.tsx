@@ -32,7 +32,7 @@ async function Home() {
   const today = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/London" }).format(new Date());
 
   const steps = [
-    { done: d.checklist.pipeline, title: "Set up your pipeline", text: "Pick the stages your deals move through.", href: "/pipeline", icon: "pipeline" as const },
+    { done: d.checklist.pipeline, title: "Set up your workspace with AI", text: "Tell us how you work. We'll suggest your pipeline, fields and workflows.", href: "/ai-builder", icon: "spark" as const },
     { done: d.checklist.contact, title: "Add your first contact", text: "Or import them later.", href: "/contacts?new=1", icon: "user" as const },
     { done: d.checklist.team, title: "Invite your team", text: "Work on leads together.", href: "/settings/team", icon: "team" as const },
   ];
@@ -159,7 +159,7 @@ async function Home() {
         <div className="relative mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { href: "/workflows", icon: "zap" as const, title: "Workflows", text: "Texts and emails on autopilot" },
-            { href: "/ai-builder", icon: "spark" as const, title: "AI builder", text: "Describe it, we build it" },
+            { href: "/ai-builder", icon: "spark" as const, title: "AI setup", text: "Describe your business, we set it up" },
             { href: "/inbox", icon: "inbox" as const, title: "Inbox", text: "Every conversation in one place" },
             { href: "/chat", icon: "hash" as const, title: "Team chat", text: "Lead alerts for the whole team" },
           ].map((f) => (
