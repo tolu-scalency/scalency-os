@@ -202,70 +202,114 @@ function readProposal(out: { content?: { type: string; input?: unknown; text?: s
   return null;
 }
 
-/** Calls Claude, with one retry and a clear reason when it fails. */
+type Reply = { stop_reason?: string; content?: { type: string; input?: unknown; text?: string }[] };
+type Attempt = { raw: Record<string, unknown> } | { error: string; detail: string } | { skip: "model" | "auth"; detail: string };
+
+function authHeaders(apiKey: string, style: string): Record<string, string> {
+  const h: Record<string, string> = { "anthropic-version": "2023-06-01", "content-type": "application/json" };
+  if (style === "x-api-key") h["x-api-key"] = apiKey;
+  else h.authorization = `Bearer ${apiKey}`;
+  return h;
+}
+
+/** One model, one key style, up to two tries. */
+async function tryModel(apiKey: string, style: string, model: string, content: unknown[]): Promise<Attempt> {
+  let detail = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: authHeaders(apiKey, style),
+        body: JSON.stringify({
+          model,
+          max_tokens: 8000,
+          system: SYSTEM,
+          tools: [TOOL],
+          tool_choice: { type: "tool", name: "propose_setup" },
+          messages: [{ role: "user", content }],
+        }),
+        signal: AbortSignal.timeout(120_000),
+      });
+    } catch (e) {
+      console.error("Claude call failed", e);
+      return { error: "The AI took too long. Try a shorter description or document.", detail: "timeout" };
+    }
+    const bodyText = await res.text();
+    if (!res.ok) {
+      console.error("Claude error", model, style, res.status, bodyText.slice(0, 500));
+      detail = `${res.status} ${bodyText.slice(0, 200)}`;
+      if (res.status === 401 || res.status === 403) return { skip: "auth", detail };
+      if (/credit balance|billing/i.test(bodyText)) return { error: "The Claude account is out of credit. Top it up in console.anthropic.com.", detail };
+      if (res.status === 404 || (res.status === 400 && /model/i.test(bodyText))) return { skip: "model", detail };
+      if (res.status === 429 || res.status >= 500) {
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      return { error: "The AI could not read that just now. Please try again in a minute.", detail };
+    }
+    let out: Reply;
+    try {
+      out = JSON.parse(bodyText);
+    } catch {
+      detail = "unreadable reply";
+      continue;
+    }
+    const raw = readProposal(out);
+    if (raw) return { raw };
+    detail = `no proposal (stop: ${out.stop_reason ?? "?"}, blocks: ${(out.content ?? []).map((c) => c.type).join(",")})`;
+    console.error("Claude returned no proposal", model, detail, bodyText.slice(0, 500));
+  }
+  return { error: "The AI did not return a setup. Please try again.", detail };
+}
+
+/** Asks Claude which models this key can use, best first: Sonnet, then Opus, then Haiku, newest first. */
+async function availableModels(apiKey: string, style: string): Promise<string[]> {
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/models?limit=100", { headers: authHeaders(apiKey, style), signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) {
+      console.error("Model list error", res.status, (await res.text()).slice(0, 300));
+      return [];
+    }
+    const body = (await res.json()) as { data?: { id: string; created_at?: string }[] };
+    const ids = (body.data ?? []).sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))).map((m) => m.id);
+    const rank = (id: string) => (/sonnet/i.test(id) ? 0 : /opus/i.test(id) ? 1 : /haiku/i.test(id) ? 2 : 3);
+    return ids.sort((a, b) => rank(a) - rank(b)).slice(0, 3);
+  } catch (e) {
+    console.error("Model list failed", e);
+    return [];
+  }
+}
+
+/** Calls Claude. Tries the configured model, then asks Claude which models this key can use. */
 async function askClaude(apiKey: string, content: unknown[]): Promise<{ raw: Record<string, unknown> } | { error: string; detail: string }> {
   const chosen = Deno.env.get("ANTHROPIC_MODEL");
-  const models = chosen ? [chosen] : ["claude-sonnet-5-5", "claude-sonnet-4-5"];
   // Standard keys (sk-ant-api...) use x-api-key; other keys use a bearer token. If one style is refused, try the other.
   const styles = apiKey.startsWith("sk-ant-api") ? ["x-api-key", "bearer"] : ["bearer", "x-api-key"];
-  let lastDetail = "";
+  let detail = "";
 
-  for (const model of models) {
-    for (const style of styles) {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const headers: Record<string, string> = { "anthropic-version": "2023-06-01", "content-type": "application/json" };
-        if (style === "x-api-key") headers["x-api-key"] = apiKey;
-        else headers.authorization = `Bearer ${apiKey}`;
-        let res: Response;
-        try {
-          res = await fetch("https://api.anthropic.com/v1/messages", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-              model,
-              max_tokens: 8000,
-              system: SYSTEM,
-              tools: [TOOL],
-              tool_choice: { type: "tool", name: "propose_setup" },
-              messages: [{ role: "user", content }],
-            }),
-            signal: AbortSignal.timeout(120_000),
-          });
-        } catch (e) {
-          console.error("Claude call failed", e);
-          return { error: "The AI took too long. Try a shorter description or document.", detail: "timeout" };
-        }
-        const bodyText = await res.text();
-        if (!res.ok) {
-          console.error("Claude error", model, style, res.status, bodyText.slice(0, 500));
-          lastDetail = `${res.status} ${bodyText.slice(0, 200)}`;
-          if (res.status === 401 || res.status === 403) break; // try the other key style
-          if (/credit balance|billing/i.test(bodyText)) return { error: "The Claude account is out of credit. Top it up in console.anthropic.com.", detail: lastDetail };
-          if (res.status === 404 || (res.status === 400 && /model/i.test(bodyText))) break; // try the next model
-          if (res.status === 429 || res.status >= 500) {
-            await new Promise((r) => setTimeout(r, 1500));
-            continue;
-          }
-          return { error: "The AI could not read that just now. Please try again in a minute.", detail: lastDetail };
-        }
-        let out: { stop_reason?: string; content?: { type: string; input?: unknown; text?: string }[] };
-        try {
-          out = JSON.parse(bodyText);
-        } catch {
-          lastDetail = "unreadable reply";
-          continue;
-        }
-        const raw = readProposal(out);
-        if (raw) return { raw };
-        lastDetail = `no proposal (stop: ${out.stop_reason ?? "?"}, blocks: ${(out.content ?? []).map((c) => c.type).join(",")})`;
-        console.error("Claude returned no proposal", model, lastDetail, bodyText.slice(0, 500));
+  for (const style of styles) {
+    const tried = new Set<string>();
+    let candidates = chosen ? [chosen] : ["claude-sonnet-5-5"];
+    let listed = false;
+    while (candidates.length) {
+      const model = candidates.shift()!;
+      if (tried.has(model)) continue;
+      tried.add(model);
+      const r = await tryModel(apiKey, style, model, content);
+      if ("raw" in r || "error" in r) return r;
+      detail = r.detail;
+      if (r.skip === "auth") break; // try the other key style
+      if (!candidates.length && !listed) {
+        listed = true;
+        candidates = (await availableModels(apiKey, style)).filter((m) => !tried.has(m));
+        console.log("Trying models this key can use:", candidates.join(", ") || "none found");
       }
-      if (/^40[13]/.test(lastDetail)) continue;
-      if (!/^(404|400)/.test(lastDetail)) return { error: "The AI did not return a setup. Please try again.", detail: lastDetail };
     }
+    if (!/^40[13]/.test(detail)) break;
   }
-  if (/^40[13]/.test(lastDetail)) return { error: "The Claude key was not accepted. Check ANTHROPIC_API_KEY in Supabase, Edge Functions, Secrets.", detail: lastDetail };
-  return { error: "The AI could not read that just now. Please try again in a minute.", detail: lastDetail };
+  if (/^40[13]/.test(detail)) return { error: "The Claude key was not accepted. Check ANTHROPIC_API_KEY in Supabase, Edge Functions, Secrets.", detail };
+  return { error: "None of the Claude models worked with this key. Check which models your Anthropic account can use.", detail };
 }
 
 Deno.serve(async (req) => {
