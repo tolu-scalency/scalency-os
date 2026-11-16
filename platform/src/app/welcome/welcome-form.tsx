@@ -112,13 +112,33 @@ export function WelcomeForm({ defaultName, email }: { defaultName: string; email
             <input name="website" autoComplete="url" placeholder="acme.co.uk" className="field h-12" />
           </Field>
           <Field label="Industry">
-            <select name="industry" required value={industry} onChange={(e) => setIndustry(e.target.value)} className="field h-12">
-              <option value="" disabled>Choose…</option>
-              {INDUSTRIES.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-            {industry === "Other" && (
-              <input name="industry_other" required maxLength={60} autoFocus placeholder="Your industry, e.g. Pet grooming" className="field mt-2.5 h-12" />
-            )}
+            <input
+              name="industry"
+              required
+              maxLength={60}
+              list="industry-options"
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              placeholder="Type your niche, e.g. Dental clinic, or pick one"
+              autoComplete="off"
+              className="field h-12"
+            />
+            <datalist id="industry-options">
+              {INDUSTRIES.filter((o) => o !== "Other").map((o) => <option key={o} value={o} />)}
+            </datalist>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {INDUSTRIES.filter((o) => o !== "Other").slice(0, 6).map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => setIndustry(o)}
+                  className={`rounded-full border px-3 py-1.5 text-[12.5px] font-medium ${industry === o ? "border-brand bg-chip text-brand" : "border-line text-muted hover:border-brand"}`}
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[12.5px] text-muted">Not listed? Just type it.</p>
           </Field>
           <Field label="Team size">
             <Chips name="team_size" options={TEAM_SIZES} required />

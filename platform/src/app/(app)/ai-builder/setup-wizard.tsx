@@ -54,17 +54,25 @@ function readAsBase64(file: File) {
   });
 }
 
-async function functionError(error: unknown) {
+type Problem = { message: string; detail?: string };
+
+async function functionError(error: unknown): Promise<Problem> {
   const ctx = (error as { context?: Response })?.context;
-  if (ctx && typeof ctx.json === "function") {
+  if (ctx && typeof ctx.text === "function") {
     try {
-      const body = await ctx.json();
-      if (body?.error) return String(body.error);
+      const raw = await ctx.text();
+      try {
+        const body = JSON.parse(raw);
+        if (body?.error) return { message: String(body.error), detail: body.detail ? String(body.detail) : undefined };
+        if (body?.msg || body?.message) return { message: "Please sign out, sign in again, then try once more.", detail: `${ctx.status} ${body.msg ?? body.message}` };
+      } catch {
+        return { message: "We couldn't reach the AI just now. Please try again.", detail: `${ctx.status} ${raw.slice(0, 120)}` };
+      }
     } catch {
       /* fall through */
     }
   }
-  return "We couldn't reach the AI just now. Please try again.";
+  return { message: "We couldn't reach the AI just now. Please try again.", detail: error instanceof Error ? error.message : undefined };
 }
 
 export function SetupWizard({
@@ -82,9 +90,17 @@ export function SetupWizard({
 }) {
   const [step, setStep] = useState<Step>("input");
   const [text, setText] = useState("");
-  const [usedVoice, setUsedVoice] = useState(false);
+  const usedVoice = useRef(false);
   const [pdf, setPdf] = useState<Pdf | null>(null);
-  const [error, setError] = useState("");
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const setError = (message: string) => setProblem(message ? { message } : null);
+  const textRef = useRef("");
+  const updateText = (next: (prev: string) => string) =>
+    setText((prev) => {
+      const value = next(prev);
+      textRef.current = value;
+      return value;
+    });
   const [setupId, setSetupId] = useState("");
   const [plan, setPlan] = useState<Blueprint | null>(null);
   const [replace, setReplace] = useState(Boolean(pipeline && pipeline.deals === 0));
@@ -92,6 +108,7 @@ export function SetupWizard({
 
   async function suggest() {
     setError("");
+    const text = textRef.current;
     if (!text.trim() && !pdf) {
       setError("Tell us a little about your business first, or attach a document.");
       return;
@@ -101,13 +118,13 @@ export function SetupWizard({
     const { data, error: fnError } = await supabase.functions.invoke("ai-setup", {
       body: {
         account_id: accountId,
-        text: usedVoice ? "" : text,
-        voice: usedVoice ? text : "",
+        text: usedVoice.current ? "" : text,
+        voice: usedVoice.current ? text : "",
         file: pdf ? { name: pdf.name, type: "application/pdf", data: pdf.data } : undefined,
       },
     });
     if (fnError || !data?.blueprint) {
-      setError(fnError ? await functionError(fnError) : "The AI did not return a setup. Please try again.");
+      setProblem(fnError ? await functionError(fnError) : { message: data?.error ?? "The AI did not return a setup. Please try again.", detail: data?.detail });
       setStep("input");
       return;
     }
@@ -138,7 +155,7 @@ export function SetupWizard({
         }}
       />
     );
-  if (step === "done" && result) return <Done result={result} onAgain={() => { setText(""); setPdf(null); setPlan(null); setResult(null); setStep("input"); }} />;
+  if (step === "done" && result) return <Done result={result} onAgain={() => { updateText(() => ""); usedVoice.current = false; setPdf(null); setPlan(null); setResult(null); setStep("input"); }} />;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_320px] [&>*]:min-w-0">
@@ -151,7 +168,10 @@ export function SetupWizard({
         </div>
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            updateText(() => v);
+          }}
           rows={9}
           maxLength={40000}
           placeholder="For example: we're a cleaning company in Manchester. Leads come from Google and Facebook. We call them, send a quote, book a first clean, then move them to a monthly plan."
@@ -159,15 +179,16 @@ export function SetupWizard({
           aria-label="About your business"
         />
         <div className="flex flex-wrap items-center gap-2">
-          <VoiceButton
+          <VoiceRecorder
             onText={(t) => {
-              setUsedVoice(true);
-              setText((prev) => (prev ? `${prev.trimEnd()} ${t}` : t));
+              usedVoice.current = true;
+              updateText((prev) => (prev ? `${prev.trimEnd()} ${t}` : t));
             }}
+            onDone={suggest}
             onError={setError}
           />
           <FileButton
-            onText={(name, t) => setText((prev) => `${prev ? `${prev.trimEnd()}\n\n` : ""}From ${name}:\n${t}`)}
+            onText={(name, t) => updateText((prev) => `${prev ? `${prev.trimEnd()}\n\n` : ""}From ${name}:\n${t}`)}
             onPdf={setPdf}
             onError={setError}
           />
@@ -181,11 +202,16 @@ export function SetupWizard({
             </span>
           )}
         </div>
-        {error && <p role="alert" className="rounded-xl bg-bad-bg px-4 py-3 text-[13.5px] text-bad">{error}</p>}
+        {problem && (
+          <div role="alert" className="rounded-xl bg-bad-bg px-4 py-3 text-[13.5px] text-bad">
+            <p>{problem.message}</p>
+            {problem.detail && <p className="mt-1 break-all font-mono text-[11.5px] opacity-75">Details: {problem.detail}</p>}
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-          <p className="text-[12.5px] text-muted">Nothing changes until you review it and click Build.</p>
+          <p className="text-[12.5px] text-muted">Next, we suggest your setup. Nothing is built until you approve it.</p>
           <button type="button" onClick={suggest} className="btn-primary inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-[14px] font-semibold">
-            <Icon name="spark" size={16} /> Suggest my setup
+            Continue <Icon name="arrow" size={16} />
           </button>
         </div>
       </section>
@@ -196,7 +222,7 @@ export function SetupWizard({
           <p className="mt-1 text-[13px] text-muted">Start from an example and change the details.</p>
           <div className="mt-3 flex flex-col gap-2">
             {EXAMPLES.map((ex) => (
-              <button key={ex} type="button" onClick={() => setText(ex)} className="rounded-xl border border-line p-3 text-left text-[12.5px] leading-relaxed text-muted hover:border-brand hover:text-ink">
+              <button key={ex} type="button" onClick={() => updateText(() => ex)} className="rounded-xl border border-line p-3 text-left text-[12.5px] leading-relaxed text-muted hover:border-brand hover:text-ink">
                 {ex.slice(0, 110)}…
               </button>
             ))}
@@ -219,18 +245,63 @@ export function SetupWizard({
 
 /* ---------------------------------------------------------------- input helpers */
 
-function VoiceButton({ onText, onError }: { onText: (t: string) => void; onError: (e: string) => void }) {
+function VoiceRecorder({ onText, onDone, onError }: { onText: (t: string) => void; onDone: () => void; onError: (e: string) => void }) {
   const [on, setOn] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [interim, setInterim] = useState("");
+  const [heard, setHeard] = useState(false);
   const supported = useSyncExternalStore(noopSubscribe, hasSpeech, () => false);
   const rec = useRef<Recognition | null>(null);
+  const wanted = useRef(false);
+  const finish = useRef(false);
+  const bars = useRef<(HTMLSpanElement | null)[]>([]);
+  const audio = useRef<{ stream: MediaStream; ctx: AudioContext; frame: number; timer: ReturnType<typeof setInterval> } | null>(null);
 
-  useEffect(() => () => rec.current?.stop(), []);
+  function stopAudio() {
+    const a = audio.current;
+    if (!a) return;
+    cancelAnimationFrame(a.frame);
+    clearInterval(a.timer);
+    a.stream.getTracks().forEach((t) => t.stop());
+    a.ctx.close().catch(() => {});
+    audio.current = null;
+  }
 
-  function toggle() {
-    if (on) {
+  useEffect(
+    () => () => {
+      wanted.current = false;
       rec.current?.stop();
-      return;
+      stopAudio();
+    },
+    [],
+  );
+
+  async function startMeter() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new AudioContext();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const timer = setInterval(() => setSeconds((n) => n + 1), 1000);
+      audio.current = { stream, ctx, frame: 0, timer };
+      const draw = () => {
+        analyser.getByteFrequencyData(data);
+        bars.current.forEach((el, i) => {
+          if (!el) return;
+          const v = data[(i % 12) + 1] / 255;
+          el.style.height = `${Math.max(12, Math.round(v * 100))}%`;
+        });
+        if (audio.current) audio.current.frame = requestAnimationFrame(draw);
+      };
+      draw();
+    } catch {
+      /* the transcript still works without the meter */
     }
+  }
+
+  function start() {
     const r = getRecognition();
     if (!r) {
       onError("Voice isn't available in this browser. Try Chrome, Edge or Safari, or type instead.");
@@ -238,34 +309,95 @@ function VoiceButton({ onText, onError }: { onText: (t: string) => void; onError
     }
     r.lang = "en-GB";
     r.continuous = true;
-    r.interimResults = false;
+    r.interimResults = true;
     r.onresult = (e) => {
       let said = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) said += e.results[i][0].transcript;
-      if (said.trim()) onText(said.trim());
+      let draft = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) said += e.results[i][0].transcript;
+        else draft += e.results[i][0].transcript;
+      }
+      if (said.trim()) {
+        onText(said.trim());
+        setHeard(true);
+      }
+      setInterim(draft);
     };
     r.onerror = (e) => {
-      if (e.error === "not-allowed") onError("Allow microphone access to speak, or type instead.");
-      setOn(false);
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        wanted.current = false;
+        onError("Allow microphone access in your browser to speak, or type instead.");
+      }
     };
-    r.onend = () => setOn(false);
+    r.onend = () => {
+      // Browsers stop listening after a pause. Keep going until the person stops.
+      if (wanted.current) {
+        try {
+          r.start();
+          return;
+        } catch {
+          /* fall through and stop */
+        }
+      }
+      setOn(false);
+      setInterim("");
+      stopAudio();
+      if (finish.current) {
+        finish.current = false;
+        onDone();
+      }
+    };
     rec.current = r;
+    wanted.current = true;
+    finish.current = false;
     onError("");
+    setSeconds(0);
+    setHeard(false);
     r.start();
     setOn(true);
+    startMeter();
+  }
+
+  function stop(thenContinue: boolean) {
+    wanted.current = false;
+    finish.current = thenContinue;
+    rec.current?.stop();
   }
 
   if (!supported) return null;
+  if (!on)
+    return (
+      <button type="button" onClick={start} className="btn-ghost inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold">
+        <Icon name="mic" size={15} /> Speak instead
+      </button>
+    );
+
+  const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   return (
-    <button
-      type="button"
-      onClick={toggle}
-      aria-pressed={on}
-      className={`inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold ${on ? "bg-bad-bg text-bad" : "btn-ghost"}`}
-    >
-      {on ? <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-bad" /> : <Icon name="mic" size={15} />}
-      {on ? "Stop recording" : "Speak instead"}
-    </button>
+    <div className="flex w-full flex-col gap-3 rounded-2xl border border-line bg-surface p-4" aria-live="polite">
+      <div className="flex items-center gap-3">
+        <span className="relative flex h-3 w-3">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-bad opacity-60" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-bad" />
+        </span>
+        <span className="text-[13.5px] font-semibold">Recording</span>
+        <span className="font-mono text-[12.5px] text-muted">{time}</span>
+        <div className="ml-auto flex h-8 flex-1 items-center justify-end gap-[3px] sm:max-w-[260px]" aria-hidden>
+          {Array.from({ length: 24 }).map((_, i) => (
+            <span key={i} ref={(el) => { bars.current[i] = el; }} className="w-[3px] rounded-full bg-brand transition-[height] duration-75" style={{ height: "12%" }} />
+          ))}
+        </div>
+      </div>
+      <p className="min-h-[20px] text-[13px] text-muted">{interim || (heard ? "Keep going, or press Done when you've finished." : "Start speaking. Tell us what you sell, where leads come from and your steps to a sale.")}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => stop(false)} className="btn-ghost inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold">
+          <Icon name="stop" size={14} /> Stop
+        </button>
+        <button type="button" onClick={() => stop(true)} className="btn-primary inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold">
+          Done, continue <Icon name="arrow" size={15} />
+        </button>
+      </div>
+    </div>
   );
 }
 
