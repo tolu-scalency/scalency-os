@@ -38,8 +38,9 @@ export async function finishOnboarding(_prev: OnboardingState, fd: FormData): Pr
   const phone = normalisePhone(text(fd, "phone", 30));
   const businessName = text(fd, "business_name", 80);
   const website = normaliseWebsite(text(fd, "website", 200));
-  const industryChoice = oneOf(text(fd, "industry"), INDUSTRIES);
-  const industry = industryChoice ? pick(industryChoice, "industry_other") : null;
+  // Industry is free text: people pick a suggestion or type their own niche.
+  const industryTyped = text(fd, "industry", 60);
+  const industry = industryTyped && industryTyped !== "Other" ? industryTyped : text(fd, "industry_other", 60) || null;
   const teamSize = oneOf(text(fd, "team_size"), TEAM_SIZES);
   const goals = fd.getAll("goals").map(String).filter((g) => (GOALS as readonly string[]).includes(g));
   const monthlyLeads = oneOf(text(fd, "monthly_leads"), MONTHLY_LEADS);
@@ -50,7 +51,7 @@ export async function finishOnboarding(_prev: OnboardingState, fd: FormData): Pr
   if (phone === "invalid") return { error: "Enter your phone number like 07700 900123, or with the country code, like +44 7700 900123." };
   if (businessName.length < 2) return { error: "Add your business name." };
   if (website === "invalid") return { error: "That website address doesn't look right." };
-  if (!industry || !teamSize) return { error: industryChoice === "Other" ? "Tell us your industry." : "Choose your industry and team size." };
+  if (!industry || !teamSize) return { error: !industry ? "Tell us your industry or niche." : "Choose your team size." };
   if (goals.length === 0) return { error: "Choose at least one thing you want Scalency OS to help with." };
   if (!monthlyLeads) return { error: "Choose roughly how many leads you get each month." };
 

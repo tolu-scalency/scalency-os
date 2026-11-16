@@ -181,6 +181,93 @@ function sanitise(raw: Record<string, unknown>, have: { fields: Set<string>; tag
   };
 }
 
+/** Pulls the proposal out of Claude's reply: the tool call, or JSON in plain text as a fallback. */
+function readProposal(out: { content?: { type: string; input?: unknown; text?: string }[] }): Record<string, unknown> | null {
+  const blocks = out.content ?? [];
+  const call = blocks.find((c) => c.type === "tool_use" && c.input && typeof c.input === "object");
+  if (call) return call.input as Record<string, unknown>;
+  for (const c of blocks) {
+    if (c.type !== "text" || !c.text) continue;
+    const start = c.text.indexOf("{");
+    const end = c.text.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        const parsed = JSON.parse(c.text.slice(start, end + 1));
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {
+        /* not JSON */
+      }
+    }
+  }
+  return null;
+}
+
+/** Calls Claude, with one retry and a clear reason when it fails. */
+async function askClaude(apiKey: string, content: unknown[]): Promise<{ raw: Record<string, unknown> } | { error: string; detail: string }> {
+  const chosen = Deno.env.get("ANTHROPIC_MODEL");
+  const models = chosen ? [chosen] : ["claude-sonnet-5-5", "claude-sonnet-4-5"];
+  // Standard keys (sk-ant-api...) use x-api-key; other keys use a bearer token. If one style is refused, try the other.
+  const styles = apiKey.startsWith("sk-ant-api") ? ["x-api-key", "bearer"] : ["bearer", "x-api-key"];
+  let lastDetail = "";
+
+  for (const model of models) {
+    for (const style of styles) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const headers: Record<string, string> = { "anthropic-version": "2023-06-01", "content-type": "application/json" };
+        if (style === "x-api-key") headers["x-api-key"] = apiKey;
+        else headers.authorization = `Bearer ${apiKey}`;
+        let res: Response;
+        try {
+          res = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              model,
+              max_tokens: 8000,
+              system: SYSTEM,
+              tools: [TOOL],
+              tool_choice: { type: "tool", name: "propose_setup" },
+              messages: [{ role: "user", content }],
+            }),
+            signal: AbortSignal.timeout(120_000),
+          });
+        } catch (e) {
+          console.error("Claude call failed", e);
+          return { error: "The AI took too long. Try a shorter description or document.", detail: "timeout" };
+        }
+        const bodyText = await res.text();
+        if (!res.ok) {
+          console.error("Claude error", model, style, res.status, bodyText.slice(0, 500));
+          lastDetail = `${res.status} ${bodyText.slice(0, 200)}`;
+          if (res.status === 401 || res.status === 403) break; // try the other key style
+          if (/credit balance|billing/i.test(bodyText)) return { error: "The Claude account is out of credit. Top it up in console.anthropic.com.", detail: lastDetail };
+          if (res.status === 404 || (res.status === 400 && /model/i.test(bodyText))) break; // try the next model
+          if (res.status === 429 || res.status >= 500) {
+            await new Promise((r) => setTimeout(r, 1500));
+            continue;
+          }
+          return { error: "The AI could not read that just now. Please try again in a minute.", detail: lastDetail };
+        }
+        let out: { stop_reason?: string; content?: { type: string; input?: unknown; text?: string }[] };
+        try {
+          out = JSON.parse(bodyText);
+        } catch {
+          lastDetail = "unreadable reply";
+          continue;
+        }
+        const raw = readProposal(out);
+        if (raw) return { raw };
+        lastDetail = `no proposal (stop: ${out.stop_reason ?? "?"}, blocks: ${(out.content ?? []).map((c) => c.type).join(",")})`;
+        console.error("Claude returned no proposal", model, lastDetail, bodyText.slice(0, 500));
+      }
+      if (/^40[13]/.test(lastDetail)) continue;
+      if (!/^(404|400)/.test(lastDetail)) return { error: "The AI did not return a setup. Please try again.", detail: lastDetail };
+    }
+  }
+  if (/^40[13]/.test(lastDetail)) return { error: "The Claude key was not accepted. Check ANTHROPIC_API_KEY in Supabase, Edge Functions, Secrets.", detail: lastDetail };
+  return { error: "The AI could not read that just now. Please try again in a minute.", detail: lastDetail };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Use POST." }, 405);
@@ -262,37 +349,9 @@ Deno.serve(async (req) => {
       "Propose the setup with the propose_setup tool.",
   });
 
-  const headers: Record<string, string> = { "anthropic-version": "2023-06-01", "content-type": "application/json" };
-  if (apiKey.startsWith("sk-ant-api")) headers["x-api-key"] = apiKey;
-  else headers.authorization = `Bearer ${apiKey}`;
-
-  let raw: Record<string, unknown> | null = null;
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model: Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5-5",
-        max_tokens: 4000,
-        system: SYSTEM,
-        tools: [TOOL],
-        tool_choice: { type: "tool", name: "propose_setup" },
-        messages: [{ role: "user", content }],
-      }),
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!res.ok) {
-      console.error("Claude error", res.status, await res.text());
-      return json({ error: "The AI could not read that just now. Please try again in a minute." }, 502);
-    }
-    const out = await res.json();
-    const call = (out.content ?? []).find((c: { type: string }) => c.type === "tool_use");
-    raw = call?.input ?? null;
-  } catch (e) {
-    console.error("Claude call failed", e);
-    return json({ error: "The AI took too long. Try a shorter document." }, 504);
-  }
-  if (!raw) return json({ error: "The AI did not return a setup. Please try again." }, 502);
+  const ai = await askClaude(apiKey, content);
+  if ("error" in ai) return json({ error: ai.error, detail: ai.detail }, 502);
+  const raw = ai.raw;
 
   const blueprint = sanitise(raw, {
     fields: new Set((fields.data ?? []).map((f) => f.key)),
