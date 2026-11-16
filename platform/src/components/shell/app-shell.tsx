@@ -64,7 +64,7 @@ const sections: Section[] = [
     title: "Automation",
     items: [
       { href: "/workflows", label: "Workflows", icon: "zap" },
-      { href: "/ai-builder", label: "AI builder", icon: "spark", soon: true },
+      { href: "/ai-builder", label: "AI setup", icon: "spark" },
       { href: "/agents", label: "AI agents", icon: "user", soon: true },
     ],
   },

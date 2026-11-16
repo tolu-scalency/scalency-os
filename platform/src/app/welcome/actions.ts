@@ -73,5 +73,5 @@ export async function finishOnboarding(_prev: OnboardingState, fd: FormData): Pr
   });
   if (workspaceError) return { error: "We couldn't create your workspace. Please try again." };
 
-  redirect("/dashboard");
+  redirect("/ai-builder?welcome=1");
 }

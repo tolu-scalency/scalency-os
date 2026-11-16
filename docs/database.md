@@ -158,6 +158,20 @@ Migration `20261114090000_email_builder_fields`.
 
 Custom fields (`custom_fields`, object "contact") and custom values (`custom_values`) are managed in Settings, then Custom fields.
 
+## AI setup assistant
+
+Migration `20261117090000_ai_setup`, plus the edge function `supabase/functions/ai-setup`.
+
+| Part | What it does |
+|---|---|
+| `workspace_setups` | One row each time someone asks the AI to suggest a setup. Holds a short excerpt of what they shared, the AI's proposal (`blueprint`), the status (draft, applied, undone) and what was built (`result`). Members can read their account's rows; owners and admins create drafts. |
+| `can_manage_account()` | True for the account's owner or an admin. |
+| `apply_workspace_setup(setup, plan)` | Builds a reviewed plan in one go: creates the pipeline if there isn't one (or replaces its stages when asked and no deals exist), adds new fields, tags and custom values only, creates workflows switched off, adds tasks for the person running it. A setup can only be applied once. |
+| `undo_workspace_setup(setup)` | Removes what a setup added, keeping anything already in use (workflows that are on or have run, tags on contacts, pipelines with deals, finished tasks). |
+| Edge function `ai-setup` | Reads pasted text, a voice transcript or a PDF and asks Claude for a proposal. Claude can only pick from fixed building blocks; workflows come from our tested templates by key, never written by the AI. Limited to 20 runs per workspace per day. Needs the `ANTHROPIC_API_KEY` secret (and optionally `ANTHROPIC_MODEL`). |
+
+Nothing changes in a workspace until someone reviews the proposal and clicks Build.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
