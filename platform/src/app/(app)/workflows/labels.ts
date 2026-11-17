@@ -46,4 +46,6 @@ export const actionLabel: Record<string, string> = {
   end: "End",
   update_field: "Update field",
   email_team: "Team email",
+  branch: "If / else",
+  goto: "Jump",
 };

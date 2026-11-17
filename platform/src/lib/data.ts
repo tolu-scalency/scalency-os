@@ -666,10 +666,14 @@ export async function myPendingInvites(): Promise<PendingInvite[]> {
 }
 
 export type WaitUnit = "minutes" | "hours" | "days";
-export type ConditionField = "has_tag" | "has_email" | "has_phone" | "replied" | "in_stage" | "deal_status" | "source_is" | "has_owner";
-export type Condition = { field: ConditionField; value?: string; negate?: boolean };
+export type ConditionField =
+  | "has_tag" | "has_email" | "has_phone" | "replied" | "in_stage" | "deal_status" | "source_is" | "has_owner"
+  | "contact_field" | "owner_is" | "deal_value" | "in_pipeline" | "day_of_week" | "time_of_day";
+export type ConditionOp = "is" | "is_not" | "contains" | "not_contains" | "empty" | "not_empty" | "gt" | "lt";
+export type Condition = { field: ConditionField; value?: string; negate?: boolean; op?: ConditionOp; key?: string };
+export type CompiledRoute = { name: string; match: "all" | "any"; conditions: Condition[]; goto: string };
 
-type StepBase = { id?: string };
+type StepBase = { id?: string; label?: string };
 export type WorkflowStep = StepBase &
   (
     | { type: "wait"; amount: number; unit: WaitUnit }
@@ -692,6 +696,8 @@ export type WorkflowStep = StepBase &
     | { type: "update_field"; field: string; value: string }
     | { type: "email_team"; to: string; subject: string; body: string }
     | { type: "end" }
+    | { type: "branch"; routes: CompiledRoute[]; otherwise_name: string; otherwise_goto: string }
+    | { type: "goto"; target: string }
   );
 export type StepType = WorkflowStep["type"];
 
@@ -741,7 +747,7 @@ export async function listWorkflows(accountId: string): Promise<WorkflowRow[]> {
 
 export async function getWorkflow(id: string, accountId: string) {
   const supabase = await createClient();
-  const { data: w } = await supabase.from("workflows").select("id, name, description, trigger, steps, status, stop_on_reply, client_approved_by, client_approved_at, updated_at").eq("id", id).eq("account_id", accountId).maybeSingle();
+  const { data: w } = await supabase.from("workflows").select("id, name, description, trigger, steps, graph, status, stop_on_reply, client_approved_by, client_approved_at, updated_at").eq("id", id).eq("account_id", accountId).maybeSingle();
   if (!w) return null;
   const { data: enr } = await supabase
     .from("workflow_enrollments")
@@ -755,6 +761,7 @@ export async function getWorkflow(id: string, accountId: string) {
     description: (w.description as string | null) ?? "",
     trigger: w.trigger as WorkflowTrigger,
     steps: (w.steps ?? []) as WorkflowStep[],
+    graph: (w.graph ?? null) as unknown[] | null,
     status: w.status as WorkflowRow["status"],
     stopOnReply: w.stop_on_reply as boolean,
     approvedBy: w.client_approved_by as string | null,

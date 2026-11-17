@@ -1,91 +1,61 @@
 "use client";
 
-import { TagsInput } from "@/components/editor/tags-input";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { Icon, type IconName } from "@/components/icon";
-import type { Condition, ConditionField, CustomField, CustomValue, Stage, StepType, WorkflowStep, WorkflowTrigger } from "@/lib/data";
-import { mergeFields, type MergeField } from "@/lib/merge-fields";
-import { EmailDesigner } from "@/components/editor/email-designer";
-import { MergeText } from "@/components/editor/field-picker";
+// The workflow builder: a canvas you can pan and zoom, with the trigger at the top
+// and steps flowing down. If / else splits into side-by-side branches that join
+// back up underneath. Click any card to edit it in the floating panel, drag cards
+// onto a + to move them.
+
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Icon } from "@/components/icon";
+import type { CustomField, CustomValue, Stage, StepType, WorkflowStep, WorkflowTrigger } from "@/lib/data";
+import { mergeFields } from "@/lib/merge-fields";
+import { cloneNode, countNodes, findNode, insertNode, locate, MAX_NODES, moveNode, newId, removeNode, toTree, updateNode, type BranchNode, type FlowNode } from "@/lib/flow";
 import { saveWorkflow } from "../actions";
+import { blank, groups, kinds, problem, StepFields, summary, type Option } from "./step-fields";
+import { BranchFields, conditionText, newRoute } from "./branch-fields";
+import { FloatingPanel } from "./panel";
 
-type Editable = { id: string; name: string; description: string; trigger: WorkflowTrigger; steps: WorkflowStep[]; stopOnReply: boolean };
-type Option = { id: string; name: string };
+type Editable = { id: string; name: string; description: string; trigger: WorkflowTrigger; steps: WorkflowStep[]; graph: unknown[] | null; stopOnReply: boolean };
+type Selection = { t: "trigger" } | { t: "node"; id: string } | { t: "add"; list: string; index: number } | { t: "settings" } | null;
 
-type Kind = { type: StepType; label: string; icon: IconName; tone: string; group: string };
-const kinds: Kind[] = [
-  { type: "sms", label: "Send a text", icon: "phone", tone: "from-[#6ee7b7] to-[#059669]", group: "Messages" },
-  { type: "email", label: "Send an email", icon: "mail", tone: "from-[#55e3ec] to-[#0a5fe3]", group: "Messages" },
-  { type: "notify_team", label: "Alert the team", icon: "hash", tone: "from-[#fdba74] to-[#ea580c]", group: "Messages" },
-  { type: "email_team", label: "Email the team", icon: "mail", tone: "from-[#fdba74] to-[#ea580c]", group: "Messages" },
-  { type: "wait", label: "Wait", icon: "clock", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
-  { type: "wait_until", label: "Wait until a time", icon: "calendar", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
-  { type: "wait_for_reply", label: "Wait for a reply", icon: "inbox", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
-  { type: "if_else", label: "If / else", icon: "branch", tone: "from-[#c4b5fd] to-[#7c3aed]", group: "Logic" },
-  { type: "end", label: "End workflow", icon: "stop", tone: "from-[#fca5a5] to-[#dc2626]", group: "Logic" },
-  { type: "add_tag", label: "Add a tag", icon: "tag", tone: "from-[#93c5fd] to-[#2563eb]", group: "Contact" },
-  { type: "remove_tag", label: "Remove a tag", icon: "tag", tone: "from-[#cbd5e1] to-[#475569]", group: "Contact" },
-  { type: "assign", label: "Assign to someone", icon: "user", tone: "from-[#a5b4fc] to-[#4f46e5]", group: "Contact" },
-  { type: "task", label: "Create a task", icon: "tasks", tone: "from-[#a5b4fc] to-[#4f46e5]", group: "Contact" },
-  { type: "note", label: "Add a note", icon: "edit", tone: "from-[#fde68a] to-[#d97706]", group: "Contact" },
-  { type: "update_field", label: "Update a field", icon: "database", tone: "from-[#93c5fd] to-[#2563eb]", group: "Contact" },
-  { type: "move_stage", label: "Move stage", icon: "pipeline", tone: "from-[#f0abfc] to-[#c026d3]", group: "Pipeline" },
-  { type: "set_status", label: "Mark deal won or lost", icon: "thumbsUp", tone: "from-[#86efac] to-[#16a34a]", group: "Pipeline" },
-  { type: "add_to_workflow", label: "Add to another workflow", icon: "zap", tone: "from-[#7dd3fc] to-[#0284c7]", group: "Workflows" },
-  { type: "remove_from_workflow", label: "Remove from a workflow", icon: "x", tone: "from-[#cbd5e1] to-[#475569]", group: "Workflows" },
-  { type: "webhook", label: "Send a webhook", icon: "link", tone: "from-[#5eead4] to-[#0d9488]", group: "Apps" },
-];
-const groups = ["Messages", "Timing", "Logic", "Contact", "Pipeline", "Workflows", "Apps"];
+const BRANCH_TONE = "from-[#c4b5fd] to-[#7c3aed]";
 
-const conditions: { field: ConditionField; label: string }[] = [
-  { field: "replied", label: "has replied" },
-  { field: "has_tag", label: "has the tag" },
-  { field: "in_stage", label: "is in the stage" },
-  { field: "deal_status", label: "has a deal that is" },
-  { field: "has_email", label: "has an email address" },
-  { field: "has_phone", label: "has a phone number" },
-  { field: "has_owner", label: "is assigned to someone" },
-  { field: "source_is", label: "came from (source)" },
-];
-
-const newId = () => Math.random().toString(36).slice(2, 10);
-
-function blank(type: StepType, stages: Stage[], members: Option[], workflows: Option[]): WorkflowStep {
-  const id = newId();
-  switch (type) {
-    case "wait": return { id, type, amount: 1, unit: "hours" };
-    case "wait_until": return { id, type, hour: 9, minute: 0, weekdays_only: true };
-    case "wait_for_reply": return { id, type, amount: 1, unit: "days" };
-    case "email": return { id, type, subject: "", body: "", html: "", mode: "design" };
-    case "email_team": return { id, type, to: "owner", subject: "Update on {{name}}", body: "{{name}} ({{phone}}) needs a call." };
-    case "update_field": return { id, type, field: "source", value: "" };
-    case "sms": return { id, type, body: "" };
-    case "task": return { id, type, title: "Follow up with {{first_name}}", due_in_days: 0 };
-    case "move_stage": return { id, type, stage_id: stages[0]?.id ?? "" };
-    case "set_status": return { id, type, status: "won" };
-    case "note": return { id, type, text: "" };
-    case "notify_team": return { id, type, text: "New lead: {{name}}" };
-    case "add_tag": return { id, type, tags: [] };
-    case "remove_tag": return { id, type, tags: [] };
-    case "assign": return { id, type, user_id: members.length > 1 ? "round_robin" : (members[0]?.id ?? "round_robin") };
-    case "if_else": return { id, type, condition: { field: "replied" }, else: "end" };
-    case "add_to_workflow": return { id, type, workflow_id: workflows[0]?.id ?? "" };
-    case "remove_from_workflow": return { id, type, workflow_id: workflows[0]?.id ?? "" };
-    case "webhook": return { id, type, url: "" };
-    case "end": return { id, type };
-  }
-}
-
-// Trigger choices, written as the select's value.
 function triggerValue(t: WorkflowTrigger) {
   return t.type === "stage_entered" ? `stage:${t.stage_id}` : t.type;
 }
 
+function triggerText(t: WorkflowTrigger, stages: Stage[]) {
+  switch (t.type) {
+    case "contact_created":
+      return "When a contact is added";
+    case "stage_entered":
+      return `When a contact enters “${stages.find((s) => s.id === t.stage_id)?.name ?? "a stage"}”`;
+    case "tag_added":
+      return t.tag ? `When “${t.tag}” is added` : "When a tag is added";
+    case "tag_removed":
+      return t.tag ? `When “${t.tag}” is removed` : "When a tag is removed";
+    case "deal_won":
+      return "When a deal is won";
+    case "deal_lost":
+      return "When a deal is lost";
+    case "message_received":
+      return "When the lead replies";
+    case "webhook":
+      return "When a webhook is received";
+    default:
+      return "When you add someone by hand";
+  }
+}
 
-/** The workflow builder: a trigger, then steps that run from top to bottom. */
+function initialTree(w: Editable): FlowNode[] {
+  if (Array.isArray(w.graph) && w.graph.length) return w.graph as FlowNode[];
+  return toTree(w.steps);
+}
+
 export function WorkflowEditor({
   workflow,
   stages,
+  pipelines,
   members,
   workflows,
   tags,
@@ -96,6 +66,7 @@ export function WorkflowEditor({
 }: {
   workflow: Editable;
   stages: Stage[];
+  pipelines: Option[];
   members: Option[];
   workflows: Option[];
   tags: string[];
@@ -105,95 +76,40 @@ export function WorkflowEditor({
   customValues: CustomValue[];
 }) {
   const fieldsList = mergeFields(customFields, customValues);
-  const flowRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoomState] = useState(1);
-  useEffect(() => {
-    try {
-      const saved = Number(localStorage.getItem("scalency.wf-zoom"));
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved >= 0.3 && saved <= 1.5) setZoomState(saved);
-    } catch {}
-  }, []);
-  function setZoom(z: number) {
-    const next = Math.round(Math.min(1.5, Math.max(0.3, z)) * 100) / 100;
-    setZoomState(next);
-    try {
-      localStorage.setItem("scalency.wf-zoom", String(next));
-    } catch {}
-  }
-  function fit() {
-    const el = flowRef.current;
-    if (!el) return;
-    const natural = el.scrollHeight;
-    const top = el.getBoundingClientRect().top;
-    const room = window.innerHeight - Math.max(top, 80) - 110;
-    setZoom(Math.min(1, room / natural));
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  const others = workflows.filter((w) => w.id !== workflow.id);
+  const ctx = { stages, members, workflows: others, customFields, pipelines };
+
   const [name, setName] = useState(workflow.name);
   const [description, setDescription] = useState(workflow.description);
   const [trigger, setTrigger] = useState<WorkflowTrigger>(workflow.trigger);
   const [stopOnReply, setStopOnReply] = useState(workflow.stopOnReply);
-  const [steps, setSteps] = useState<WorkflowStep[]>(() => workflow.steps.map((s) => (s.id ? s : { ...s, id: newId() })));
-  const [adding, setAdding] = useState<number | null>(null);
+  const [nodes, setNodes] = useState<FlowNode[]>(() => initialTree(workflow));
+  const [sel, setSel] = useState<Selection>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropOver, setDropOver] = useState<string | null>(null);
   const [message, setMessage] = useState<{ error?: string; ok?: string }>({});
   const [dirty, setDirty] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
-  const others = workflows.filter((w) => w.id !== workflow.id);
+  const disabled = locked;
 
   function change(fn: () => void) {
     fn();
     setDirty(true);
     setMessage({});
   }
-  function update(i: number, patch: Partial<WorkflowStep>) {
-    change(() => setSteps((s) => s.map((st, j) => (j === i ? ({ ...st, ...patch } as WorkflowStep) : st))));
-  }
-  function insert(at: number, type: StepType) {
-    change(() => setSteps((s) => [...s.slice(0, at), blank(type, stages, members, others), ...s.slice(at)]));
-    setAdding(null);
-  }
-  function move(i: number, d: -1 | 1) {
-    change(() =>
-      setSteps((s) => {
-        const j = i + d;
-        if (j < 0 || j >= s.length) return s;
-        const copy = [...s];
-        [copy[i], copy[j]] = [copy[j], copy[i]];
-        return copy;
-      }),
-    );
-  }
-  function remove(i: number) {
-    change(() =>
-      setSteps((s) => {
-        const gone = s[i].id;
-        // Anything that pointed at the removed step now ends the workflow instead.
-        return s.filter((_, j) => j !== i).map((st) => (st.type === "if_else" && st.else === gone ? { ...st, else: "end" } : st));
-      }),
-    );
-  }
-  function setTriggerFrom(v: string) {
-    change(() => {
-      if (v.startsWith("stage:")) return setTrigger({ type: "stage_entered", stage_id: v.slice(6) });
-      if (v === "tag_added" || v === "tag_removed") return setTrigger({ type: v, tag: trigger.type === "tag_added" || trigger.type === "tag_removed" ? trigger.tag : "" });
-      if (v === "message_received") return setTrigger({ type: v, channel: "any" });
-      if (v === "webhook") return setTrigger({ type: v, token: workflow.trigger.type === "webhook" ? workflow.trigger.token : "" });
-      setTrigger({ type: v } as WorkflowTrigger);
-    });
-  }
-  // Last saved version, for Cancel.
-  const savedRef = useRef({ name: workflow.name, description: workflow.description, trigger: workflow.trigger, stopOnReply: workflow.stopOnReply, steps });
+  const edit = (fn: (n: FlowNode[]) => FlowNode[]) => change(() => setNodes(fn));
+
+  // ---------------------------------------------------------------- saving
+  const savedRef = useRef({ name: workflow.name, description: workflow.description, trigger: workflow.trigger, stopOnReply: workflow.stopOnReply, nodes });
   const backupKey = `scalency.wf-draft.${workflow.id}`;
   const [restorable, setRestorable] = useState(false);
 
   function save(auto = false) {
     start(async () => {
-      const snapshot = { name, description, trigger, steps, stopOnReply };
-      const result = await saveWorkflow(workflow.id, snapshot).catch(() => ({ error: "We couldn't save. Check your connection and try again.", token: undefined }));
+      const snapshot = { name, description, trigger, stopOnReply, nodes };
+      const result = await saveWorkflow(workflow.id, { name, description, trigger, graph: nodes, stopOnReply }).catch(() => ({ error: "We couldn't save. Check your connection and try again.", token: undefined }));
       if (auto && result.error) {
-        // Half-finished steps can't be saved yet. Keep them safe on this device and try again later.
         setMessage({ error: `Not saved yet: ${result.error}` });
         return;
       }
@@ -215,24 +131,25 @@ export function WorkflowEditor({
     setDescription(s0.description);
     setTrigger(s0.trigger);
     setStopOnReply(s0.stopOnReply);
-    setSteps(s0.steps);
+    setNodes(s0.nodes);
     setDirty(false);
+    setSel(null);
     setMessage({ ok: "Changes discarded" });
     try {
       localStorage.removeItem(backupKey);
     } catch {}
   }
 
-  // Autosave: two seconds after the last change. Also keep a copy on this device, so nothing is lost if the page closes.
+  // Autosave two seconds after the last change, with a copy kept on this device.
   useEffect(() => {
     if (!dirty || locked) return;
     try {
-      localStorage.setItem(backupKey, JSON.stringify({ at: Date.now(), name, description, trigger, steps, stopOnReply }));
+      localStorage.setItem(backupKey, JSON.stringify({ at: Date.now(), name, description, trigger, graph: nodes, stopOnReply }));
     } catch {}
     const t = setTimeout(() => save(true), 2000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, name, description, trigger, steps, stopOnReply]);
+  }, [dirty, name, description, trigger, nodes, stopOnReply]);
 
   useEffect(() => {
     try {
@@ -249,12 +166,173 @@ export function WorkflowEditor({
         setDescription(b.description);
         setTrigger(b.trigger);
         setStopOnReply(b.stopOnReply);
-        setSteps(b.steps);
+        setNodes(Array.isArray(b.graph) ? b.graph : toTree(b.steps ?? []));
         setDirty(true);
       }
     } catch {}
     setRestorable(false);
   }
+
+  // ---------------------------------------------------------------- canvas
+  const viewport = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const [zoom, setZoomState] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 24 });
+  const panning = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+
+  const setZoom = useCallback((z: number, around?: { x: number; y: number }) => {
+    const next = Math.round(Math.min(1.5, Math.max(0.25, z)) * 100) / 100;
+    setZoomState((old) => {
+      if (around)
+        setPan((p) => ({ x: around.x - ((around.x - p.x) * next) / old, y: around.y - ((around.y - p.y) * next) / old }));
+      return next;
+    });
+    try {
+      localStorage.setItem("scalency.wf-zoom", String(next));
+    } catch {}
+  }, []);
+
+  const centre = useCallback((z: number) => {
+    const v = viewport.current;
+    const c = content.current;
+    if (!v || !c) return;
+    setPan({ x: (v.clientWidth - c.offsetWidth * z) / 2, y: 24 });
+  }, []);
+
+  function fit() {
+    const v = viewport.current;
+    const c = content.current;
+    if (!v || !c) return;
+    const z = Math.max(0.25, Math.min(1, (v.clientWidth - 40) / c.offsetWidth, (v.clientHeight - 48) / c.offsetHeight));
+    setZoom(z);
+    centre(z);
+  }
+
+  useEffect(() => {
+    let z = 1;
+    try {
+      const saved = Number(localStorage.getItem("scalency.wf-zoom"));
+      if (saved >= 0.25 && saved <= 1.5) z = saved;
+    } catch {}
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setZoomState(z);
+    centre(z);
+  }, [centre]);
+
+  // Scroll to move around, Ctrl or Cmd + scroll (or pinch) to zoom.
+  useEffect(() => {
+    const v = viewport.current;
+    if (!v) return;
+    const onWheel = (e: WheelEvent) => {
+      if ((e.target as HTMLElement).closest("[data-scroll]")) return;
+      e.preventDefault();
+      const r = v.getBoundingClientRect();
+      if (e.ctrlKey || e.metaKey) {
+        setZoomState((old) => {
+          const next = Math.round(Math.min(1.5, Math.max(0.25, old * (e.deltaY < 0 ? 1.1 : 0.9))) * 100) / 100;
+          const ax = e.clientX - r.left;
+          const ay = e.clientY - r.top;
+          setPan((p) => ({ x: ax - ((ax - p.x) * next) / old, y: ay - ((ay - p.y) * next) / old }));
+          return next;
+        });
+      } else setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+    };
+    v.addEventListener("wheel", onWheel, { passive: false });
+    return () => v.removeEventListener("wheel", onWheel);
+  }, []);
+
+  function onPanStart(e: React.PointerEvent) {
+    if ((e.target as HTMLElement).closest("[data-node],button,input,select,textarea,a")) return;
+    panning.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onPanMove(e: React.PointerEvent) {
+    const p = panning.current;
+    if (!p) return;
+    setPan({ x: p.px + e.clientX - p.x, y: p.py + e.clientY - p.y });
+  }
+  function onPanEnd() {
+    panning.current = null;
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSel(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // ---------------------------------------------------------------- edits
+  const total = useMemo(() => countNodes(nodes), [nodes]);
+  const issues = useMemo(() => {
+    let n = 0;
+    const walk = (list: FlowNode[]) =>
+      list.forEach((x) => {
+        if (x.type === "branch") {
+          x.branches.forEach((r) => walk(r.steps));
+          walk(x.otherwise.steps);
+        } else if (problem(x as WorkflowStep)) n++;
+      });
+    walk(nodes);
+    return n;
+  }, [nodes]);
+
+  function add(type: StepType, list: string, index: number) {
+    if (total >= MAX_NODES) {
+      setMessage({ error: `Keep it to ${MAX_NODES} steps or fewer.` });
+      return;
+    }
+    const node: FlowNode =
+      type === "if_else"
+        ? { id: newId(), type: "branch", branches: [{ ...newRoute(1), name: "Yes" }], otherwise: { name: "None", steps: [] } }
+        : blank(type, stages, members, others);
+    edit((n) => insertNode(n, list, index, node));
+    setSel({ t: "node", id: node.id });
+  }
+
+  function remove(id: string) {
+    const n = findNode(nodes, id);
+    if (n?.type === "branch") {
+      const inside = countNodes([n]) - 1;
+      if (inside > 0 && !confirm(`Delete this If / else and the ${inside} step${inside === 1 ? "" : "s"} inside its branches?`)) return;
+    }
+    edit((all) => removeNode(all, id));
+    setSel(null);
+  }
+
+  function duplicate(id: string) {
+    const n = findNode(nodes, id);
+    if (!n) return;
+    if (total + countNodes([n]) > MAX_NODES) {
+      setMessage({ error: `Keep it to ${MAX_NODES} steps or fewer.` });
+      return;
+    }
+    const copy = cloneNode(n);
+    edit((all) => {
+      const at = locate(all, id);
+      return at ? insertNode(all, at.list, at.index + 1, copy) : all;
+    });
+    setSel({ t: "node", id: copy.id });
+  }
+
+  function drop(list: string, index: number) {
+    if (!dragId) return;
+    edit((n) => moveNode(n, dragId, list, index));
+    setDragId(null);
+    setDropOver(null);
+  }
+
+  function setTriggerFrom(v: string) {
+    change(() => {
+      if (v.startsWith("stage:")) return setTrigger({ type: "stage_entered", stage_id: v.slice(6) });
+      if (v === "tag_added" || v === "tag_removed") return setTrigger({ type: v, tag: trigger.type === "tag_added" || trigger.type === "tag_removed" ? trigger.tag : "" });
+      if (v === "message_received") return setTrigger({ type: v, channel: "any" });
+      if (v === "webhook") return setTrigger({ type: v, token: workflow.trigger.type === "webhook" ? workflow.trigger.token : "" });
+      setTrigger({ type: v } as WorkflowTrigger);
+    });
+  }
+
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -265,41 +343,316 @@ export function WorkflowEditor({
     }
   }
 
-  const disabled = locked;
   const hookUrl = trigger.type === "webhook" && trigger.token ? `${hookBase}/api/hooks/${trigger.token}` : "";
+  const selected = sel?.t === "node" ? findNode(nodes, sel.id) : null;
 
+  // ---------------------------------------------------------------- render helpers
+  function plus(list: string, index: number) {
+    const open = sel?.t === "add" && sel.list === list && sel.index === index;
+    const spot = `${list}#${index}`;
+    const over = dropOver === spot;
+    return (
+      <div key={`plus-${spot}`} className="flex flex-col items-center">
+        <span className="h-4 w-0.5 bg-line-strong" />
+        {disabled ? (
+          <span className="h-3 w-0.5 bg-line-strong" />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setSel(open ? null : { t: "add", list, index })}
+            onDragOver={(e) => {
+              if (!dragId) return;
+              e.preventDefault();
+              setDropOver(spot);
+            }}
+            onDragLeave={() => setDropOver(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDropOver(null);
+              drop(list, index);
+            }}
+            aria-label="Add a step here"
+            title={dragId ? "Drop here" : "Add a step"}
+            className={`inline-flex items-center justify-center rounded-full border bg-white shadow-sm transition-all ${
+              dragId ? (over ? "h-9 w-24 border-brand bg-[#e8f1ff] text-brand" : "h-7 w-20 border-dashed border-sky text-sky") : open ? "h-7 w-7 border-brand bg-brand text-white" : "h-7 w-7 border-line-strong text-muted hover:border-sky hover:text-brand"
+            }`}
+          >
+            {dragId ? <span className="text-[11px] font-semibold">Drop here</span> : <Icon name="plus" size={14} />}
+          </button>
+        )}
+        <span className="h-4 w-0.5 bg-line-strong" />
+      </div>
+    );
+  }
+
+  function card(node: FlowNode) {
+    const isSel = sel?.t === "node" && sel.id === node.id;
+    const isBranch = node.type === "branch";
+    const k = isBranch ? null : (kinds.find((x) => x.type === node.type) ?? kinds[0]);
+    const issue = isBranch ? null : problem(node as WorkflowStep);
+    return (
+      <div
+        data-node
+        draggable={!disabled}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", node.id);
+          setDragId(node.id);
+        }}
+        onDragEnd={() => {
+          setDragId(null);
+          setDropOver(null);
+        }}
+        onClick={() => setSel({ t: "node", id: node.id })}
+        className={`group relative w-[280px] cursor-pointer rounded-2xl border bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${
+          isSel ? "border-brand ring-4 ring-[#0a5fe3]/15" : issue ? "border-warn/60" : "border-line"
+        } ${dragId === node.id ? "opacity-40" : ""}`}
+      >
+        <div className="flex items-center gap-2.5">
+          <span className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gradient-to-br text-white ${isBranch ? BRANCH_TONE : k!.tone}`}>
+            <Icon name={isBranch ? "branch" : k!.icon} size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13.5px] font-semibold">{node.label || (isBranch ? "If / else" : k!.label)}</div>
+            <div className="truncate text-[12px] text-muted">
+              {isBranch ? `${node.branches.length + 1} branches` : summary(node as WorkflowStep, ctx)}
+            </div>
+          </div>
+          {!disabled && <Icon name="grip" size={14} className="flex-none text-faint opacity-0 transition-opacity group-hover:opacity-100" />}
+        </div>
+        {issue && (
+          <div className="mt-2 inline-flex items-center gap-1 rounded-md bg-warn-bg px-1.5 py-0.5 text-[11px] font-semibold text-warn">
+            <Icon name="warning" size={11} /> {issue}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function list(key: string, items: FlowNode[], root?: boolean) {
+    const ended = items.at(-1)?.type === "end";
+    return (
+      <>
+        {items.map((n, i) => (
+          <div key={n.id} className="flex flex-col items-center">
+            {plus(key, i)}
+            {card(n)}
+            {n.type === "branch" && branches(n)}
+          </div>
+        ))}
+        {!ended && plus(key, items.length)}
+        {root && !ended && (
+          <div className="flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-[12.5px] font-semibold text-muted shadow-[var(--shadow-card)] ring-1 ring-line">
+            <Icon name="checkCircle" size={14} className="text-ok" /> End
+          </div>
+        )}
+      </>
+    );
+  }
+
+  function branches(node: BranchNode) {
+    const cols = [...node.branches.map((r) => ({ key: `${node.id}/${r.id}`, name: r.name, steps: r.steps, sub: r.conditions.map((c) => conditionText(c, ctx)).join(r.match === "all" ? " and " : " or ") })), { key: `${node.id}/else`, name: node.otherwise.name, steps: node.otherwise.steps, sub: "None of the above" }];
+    const n = cols.length;
+    const allEnd = cols.every((c) => c.steps.at(-1)?.type === "end");
+    return (
+      <div className="flex flex-col items-center">
+        <span className="h-5 w-0.5 bg-line-strong" />
+        <div className="flex items-stretch">
+          {cols.map((c, i) => {
+            const ended = c.steps.at(-1)?.type === "end";
+            return (
+              <div key={c.key} className="relative flex flex-col items-center px-5">
+                <span className="absolute top-0 h-0.5 bg-line-strong" style={{ left: i === 0 ? "50%" : 0, right: i === n - 1 ? "50%" : 0 }} />
+                <span className="h-4 w-0.5 bg-line-strong" />
+                <button
+                  type="button"
+                  data-node
+                  onClick={() => setSel({ t: "node", id: node.id })}
+                  title={c.sub}
+                  className={`max-w-[240px] rounded-xl border px-3 py-1.5 text-left shadow-sm transition-colors ${i === n - 1 ? "border-line bg-surface text-muted" : "border-[#ddd6fe] bg-[#f5f3ff] text-[#5b21b6]"} hover:border-[#a78bfa]`}
+                >
+                  <div className="truncate text-[12.5px] font-bold">{c.name || "Branch"}</div>
+                  <div className="truncate text-[11px] opacity-80">{c.sub}</div>
+                </button>
+                {list(c.key, c.steps)}
+                {!ended && <span className="w-0.5 flex-1 bg-line-strong" />}
+                {ended && <span className="flex-1" />}
+                {!allEnd && <span className="absolute bottom-0 h-0.5 bg-line-strong" style={{ left: i === 0 ? "50%" : 0, right: i === n - 1 ? "50%" : 0 }} />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------- panel
+  function renderPanel() {
+    if (!sel) return null;
+    if (sel.t === "add") return <AddPanel onPick={(t) => add(t, sel.list, sel.index)} onClose={() => setSel(null)} />;
+    if (sel.t === "settings")
+      return (
+        <FloatingPanel title="Workflow settings" icon={<Icon name="settings" size={15} />} onClose={() => setSel(null)}>
+          <fieldset disabled={disabled} className="flex flex-col gap-3">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-medium">Name</span>
+              <input value={name} onChange={(e) => change(() => setName(e.target.value))} className="field h-11 font-semibold" />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-medium">What it&apos;s for</span>
+              <input value={description} onChange={(e) => change(() => setDescription(e.target.value))} placeholder="Optional" className="field h-11" />
+            </label>
+            <label className="flex cursor-pointer items-start gap-3">
+              <input type="checkbox" checked={stopOnReply} onChange={(e) => change(() => setStopOnReply(e.target.checked))} className="mt-0.5 h-4 w-4 accent-[#0a5fe3]" />
+              <span className="text-[13.5px]">
+                <span className="font-medium">Stop when the lead replies</span>
+                <span className="block text-[12.5px] text-muted">So nobody gets chased after they&apos;ve answered. “Wait for a reply” steps still carry on.</span>
+              </span>
+            </label>
+          </fieldset>
+        </FloatingPanel>
+      );
+    if (sel.t === "trigger")
+      return (
+        <FloatingPanel title="Trigger" subtitle="What starts this workflow" icon={<Icon name="play" size={15} />} onClose={() => setSel(null)}>
+          <fieldset disabled={disabled} className="flex flex-col gap-3">
+            <select value={triggerValue(trigger)} onChange={(e) => setTriggerFrom(e.target.value)} aria-label="Trigger" className="field h-11 font-semibold">
+              <optgroup label="Contacts">
+                <option value="contact_created">When a contact is added</option>
+                <option value="tag_added">When a tag is added</option>
+                <option value="tag_removed">When a tag is removed</option>
+              </optgroup>
+              <optgroup label="Pipeline">
+                {stages.map((s) => (
+                  <option key={s.id} value={`stage:${s.id}`}>When a contact enters “{s.name}”</option>
+                ))}
+                <option value="deal_won">When a deal is won</option>
+                <option value="deal_lost">When a deal is lost</option>
+              </optgroup>
+              <optgroup label="Conversations">
+                <option value="message_received">When the lead replies</option>
+              </optgroup>
+              <optgroup label="Other">
+                <option value="webhook">When a webhook is received (other apps)</option>
+                <option value="manual">When you add someone by hand</option>
+              </optgroup>
+            </select>
+            {(trigger.type === "tag_added" || trigger.type === "tag_removed") && (
+              <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+                Tag
+                <input list="wf-tags" value={trigger.tag} onChange={(e) => change(() => setTrigger({ ...trigger, tag: e.target.value }))} placeholder="e.g. Hot lead" className="field h-10 font-normal" />
+              </label>
+            )}
+            {trigger.type === "message_received" && (
+              <label className="flex flex-col gap-1.5 text-[13px] font-medium">
+                Replies by
+                <select value={trigger.channel} onChange={(e) => change(() => setTrigger({ type: "message_received", channel: e.target.value as "any" }))} className="field h-10 font-normal">
+                  <option value="any">text or email</option>
+                  <option value="sms">text only</option>
+                  <option value="email">email only</option>
+                </select>
+              </label>
+            )}
+            {trigger.type === "webhook" && (
+              <div className="rounded-xl bg-surface p-3 text-[13px]">
+                {hookUrl ? (
+                  <>
+                    <div className="mb-1.5 font-medium">Send leads to this address (POST):</div>
+                    <div className="flex items-center gap-2">
+                      <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-2 text-[12px] ring-1 ring-line">{hookUrl}</code>
+                      <button type="button" onClick={() => copy(hookUrl)} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
+                        <Icon name={copied ? "check" : "link"} size={13} /> {copied ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-muted">
+                      Send JSON with <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>phone</code>, and optionally <code>source</code> and <code>tags</code>. Keep this address private.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-muted">Save to get the address other apps send leads to.</p>
+                )}
+              </div>
+            )}
+          </fieldset>
+        </FloatingPanel>
+      );
+    if (!selected) return null;
+    const isBranch = selected.type === "branch";
+    const k = isBranch ? null : (kinds.find((x) => x.type === selected.type) ?? kinds[0]);
+    return (
+      <FloatingPanel
+        title={selected.label || (isBranch ? "If / else" : k!.label)}
+        subtitle={isBranch ? "Split contacts down different paths" : `${k!.group} action`}
+        icon={<Icon name={isBranch ? "branch" : k!.icon} size={15} />}
+        tone={isBranch ? BRANCH_TONE : k!.tone}
+        onClose={() => setSel(null)}
+        footer={
+          disabled ? undefined : (
+            <>
+              <button type="button" onClick={() => duplicate(selected.id)} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold">
+                <Icon name="copy" size={14} /> Duplicate
+              </button>
+              <button type="button" onClick={() => remove(selected.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold text-bad hover:bg-bad-bg">
+                <Icon name="trash" size={14} /> Delete
+              </button>
+              <span className="flex-1" />
+              <button type="button" onClick={() => setSel(null)} className="btn-primary inline-flex min-h-9 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
+                <Icon name="check" size={14} /> Done
+              </button>
+            </>
+          )
+        }
+      >
+        <fieldset disabled={disabled} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[12px] font-medium text-muted">Step name (optional)</span>
+            <input
+              value={selected.label ?? ""}
+              maxLength={60}
+              onChange={(e) => edit((n) => updateNode(n, selected.id, (x) => ({ ...x, label: e.target.value || undefined }) as FlowNode))}
+              placeholder={isBranch ? "e.g. Did they book?" : k!.label}
+              className="field h-10"
+            />
+          </label>
+          <div className="h-px bg-line" />
+          {isBranch ? (
+            <BranchFields
+              node={selected}
+              onChange={(nb) => edit((n) => updateNode(n, selected.id, () => nb))}
+              stages={stages}
+              pipelines={pipelines}
+              members={members}
+              customFields={customFields}
+              tags={tags}
+            />
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              <StepFields
+                step={selected as WorkflowStep}
+                stages={stages}
+                members={members}
+                workflows={others}
+                fields={fieldsList}
+                customFields={customFields}
+                allTags={tags}
+                onChange={(p) => edit((n) => updateNode(n, selected.id, (x) => ({ ...x, ...p }) as FlowNode))}
+              />
+            </div>
+          )}
+        </fieldset>
+      </FloatingPanel>
+    );
+  }
+
+  // ---------------------------------------------------------------- page
+  const zbtn = "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px] font-semibold text-navy transition-colors hover:bg-surface disabled:opacity-40";
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <datalist id="wf-tags">
         {tags.map((t) => (
           <option key={t} value={t} />
         ))}
       </datalist>
-
-      <section className="card p-5 sm:p-6">
-        <div className="grid gap-3 md:grid-cols-[1fr_1.4fr]">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-medium">Name</span>
-            <input value={name} disabled={disabled} onChange={(e) => change(() => setName(e.target.value))} className="field h-11 text-[15px] font-semibold" />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-medium">What it&apos;s for</span>
-            <input value={description} disabled={disabled} onChange={(e) => change(() => setDescription(e.target.value))} placeholder="Optional" className="field h-11" />
-          </label>
-        </div>
-        <label className="mt-4 flex w-fit cursor-pointer items-start gap-3">
-          <input type="checkbox" checked={stopOnReply} disabled={disabled} onChange={(e) => change(() => setStopOnReply(e.target.checked))} className="mt-0.5 h-4 w-4 accent-[#0a5fe3]" />
-          <span className="text-[13.5px]">
-            <span className="font-medium">Stop when the lead replies</span>
-            <span className="block text-[12.5px] text-muted">So nobody gets chased after they&apos;ve answered. “Wait for a reply” steps still carry on.</span>
-          </span>
-        </label>
-        {locked && (
-          <p className="mt-3 flex items-center gap-2 text-[13px] text-muted">
-            <Icon name="lock" size={14} /> This workflow is on. Pause it to make changes.
-          </p>
-        )}
-      </section>
 
       {restorable && !disabled && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warn/30 bg-warn-bg p-3 text-[13.5px]">
@@ -321,500 +674,105 @@ export function WorkflowEditor({
         </div>
       )}
 
-      {/* Zoom, so a whole build fits on screen (handy for screenshots). */}
-      <ZoomBar zoom={zoom} setZoom={setZoom} onFit={fit} />
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-white p-2 pl-3 shadow-[var(--shadow-card)]">
+        <button type="button" onClick={() => setSel({ t: "settings" })} className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-surface" title="Workflow settings">
+          <span className="truncate text-[15px] font-semibold">{name || "Untitled workflow"}</span>
+          <Icon name="edit" size={13} className="flex-none text-faint" />
+        </button>
+        <span className={`min-w-0 flex-1 truncate text-[12.5px] ${message.error ? "text-bad" : message.ok ? "text-ok" : "text-muted"}`}>
+          {locked ? (
+            <span className="inline-flex items-center gap-1.5"><Icon name="lock" size={13} /> On. Pause it to make changes.</span>
+          ) : pending ? "Saving…" : (message.error ?? message.ok ?? (dirty ? "Saving automatically…" : issues ? `${issues} step${issues === 1 ? "" : "s"} still to finish` : "Changes save automatically"))}
+        </span>
+        <div className="flex items-center gap-0.5 rounded-xl bg-surface p-0.5">
+          <button type="button" onClick={() => setZoom(zoom - 0.1)} disabled={zoom <= 0.25} aria-label="Zoom out" className={zbtn}>−</button>
+          <button type="button" onClick={() => { setZoom(1); centre(1); }} title="Back to 100%" className={`${zbtn} w-12 tabular-nums`}>{Math.round(zoom * 100)}%</button>
+          <button type="button" onClick={() => setZoom(zoom + 0.1)} disabled={zoom >= 1.5} aria-label="Zoom in" className={zbtn}>+</button>
+          <button type="button" onClick={fit} className={`${zbtn} gap-1.5`} title="Fit the whole workflow on screen"><Icon name="panel" size={14} /> Fit</button>
+        </div>
+        <button type="button" onClick={() => setSel({ t: "settings" })} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold">
+          <Icon name="settings" size={14} /> Settings
+        </button>
+        {!disabled && dirty && (
+          <button type="button" onClick={cancel} disabled={pending} className="btn-ghost inline-flex min-h-9 items-center rounded-xl px-3 text-[13px] font-semibold">Cancel</button>
+        )}
+        {!disabled && (
+          <button type="button" onClick={() => save()} disabled={pending} className="btn-primary inline-flex min-h-9 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold disabled:opacity-70">
+            <Icon name="check" size={14} /> Save
+          </button>
+        )}
+      </div>
 
-      {/* The flow */}
-      <div ref={flowRef} style={{ zoom }} className="relative mx-auto flex w-full max-w-[680px] flex-col items-stretch transition-[zoom] duration-150">
-        <div className="rounded-2xl border-2 border-dashed border-sky/50 bg-white p-4 shadow-[var(--shadow-card)]">
-          <div className="flex items-center gap-3">
-            <span className="tile h-10 w-10 rounded-xl"><Icon name="play" size={17} /></span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-brand">Trigger</div>
-              <select value={triggerValue(trigger)} disabled={disabled} onChange={(e) => setTriggerFrom(e.target.value)} aria-label="Trigger" className="mt-1 w-full bg-transparent text-[15px] font-semibold outline-none">
-                <optgroup label="Contacts">
-                  <option value="contact_created">When a contact is added</option>
-                  <option value="tag_added">When a tag is added</option>
-                  <option value="tag_removed">When a tag is removed</option>
-                </optgroup>
-                <optgroup label="Pipeline">
-                  {stages.map((s) => (
-                    <option key={s.id} value={`stage:${s.id}`}>When a contact enters “{s.name}”</option>
-                  ))}
-                  <option value="deal_won">When a deal is won</option>
-                  <option value="deal_lost">When a deal is lost</option>
-                </optgroup>
-                <optgroup label="Conversations">
-                  <option value="message_received">When the lead replies</option>
-                </optgroup>
-                <optgroup label="Other">
-                  <option value="webhook">When a webhook is received (other apps)</option>
-                  <option value="manual">When you add someone by hand</option>
-                </optgroup>
-              </select>
-            </div>
+      {/* Canvas */}
+      <div
+        ref={viewport}
+        onPointerDown={onPanStart}
+        onPointerMove={onPanMove}
+        onPointerUp={onPanEnd}
+        onPointerCancel={onPanEnd}
+        className="relative h-[calc(100vh-230px)] min-h-[520px] cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing"
+        style={{ backgroundColor: "#f6f8fc", backgroundImage: "radial-gradient(#d5dbe6 1.2px, transparent 1.2px)", backgroundSize: `${22 * zoom}px ${22 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}
+      >
+        <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }} className="absolute left-0 top-0">
+          <div ref={content} className="inline-flex flex-col items-center px-16 pb-24 pt-2">
+            <button
+              type="button"
+              data-node
+              onClick={() => setSel({ t: "trigger" })}
+              className={`w-[300px] rounded-2xl border-2 border-dashed bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 ${sel?.t === "trigger" ? "border-brand" : "border-sky/60"}`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="tile h-9 w-9 rounded-xl"><Icon name="play" size={16} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-brand">Trigger</div>
+                  <div className="truncate text-[13.5px] font-semibold">{triggerText(trigger, stages)}</div>
+                </div>
+              </div>
+            </button>
+            {list("root", nodes, true)}
           </div>
-
-          {(trigger.type === "tag_added" || trigger.type === "tag_removed") && (
-            <label className="mt-3 flex items-center gap-2 text-[14px]">
-              Tag
-              <input list="wf-tags" value={trigger.tag} disabled={disabled} onChange={(e) => change(() => setTrigger({ ...trigger, tag: e.target.value }))} placeholder="e.g. Hot lead" className="field h-10 flex-1" aria-label="Trigger tag" />
-            </label>
-          )}
-          {trigger.type === "message_received" && (
-            <label className="mt-3 flex items-center gap-2 text-[14px]">
-              Replies by
-              <select value={trigger.channel} disabled={disabled} onChange={(e) => change(() => setTrigger({ type: "message_received", channel: e.target.value as "any" }))} className="field h-10 w-44" aria-label="Reply channel">
-                <option value="any">text or email</option>
-                <option value="sms">text only</option>
-                <option value="email">email only</option>
-              </select>
-            </label>
-          )}
-          {trigger.type === "webhook" && (
-            <div className="mt-3 rounded-xl bg-surface p-3 text-[13px]">
-              {hookUrl ? (
-                <>
-                  <div className="mb-1.5 font-medium">Send leads to this address (POST):</div>
-                  <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-2 text-[12px] ring-1 ring-line">{hookUrl}</code>
-                    <button type="button" onClick={() => copy(hookUrl)} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
-                      <Icon name={copied ? "check" : "link"} size={13} /> {copied ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                  <p className="mt-2 text-muted">
-                    Send JSON with <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>phone</code>, and optionally <code>source</code> and <code>tags</code>. The contact is created or updated, then this workflow runs. Keep this address private.
-                  </p>
-                </>
-              ) : (
-                <p className="text-muted">Save to get the address other apps send leads to.</p>
-              )}
-            </div>
-          )}
         </div>
 
-        <Connector onAdd={disabled ? undefined : () => setAdding(adding === 0 ? null : 0)} open={adding === 0} onPick={(t) => insert(0, t)} />
-
-        {steps.map((step, i) => {
-          const k = kinds.find((x) => x.type === step.type) ?? kinds[0];
-          return (
-            <div key={step.id ?? i}>
-              <div className="rise rounded-2xl border border-line bg-white p-4 shadow-[var(--shadow-card)]">
-                <div className="mb-3 flex items-center gap-3">
-                  <span className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-gradient-to-br text-white ${k.tone}`}>
-                    <Icon name={k.icon} size={16} />
-                  </span>
-                  <div className="flex-1 text-[14px] font-semibold">
-                    <span className="mr-1.5 text-faint">{i + 1}.</span>
-                    {k.label}
-                  </div>
-                  {!disabled && (
-                    <div className="flex items-center">
-                      <IconBtn icon="arrowUp" label="Move up" onClick={() => move(i, -1)} hidden={i === 0} />
-                      <IconBtn icon="arrowDown" label="Move down" onClick={() => move(i, 1)} hidden={i === steps.length - 1} />
-                      <IconBtn icon="trash" label="Remove step" onClick={() => remove(i)} danger />
-                    </div>
-                  )}
-                </div>
-                <fieldset disabled={disabled} className="flex flex-col gap-2.5">
-                  <StepFields step={step} index={i} steps={steps} stages={stages} members={members} workflows={others} fields={fieldsList} customFields={customFields} allTags={tags} onChange={(p) => update(i, p)} />
-                </fieldset>
-              </div>
-              <Connector
-                onAdd={disabled ? undefined : () => setAdding(adding === i + 1 ? null : i + 1)}
-                open={adding === i + 1}
-                onPick={(t) => insert(i + 1, t)}
-                label={step.type === "if_else" ? "Yes" : undefined}
-              />
-            </div>
-          );
-        })}
-
-        <div className="mx-auto flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[13px] font-medium text-muted shadow-[var(--shadow-card)] ring-1 ring-line">
-          <Icon name="checkCircle" size={15} className="text-ok" /> End of workflow
+        <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg bg-white/90 px-2.5 py-1.5 text-[11.5px] text-muted ring-1 ring-line max-sm:hidden">
+          Drag the background to move around. Ctrl + scroll to zoom. Drag a card onto a + to move it.
         </div>
       </div>
 
-      {!disabled && (
-        <div className="sticky bottom-[calc(var(--nav-h)+12px)] z-20 mx-auto flex w-full max-w-[680px] items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 pl-4 shadow-[var(--shadow-pop)] backdrop-blur">
-          <span className={`min-w-0 flex-1 text-[13px] ${message.error ? "text-bad" : message.ok ? "text-ok" : "text-muted"}`}>
-            {pending ? "Saving…" : (message.error ?? message.ok ?? (dirty ? "Saving automatically…" : "Changes save automatically."))}
-          </span>
-          {dirty && (
-            <button type="button" onClick={cancel} disabled={pending} className="btn-ghost inline-flex min-h-10 items-center rounded-xl px-4 text-[13.5px] font-semibold">
-              Cancel
-            </button>
-          )}
-          <button type="button" onClick={() => save()} disabled={pending} className="btn-primary inline-flex min-h-10 items-center gap-2 rounded-xl px-5 text-[13.5px] font-semibold disabled:opacity-70">
-            <Icon name="check" size={15} /> Save
-          </button>
-        </div>
-      )}
+      {renderPanel()}
     </div>
   );
 }
 
-function Connector({ onAdd, open, onPick, label }: { onAdd?: () => void; open: boolean; onPick: (t: StepType) => void; label?: string }) {
+function AddPanel({ onPick, onClose }: { onPick: (t: StepType) => void; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const found = kinds.filter((k) => !q.trim() || k.label.toLowerCase().includes(q.trim().toLowerCase()) || k.group.toLowerCase().includes(q.trim().toLowerCase()));
   return (
-    <div className="relative flex flex-col items-center py-1">
-      <span className="connector h-5" />
-      {label && <span className="mb-1 rounded-full bg-ok-bg px-2 py-0.5 text-[11px] font-semibold text-ok">{label}</span>}
-      {onAdd && (
-        <button
-          type="button"
-          onClick={onAdd}
-          aria-label="Add a step here"
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border bg-white shadow-sm transition-colors ${open ? "border-brand text-brand" : "border-line-strong text-muted hover:border-sky hover:text-brand"}`}
-        >
-          <Icon name={open ? "x" : "plus"} size={14} />
-        </button>
-      )}
-      <span className="connector h-5" />
-      {open && (
-        <div className="rise absolute top-12 z-30 max-h-[60vh] w-[min(600px,94vw)] overflow-y-auto rounded-2xl border border-line bg-white p-3 shadow-[var(--shadow-pop)]">
-          {groups.map((g) => (
-            <div key={g} className="mb-2 last:mb-0">
-              <div className="px-1.5 pb-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint">{g}</div>
-              <div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-                {kinds
-                  .filter((k) => k.group === g)
-                  .map((k) => (
-                    <button key={k.type} type="button" onClick={() => onPick(k.type)} className="flex items-center gap-2.5 rounded-xl p-2 text-left text-[13px] font-medium hover:bg-surface">
-                      <span className={`inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-gradient-to-br text-white ${k.tone}`}>
-                        <Icon name={k.icon} size={15} />
-                      </span>
-                      {k.label}
-                    </button>
-                  ))}
-              </div>
+    <FloatingPanel title="Add a step" subtitle="Choose what happens next" icon={<Icon name="plus" size={15} />} onClose={onClose}>
+      <div className="relative mb-3">
+        <Icon name="search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search actions" className="field h-10 w-full pl-9" aria-label="Search actions" />
+      </div>
+      {groups.map((g) => {
+        const list = found.filter((k) => k.group === g);
+        if (!list.length) return null;
+        return (
+          <div key={g} className="mb-3 last:mb-0">
+            <div className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-faint">{g}</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {list.map((k) => (
+                <button key={k.type} type="button" onClick={() => onPick(k.type)} className="flex items-center gap-2.5 rounded-xl border border-line p-2 text-left text-[13px] font-medium transition-colors hover:border-sky hover:bg-surface">
+                  <span className={`inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-gradient-to-br text-white ${k.tone}`}>
+                    <Icon name={k.icon} size={15} />
+                  </span>
+                  {k.label}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function IconBtn({ icon, label, onClick, hidden, danger }: { icon: IconName; label: string; onClick: () => void; hidden?: boolean; danger?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${hidden ? "invisible" : ""} ${danger ? "text-faint hover:bg-bad-bg hover:text-bad" : "text-muted hover:bg-surface hover:text-navy"}`}
-    >
-      <Icon name={icon} size={15} />
-    </button>
-  );
-}
-
-function Amount({ amount, unit, onChange }: { amount: number; unit: string; onChange: (p: { amount?: number; unit?: "hours" }) => void }) {
-  return (
-    <>
-      <input type="number" min={1} max={365} value={amount} onChange={(e) => onChange({ amount: Number(e.target.value) })} className="field h-10 w-24" aria-label="Amount" />
-      <select value={unit} onChange={(e) => onChange({ unit: e.target.value as "hours" })} className="field h-10 w-32" aria-label="Unit">
-        <option value="minutes">minutes</option>
-        <option value="hours">hours</option>
-        <option value="days">days</option>
-      </select>
-    </>
-  );
-}
-
-function stepName(s: WorkflowStep) {
-  return kinds.find((k) => k.type === s.type)?.label ?? s.type;
-}
-
-function StepFields({
-  step,
-  index,
-  steps,
-  stages,
-  members,
-  workflows,
-  fields: mf,
-  customFields,
-  allTags,
-  onChange,
-}: {
-  allTags: string[];
-  step: WorkflowStep;
-  index: number;
-  steps: WorkflowStep[];
-  stages: Stage[];
-  members: Option[];
-  workflows: Option[];
-  fields: MergeField[];
-  customFields: CustomField[];
-  onChange: (p: Partial<WorkflowStep>) => void;
-}) {
-  switch (step.type) {
-    case "wait":
-      return (
-        <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          Wait <Amount amount={step.amount} unit={step.unit} onChange={onChange} /> then carry on.
-        </div>
-      );
-    case "wait_for_reply":
-      return (
-        <>
-          <div className="flex flex-wrap items-center gap-2 text-[14px]">
-            Wait up to <Amount amount={step.amount} unit={step.unit} onChange={onChange} /> for a reply.
           </div>
-          <span className="text-[12px] text-faint">Carries on as soon as they reply, or when the time is up. Add an If / else “has replied” after it to choose what happens.</span>
-        </>
-      );
-    case "wait_until":
-      return (
-        <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          Wait until
-          <input
-            type="time"
-            value={`${String(step.hour).padStart(2, "0")}:${String(step.minute).padStart(2, "0")}`}
-            onChange={(e) => {
-              const [h, m] = e.target.value.split(":").map(Number);
-              onChange({ hour: h || 0, minute: m || 0 });
-            }}
-            className="field h-10 w-32"
-            aria-label="Time"
-          />
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={step.weekdays_only} onChange={(e) => onChange({ weekdays_only: e.target.checked })} className="h-4 w-4 accent-[#0a5fe3]" />
-            Monday to Friday only
-          </label>
-        </div>
-      );
-    case "email":
-      return (
-        <EmailDesigner
-          value={{ subject: step.subject, body: step.body, html: step.html ?? "", mode: step.mode ?? (step.html ? "design" : "text") }}
-          onChange={(p) => onChange(p as Partial<WorkflowStep>)}
-          fields={mf}
-        />
-      );
-    case "email_team":
-      return (
-        <>
-          <div className="flex flex-wrap items-center gap-2 text-[14px]">
-            Email
-            <select value={step.to} onChange={(e) => onChange({ to: e.target.value })} className="field h-10 min-w-0 flex-1" aria-label="Who to email">
-              <option value="owner">the contact&apos;s owner</option>
-              <option value="everyone">everyone in the workspace</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <MergeText value={step.subject} onChange={(subject) => onChange({ subject })} fields={mf} maxLength={200} placeholder="Subject" label="Team email subject" />
-          <MergeText value={step.body} onChange={(body) => onChange({ body })} fields={mf} multiline rows={3} maxLength={5000} placeholder="Message to your team" label="Team email message" />
-          <span className="text-[12px] text-faint">Goes to your team, not the lead, so it sends even in test mode.</span>
-        </>
-      );
-    case "update_field":
-      return (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-[14px]">
-            Set
-            <select value={step.field} onChange={(e) => onChange({ field: e.target.value })} className="field h-10 min-w-0 flex-1" aria-label="Field to update">
-              <option value="first_name">First name</option>
-              <option value="last_name">Last name</option>
-              <option value="source">Source</option>
-              {customFields.map((f) => (
-                <option key={f.key} value={`custom:${f.key}`}>{f.label}</option>
-              ))}
-            </select>
-            to
-          </div>
-          {(() => {
-            const cf = step.field.startsWith("custom:") ? customFields.find((f) => f.key === step.field.slice(7)) : undefined;
-            if (cf?.type === "select")
-              return (
-                <select value={step.value} onChange={(e) => onChange({ value: e.target.value })} className="field h-10" aria-label="New value">
-                  <option value="">Clear the field</option>
-                  {cf.options.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-              );
-            if (cf?.type === "yes_no")
-              return (
-                <select value={step.value} onChange={(e) => onChange({ value: e.target.value })} className="field h-10" aria-label="New value">
-                  <option value="">Clear the field</option>
-                  <option value="yes">Yes</option>
-                  <option value="no">No</option>
-                </select>
-              );
-            if (cf?.type === "date")
-              return <input type="date" value={step.value} onChange={(e) => onChange({ value: e.target.value })} className="field h-10" aria-label="New value" />;
-            const hint =
-              cf?.type === "multi_select"
-                ? `Separate options with commas: ${cf.options.slice(0, 3).join(", ")}`
-                : cf?.type === "number" || cf?.type === "money"
-                  ? "A number, e.g. 2500"
-                  : "New value (leave empty to clear)";
-            return <MergeText value={step.value} onChange={(value) => onChange({ value })} fields={mf} maxLength={500} placeholder={hint} label="New value" />;
-          })()}
-          {customFields.length === 0 && <span className="text-[12px] text-faint">Add your own fields in Settings, then Custom fields.</span>}
-        </div>
-      );
-    case "sms":
-      return (
-        <>
-          <MergeText value={step.body} onChange={(body) => onChange({ body })} fields={mf} multiline rows={4} maxLength={640} placeholder={"Hi {{first_name}}, …"} label="Text message" />
-          <span className="text-[12px] text-faint">Press Enter for a new line. Only sends inside your texting hours (Settings).</span>
-        </>
-      );
-    case "task":
-      return (
-        <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          <MergeText value={step.title} onChange={(title) => onChange({ title })} fields={mf} maxLength={200} label="Task title" className="min-w-0 flex-[1_1_260px]" />
-          due in
-          <input type="number" min={0} max={365} value={step.due_in_days} onChange={(e) => onChange({ due_in_days: Number(e.target.value) })} className="field h-10 w-20" aria-label="Days" />
-          days
-        </div>
-      );
-    case "move_stage":
-      return stages.length ? (
-        <select value={step.stage_id} onChange={(e) => onChange({ stage_id: e.target.value })} className="field" aria-label="Stage">
-          {stages.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-      ) : (
-        <p className="text-[13px] text-muted">Set up your pipeline first.</p>
-      );
-    case "set_status":
-      return (
-        <div className="flex flex-wrap items-center gap-2 text-[14px]">
-          Mark their deal as
-          <select value={step.status} onChange={(e) => onChange({ status: e.target.value as "won" })} className="field h-10 w-36" aria-label="Deal status">
-            <option value="won">won</option>
-            <option value="lost">lost</option>
-            <option value="open">open again</option>
-          </select>
-        </div>
-      );
-    case "note":
-      return <MergeText value={step.text} onChange={(text) => onChange({ text })} fields={mf} multiline rows={3} maxLength={2000} placeholder="Note to add to the contact" label="Note" />;
-    case "notify_team":
-      return (
-        <>
-          <MergeText value={step.text} onChange={(text) => onChange({ text })} fields={mf} multiline rows={2} maxLength={1000} label="Alert message" />
-          <span className="text-[12px] text-faint">Posts in #leads in Team chat.</span>
-        </>
-      );
-    case "add_tag":
-    case "remove_tag":
-      return (
-        <TagsInput
-          value={step.tags ?? (step.tag ? [step.tag] : [])}
-          onChange={(tags) => onChange({ tags, tag: undefined } as Partial<WorkflowStep>)}
-          suggestions={allTags}
-          placeholder={step.type === "add_tag" ? "Type a tag and press Enter, e.g. Hot lead" : "Tags to remove"}
-        />
-      );
-    case "assign":
-      return (
-        <select value={step.user_id} onChange={(e) => onChange({ user_id: e.target.value })} className="field" aria-label="Assign to">
-          <option value="round_robin">Share evenly across the team (round robin)</option>
-          {members.map((m) => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
-      );
-    case "if_else": {
-      const c = step.condition;
-      const set = (p: Partial<Condition>) => onChange({ condition: { ...c, ...p } } as Partial<WorkflowStep>);
-      const later = steps.slice(index + 1);
-      return (
-        <>
-          <div className="flex flex-wrap items-center gap-2 text-[14px]">
-            <select value={c.negate ? "not" : "yes"} onChange={(e) => set({ negate: e.target.value === "not" })} className="field h-10 w-56" aria-label="If or if not">
-              <option value="yes">If the contact</option>
-              <option value="not">If the contact does NOT</option>
-            </select>
-            <select value={c.field} onChange={(e) => set({ field: e.target.value as ConditionField, value: e.target.value === "in_stage" ? stages[0]?.id : e.target.value === "deal_status" ? "won" : "" })} className="field h-10 min-w-0 flex-[1_1_180px]" aria-label="Condition">
-              {conditions.map((x) => (
-                <option key={x.field} value={x.field}>{x.label}</option>
-              ))}
-            </select>
-            {(c.field === "has_tag" || c.field === "source_is") && (
-              <input list={c.field === "has_tag" ? "wf-tags" : undefined} value={c.value ?? ""} onChange={(e) => set({ value: e.target.value })} placeholder={c.field === "has_tag" ? "Tag name" : "e.g. Facebook"} className="field h-10 min-w-0 flex-[1_1_140px]" aria-label="Value" />
-            )}
-            {c.field === "in_stage" && (
-              <select value={c.value ?? ""} onChange={(e) => set({ value: e.target.value })} className="field h-10 min-w-0 flex-[1_1_140px]" aria-label="Stage">
-                {stages.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            )}
-            {c.field === "deal_status" && (
-              <select value={c.value ?? "won"} onChange={(e) => set({ value: e.target.value })} className="field h-10 w-32" aria-label="Deal status">
-                <option value="won">won</option>
-                <option value="lost">lost</option>
-                <option value="open">open</option>
-              </select>
-            )}
-          </div>
-          <div className="grid gap-2 rounded-xl bg-surface p-3 text-[13px] sm:grid-cols-2">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-ok-bg px-2 py-0.5 text-[11px] font-semibold text-ok">Yes</span> carry on to the next step
-            </div>
-            <label className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-bad-bg px-2 py-0.5 text-[11px] font-semibold text-bad">No</span>
-              <select value={step.else} onChange={(e) => onChange({ else: e.target.value })} className="field h-9 min-w-0 flex-1 text-[13px]" aria-label="Otherwise">
-                <option value="end">end the workflow</option>
-                {later.map((s, j) => (
-                  <option key={s.id} value={s.id}>skip to step {index + j + 2}: {stepName(s)}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </>
-      );
-    }
-    case "add_to_workflow":
-    case "remove_from_workflow":
-      return workflows.length ? (
-        <select value={step.workflow_id} onChange={(e) => onChange({ workflow_id: e.target.value })} className="field" aria-label="Workflow">
-          {workflows.map((w) => (
-            <option key={w.id} value={w.id}>{w.name}</option>
-          ))}
-        </select>
-      ) : (
-        <p className="text-[13px] text-muted">Create another workflow first.</p>
-      );
-    case "webhook":
-      return (
-        <>
-          <input value={step.url} onChange={(e) => onChange({ url: e.target.value })} placeholder="https://hooks.zapier.com/…" className="field" aria-label="Webhook address" />
-          <span className="text-[12px] text-faint">Sends the contact&apos;s details as JSON to this address, for Zapier, Make, Slack and others.</span>
-        </>
-      );
-    case "end":
-      return <p className="text-[13px] text-muted">The workflow stops here for this contact.</p>;
-  }
-}
-
-
-function ZoomBar({ zoom, setZoom, onFit }: { zoom: number; setZoom: (z: number) => void; onFit: () => void }) {
-  const btn = "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px] font-semibold text-navy transition-colors hover:bg-surface disabled:opacity-40";
-  return (
-    <div className="sticky top-20 z-20 mx-auto flex w-fit items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-[var(--shadow-card)] backdrop-blur">
-      <button type="button" onClick={() => setZoom(zoom - 0.1)} disabled={zoom <= 0.3} aria-label="Zoom out" className={btn}>
-        −
-      </button>
-      <button type="button" onClick={() => setZoom(1)} aria-label="Reset zoom to 100%" title="Back to 100%" className={`${btn} w-14 tabular-nums`}>
-        {Math.round(zoom * 100)}%
-      </button>
-      <button type="button" onClick={() => setZoom(zoom + 0.1)} disabled={zoom >= 1.5} aria-label="Zoom in" className={btn}>
-        +
-      </button>
-      <span className="mx-1 h-5 w-px bg-line" />
-      <button type="button" onClick={onFit} className={`${btn} gap-1.5`}>
-        <Icon name="panel" size={14} /> Fit to screen
-      </button>
-    </div>
+        );
+      })}
+      {!found.length && <p className="py-6 text-center text-[13px] text-muted">Nothing matches “{q}”.</p>}
+    </FloatingPanel>
   );
 }
