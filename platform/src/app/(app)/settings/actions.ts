@@ -77,7 +77,7 @@ export async function reorderStage(_prev: ActionResult, fd: FormData): Promise<A
   const id = text(fd, "id", 40);
   const dir = text(fd, "dir", 4);
   const ws = await getWorkspace();
-  const pipeline = await getPipeline(ws.account.id);
+  const pipeline = await getPipeline(ws.account.id, text(fd, "pipeline_id", 40) || null);
   if (!pipeline) return {};
   const i = pipeline.stages.findIndex((s) => s.id === id);
   const j = dir === "up" ? i - 1 : i + 1;
@@ -305,9 +305,10 @@ export async function addCustomField(_prev: ActionResult, fd: FormData): Promise
   if (OPTION_TYPES.includes(typeRaw) && options.length < 2) return { error: "Add at least two options, one per line." };
   const ws = await getWorkspace();
   if (!canManage(ws)) return { error: NO_ACCESS };
+  const object = text(fd, "object", 20) === "opportunity" ? "opportunity" : "contact";
   const supabase = await createClient();
-  const { count } = await supabase.from("custom_fields").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("object", "contact");
-  const { error } = await supabase.from("custom_fields").insert({ account_id: ws.account.id, object: "contact", key, label, type: typeRaw, options, position: count ?? 0 });
+  const { count } = await supabase.from("custom_fields").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("object", object);
+  const { error } = await supabase.from("custom_fields").insert({ account_id: ws.account.id, object, key, label, type: typeRaw, options, position: count ?? 0 });
   if (error) return { error: error.code === "23505" ? "You already have a field with that name." : "We couldn't add the field." };
   refresh();
   return { ok: `Added. Use {{contact.${key}}} in messages.` };

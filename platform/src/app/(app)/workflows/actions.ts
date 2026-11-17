@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { deliverPending } from "@/lib/deliver";
-import { getPipeline, getWorkspace, type WorkflowStep, type WorkflowTrigger } from "@/lib/data";
+import { getWorkspace, type WorkflowStep, type WorkflowTrigger, listAllStages } from "@/lib/data";
 import { text, type ActionResult } from "@/lib/forms";
 import { TEMPLATES, newHookToken } from "@/lib/workflow-templates";
 
@@ -214,14 +214,14 @@ export async function saveWorkflow(
   const ws = await getWorkspace();
   const supabase = await createClient();
   const [pipeline, { data: members }, { data: flows }, { data: current }, { data: cf }] = await Promise.all([
-    getPipeline(ws.account.id),
+    listAllStages(ws.account.id),
     supabase.from("account_members").select("user_id").eq("account_id", ws.account.id),
     supabase.from("workflows").select("id").eq("account_id", ws.account.id).neq("status", "archived"),
     supabase.from("workflows").select("trigger").eq("id", id).eq("account_id", ws.account.id).maybeSingle(),
     supabase.from("custom_fields").select("key").eq("account_id", ws.account.id).eq("object", "contact"),
   ]);
   if (!current) return { error: "This workflow no longer exists." };
-  const stageIds = new Set((pipeline?.stages ?? []).map((s) => s.id));
+  const stageIds = new Set(pipeline.map((s) => s.id));
   const steps = cleanSteps(input.steps, {
     stageIds,
     memberIds: new Set((members ?? []).map((m) => m.user_id as string)),

@@ -5,7 +5,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon } from "@/components/icon";
 import { Page, Pill } from "@/components/ui";
 import { headers } from "next/headers";
-import { getPipeline, getWorkflow, getWorkspace, listCustomFields, listCustomValues, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
+import { getWorkflow, getWorkspace, listCustomFields, listCustomValues, listTags, listWorkflows, memberNames, timeAgo, listAllStages } from "@/lib/data";
 import { runDueNow, setWorkflowStatus } from "../actions";
 import { actionLabel } from "../labels";
 import { WorkflowEditor } from "./editor";
@@ -30,7 +30,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
   const ws = await getWorkspace();
   const [wf, pipeline, names, flows, tags, h, customFields, customValues] = await Promise.all([
     getWorkflow(id, ws.account.id),
-    getPipeline(ws.account.id),
+    listAllStages(ws.account.id),
     memberNames(ws.account.id),
     listWorkflows(ws.account.id),
     listTags(ws.account.id),
@@ -81,7 +81,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
       <WorkflowEditor
         key={wf.id}
         workflow={{ id: wf.id, name: wf.name, description: wf.description, trigger: wf.trigger, steps: wf.steps, stopOnReply: wf.stopOnReply }}
-        stages={pipeline?.stages ?? []}
+        stages={pipeline.map((s, i) => ({ id: s.id, name: s.name, position: i + 1 }))}
         members={Object.entries(names).map(([mid, name]) => ({ id: mid, name }))}
         workflows={flows.map((f) => ({ id: f.id, name: f.name }))}
         tags={tags}

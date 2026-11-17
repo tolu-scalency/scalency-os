@@ -8,9 +8,10 @@ import { CopyId } from "@/components/copy-id";
 
 export const metadata: Metadata = { title: "Custom fields" };
 
-export default async function FieldsPage() {
+export default async function FieldsPage({ searchParams }: { searchParams: Promise<{ object?: string }> }) {
+  const object = (await searchParams).object === "opportunity" ? "opportunity" : "contact";
   const ws = await getWorkspace();
-  const [fields, values] = await Promise.all([listCustomFields(ws.account.id), listCustomValues(ws.account.id)]);
+  const [fields, values] = await Promise.all([listCustomFields(ws.account.id, object), listCustomValues(ws.account.id)]);
   const manager = can(ws, "settings.manage");
 
   return (
@@ -18,7 +19,15 @@ export default async function FieldsPage() {
       <section className="card grid gap-5 p-5 sm:p-6 md:grid-cols-[260px_1fr] [&>*]:min-w-0">
         <div>
           <h2 className="text-[16px] font-semibold">Custom fields</h2>
-          <p className="mt-1 text-[13.5px] text-muted">Extra details you keep on every contact, like budget, renewal date or service. Choose a type so the right box shows: dropdowns, dates, money and more. Fill them in on the contact page, or with an “Update a field” workflow step.</p>
+          <div className="mt-2 inline-flex rounded-xl border border-line bg-white p-0.5" role="group" aria-label="Fields for">
+            <a href="/settings/fields" aria-current={object === "contact" ? "page" : undefined} className={`rounded-[10px] px-3 py-1.5 text-[13px] font-semibold ${object === "contact" ? "bg-brand text-white" : "text-muted"}`}>Contacts</a>
+            <a href="/settings/fields?object=opportunity" aria-current={object === "opportunity" ? "page" : undefined} className={`rounded-[10px] px-3 py-1.5 text-[13px] font-semibold ${object === "opportunity" ? "bg-brand text-white" : "text-muted"}`}>Deals</a>
+          </div>
+          <p className="mt-2 text-[13.5px] text-muted">
+            {object === "contact"
+              ? "Extra details you keep on every contact, like budget, renewal date or service. Fill them in on the contact page, or with an “Update a field” workflow step."
+              : "Extra details on every deal, like contract length, start date or package. Fill them in from the deal panel on the pipeline."}
+          </p>
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           {fields.length === 0 ? (
@@ -34,7 +43,7 @@ export default async function FieldsPage() {
                       {f.options.length > 0 && `: ${f.options.slice(0, 4).join(", ")}${f.options.length > 4 ? ` and ${f.options.length - 4} more` : ""}`}
                     </span>
                   </span>
-                  <code className="min-w-0 break-all rounded bg-surface px-2 py-0.5 text-[12px] text-muted">{`{{contact.${f.key}}}`}</code>
+                  {object === "contact" && <code className="min-w-0 break-all rounded bg-surface px-2 py-0.5 text-[12px] text-muted">{`{{contact.${f.key}}}`}</code>}
                   <CopyId label="Field ID" id={f.id} className="hidden lg:inline-flex" />
                   {manager && <EditFieldForm id={f.id} label={f.label} type={f.type} options={f.options} />}
                   {manager && (
@@ -47,7 +56,7 @@ export default async function FieldsPage() {
               ))}
             </ul>
           )}
-          {manager && <AddFieldForm />}
+          {manager && <AddFieldForm object={object} />}
         </div>
       </section>
 

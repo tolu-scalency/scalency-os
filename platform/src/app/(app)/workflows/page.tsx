@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icon";
 import { Page, PageHeader, Pill, Tile, type Tone } from "@/components/ui";
-import { getPipeline, getWorkspace, listWorkflows, timeAgo } from "@/lib/data";
+import { getWorkspace, listWorkflows, timeAgo, listAllStages } from "@/lib/data";
 import { createWorkflow } from "./actions";
 import { triggerLabel } from "./labels";
 
@@ -22,8 +22,8 @@ const statusTone = { active: "green", draft: "neutral", paused: "amber", archive
 
 export default async function WorkflowsPage() {
   const ws = await getWorkspace();
-  const [workflows, pipeline] = await Promise.all([listWorkflows(ws.account.id), getPipeline(ws.account.id)]);
-  const stages = pipeline?.stages ?? [];
+  const [workflows, pipeline] = await Promise.all([listWorkflows(ws.account.id), listAllStages(ws.account.id)]);
+  const stages = pipeline;
 
   return (
     <Page>

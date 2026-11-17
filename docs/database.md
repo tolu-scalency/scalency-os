@@ -216,6 +216,10 @@ Migration `20261119090000_workspace_rules_multi_tags`.
 
 Migration `20261119120000_custom_access`. `account_members.permissions` and `account_invites.permissions` hold a person's own permission list, set by ticking boxes in the access pop-up. When present it wins over their role (owners and admins still have everything). `set_member_permissions(account, member, base_role, permissions)` saves it; choosing a role again with `set_member_access` clears it. New permissions: `contacts.import`, `contacts.export`, `calls.make`.
 
+## Pipelines upgrade
+
+Migration `20261120090000_pipelines_upgrade`. Workspaces can have up to 20 pipelines (`pipelines.position` orders them). Deals (`opportunities`) use their existing `name`, `value_pence`, `status`, `source`, `assigned_to` (owner) and `custom` (deal fields, `custom_fields.object = 'opportunity'`), plus a new `lost_reason`. `delete_pipeline(id)` removes a pipeline only when it has no deals and isn't the last one. Workflow stage triggers and steps can use stages from any pipeline.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
