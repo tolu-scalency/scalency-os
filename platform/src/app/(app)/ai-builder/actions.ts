@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getWorkspace } from "@/lib/data";
+import { can, getWorkspace } from "@/lib/data";
 import { buildPlan, cleanBlueprint, type SetupResult } from "@/lib/setup";
 import { newHookToken } from "@/lib/workflow-templates";
 
@@ -12,7 +12,7 @@ type ApplyOutcome = { error?: string; result?: SetupResult };
 export async function applySetup(setupId: string, edited: unknown, replaceStages: boolean): Promise<ApplyOutcome> {
   if (!/^[0-9a-f-]{36}$/i.test(setupId)) return { error: "That setup is missing. Start again." };
   const ws = await getWorkspace();
-  if (ws.account.role !== "owner" && ws.account.role !== "admin") return { error: "Only the owner or an admin can build the workspace." };
+  if (!can(ws, "settings.manage")) return { error: "You need permission to change workspace settings to build a setup." };
 
   const blueprint = cleanBlueprint(edited);
   if (typeof blueprint === "string") return { error: blueprint };
@@ -31,7 +31,7 @@ export async function applySetup(setupId: string, edited: unknown, replaceStages
 export async function undoSetup(setupId: string): Promise<{ error?: string; removed?: number; kept?: string[] }> {
   if (!/^[0-9a-f-]{36}$/i.test(setupId)) return { error: "That setup is missing." };
   const ws = await getWorkspace();
-  if (ws.account.role !== "owner" && ws.account.role !== "admin") return { error: "Only the owner or an admin can undo a setup." };
+  if (!can(ws, "settings.manage")) return { error: "You need permission to change workspace settings to undo a setup." };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("undo_workspace_setup", { target_setup: setupId });
   if (error) return { error: "We couldn't undo that setup." };

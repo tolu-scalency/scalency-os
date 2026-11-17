@@ -1,4 +1,5 @@
 import "server-only";
+import { permissionsFor, type Permission } from "@/lib/permissions";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -16,7 +17,7 @@ export type Workspace = {
   userEmail: string;
   fullName: string | null;
   firstName: string;
-  account: { id: string; name: string; testMode: boolean; role: Role };
+  account: { id: string; name: string; testMode: boolean; role: Role; roleName: string; permissions: Permission[] };
   workspaces: WorkspaceSummary[];
 };
 
@@ -113,14 +114,22 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
   const { supabase, userId, email } = session;
 
   const [memberships, profile, jar] = await Promise.all([
-    supabase.from("account_members").select("role, created_at, accounts(id, name, test_mode)").eq("user_id", userId).order("created_at", { ascending: true }),
+    supabase
+      .from("account_members")
+      .select("role, created_at, accounts(id, name, test_mode), account_roles(name, permissions)")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true }),
     supabase.from("profiles").select("full_name").eq("user_id", userId).maybeSingle(),
     cookies(),
   ]);
 
   const rows = (memberships.data ?? [])
-    .map((m) => ({ role: m.role as Role, acc: m.accounts as unknown as { id: string; name: string; test_mode: boolean } | null }))
-    .filter((m): m is { role: Role; acc: { id: string; name: string; test_mode: boolean } } => Boolean(m.acc));
+    .map((m) => ({
+      role: m.role as Role,
+      acc: m.accounts as unknown as { id: string; name: string; test_mode: boolean } | null,
+      custom: m.account_roles as unknown as { name: string; permissions: string[] } | null,
+    }))
+    .filter((m): m is { role: Role; acc: { id: string; name: string; test_mode: boolean }; custom: { name: string; permissions: string[] } | null } => Boolean(m.acc));
   if (!rows.length) redirect("/welcome");
 
   // Use the workspace they picked last; otherwise the first one they joined.
@@ -134,10 +143,31 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
     userEmail: email,
     fullName: name,
     firstName: first.charAt(0).toUpperCase() + first.slice(1),
-    account: { id: current.acc.id, name: current.acc.name, testMode: current.acc.test_mode, role: current.role },
+    account: {
+      id: current.acc.id,
+      name: current.acc.name,
+      testMode: current.acc.test_mode,
+      role: current.role,
+      roleName: current.role === "owner" ? "Owner" : current.role === "admin" ? "Admin" : (current.custom?.name ?? "Team member"),
+      permissions: permissionsFor(current.role, current.custom?.permissions),
+    },
     workspaces: rows.map((r) => ({ id: r.acc.id, name: r.acc.name, role: r.role })),
   };
 });
+
+/** Whether the signed-in person can do something in their current workspace. */
+export function can(ws: Workspace, perm: Permission) {
+  return ws.account.permissions.includes(perm);
+}
+
+export type AccessRole = { id: string; name: string; description: string | null; permissions: Permission[] };
+
+/** The workspace's roles, for the team and roles pages. */
+export async function listRoles(accountId: string): Promise<AccessRole[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("account_roles").select("id, name, description, permissions").eq("account_id", accountId).order("created_at");
+  return (data ?? []).map((r) => ({ id: r.id, name: r.name, description: r.description, permissions: permissionsFor("member", r.permissions as string[]) }));
+}
 
 /** Strip characters that would break a PostgREST "or" filter. */
 function searchTerm(q: string) {
@@ -346,14 +376,19 @@ export async function getDashboard(accountId: string) {
   };
 }
 
-export type Member = { userId: string; role: Role; name: string; email: string | null; joinedAt: string; isYou: boolean };
+export type Member = { userId: string; role: Role; roleId: string | null; access: string; name: string; email: string | null; joinedAt: string; isYou: boolean };
 
 /** Members of the workspace and open invites. */
 export async function getTeam(accountId: string, userId: string) {
   const supabase = await createClient();
   const [members, invites] = await Promise.all([
-    supabase.from("account_members").select("user_id, role, created_at").eq("account_id", accountId).order("created_at"),
-    supabase.from("account_invites").select("id, email, role, created_at").eq("account_id", accountId).is("accepted_at", null).order("created_at", { ascending: false }),
+    supabase.from("account_members").select("user_id, role, role_id, created_at, account_roles(name)").eq("account_id", accountId).order("created_at"),
+    supabase
+      .from("account_invites")
+      .select("id, email, role, created_at, expires_at, account_roles(name)")
+      .eq("account_id", accountId)
+      .is("accepted_at", null)
+      .order("created_at", { ascending: false }),
   ]);
   const ids = (members.data ?? []).map((m) => m.user_id);
   const { data: profiles } = ids.length ? await supabase.from("profiles").select("user_id, full_name, email").in("user_id", ids) : { data: [] };
@@ -365,13 +400,21 @@ export async function getTeam(accountId: string, userId: string) {
       return {
         userId: m.user_id,
         role: m.role as Role,
+        roleId: (m.role_id as string | null) ?? null,
+        access: m.role === "owner" ? "Owner" : m.role === "admin" ? "Admin" : ((m.account_roles as unknown as { name: string } | null)?.name ?? "Team member"),
         name: p?.full_name ?? (m.user_id === userId ? "You" : "Teammate"),
         email: p?.email ?? null,
         joinedAt: m.created_at,
         isYou: m.user_id === userId,
       } satisfies Member;
     }),
-    invites: (invites.data ?? []).map((i) => ({ id: i.id as string, email: i.email as string, role: i.role as string, createdAt: i.created_at as string })),
+    invites: (invites.data ?? []).map((i) => ({
+      id: i.id as string,
+      email: i.email as string,
+      access: i.role === "admin" ? "Admin" : ((i.account_roles as unknown as { name: string } | null)?.name ?? "Team member"),
+      createdAt: i.created_at as string,
+      expired: new Date(i.expires_at as string).getTime() < Date.now(),
+    })),
   };
 }
 

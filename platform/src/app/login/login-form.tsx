@@ -35,6 +35,8 @@ export function LoginForm() {
     const params = new URLSearchParams(window.location.search);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNext(safeNext(params.get("next")));
+    const presetEmail = params.get("email");
+    if (presetEmail) setEmail(presetEmail);
     const error = errors[params.get("error") ?? ""];
     if (error) setMessage(error);
   }, []);

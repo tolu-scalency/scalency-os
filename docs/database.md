@@ -184,6 +184,25 @@ Nothing changes in a workspace until someone reviews the proposal and clicks Bui
 
 Migration `20261118120000_workspace_name_in_emails`. Each user's auth metadata holds `workspace_name`: the first workspace they joined. `sync_workspace_name(user)` sets it, and triggers keep it current when someone joins or leaves a workspace (`account_members_workspace_name`) or a workspace is renamed (`accounts_workspace_name`). The sign-in, password, code and email-change templates in `supabase/templates` read it, so they say "Sign in to Maximus HQ" rather than "Scalency OS".
 
+## Roles, permissions and invite links
+
+Migration `20261118150000_roles_and_invites`.
+
+| Part | What it does |
+|---|---|
+| `account_roles` | A workspace's roles: name, description and a list of permissions. Every workspace starts with Team member, Sales rep and Viewer. |
+| `account_members.role_id`, `account_invites.role_id` | The role someone has, or is invited with. Owners and admins have no role: they can do everything. Members with no role keep the default member access. |
+| Permissions | `contacts.view_all`, `contacts.edit`, `contacts.delete`, `deals.edit`, `pipeline.manage`, `inbox.send`, `workflows.manage`, `settings.manage`, `team.manage` (`all_permissions()`). |
+| `my_permissions(account)`, `has_permission(account, perm)`, `accounts_where_i_can(perm)` | What the signed-in person can do. Policies use `accounts_where_i_can` so the check runs once per query. |
+| Restrictive policies | Added on top of "members manage their accounts' records" on contacts, deals, messages, activity, tags, pipelines, stages, workflows, custom fields and values, templates, forms, webhooks, the workspace and invites. People without `contacts.view_all` only see contacts they own (and their deals, messages and activity). New contacts they add are owned by them (`contacts_own_new`). |
+| `set_member_access(account, member, role, role_id)` | Changes someone's access. Needs `team.manage`. The owner can't be changed. |
+| `can_manage_account(account)` | Now means `settings.manage` (used by AI setup). |
+| `account_invites.token`, `expires_at` | Each invite has a private link (`/invite/<token>`) that lasts 7 days. `refresh_invite` gives it another 7 days and keeps the same link. |
+| `invite_details(token)` | What the invite page shows. Callable without signing in. |
+| `accept_invite_token(token)` | Joins the signed-in person to the workspace, with the invited access, if the invite was sent to their email. |
+
+The workflow engine and webhooks run as the server, so roles don't limit them.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

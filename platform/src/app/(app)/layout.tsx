@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         initials: initialsOf(name),
         workspace: ws.account.name,
         workspaceId: ws.account.id,
-        role: ws.account.role,
+        role: ws.account.roleName,
         leadsThisWeek: leads,
         workspaces: ws.workspaces,
         invites,
