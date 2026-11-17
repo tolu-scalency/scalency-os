@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { ActionForm, ConfirmSubmit, SubmitButton } from "@/components/action-form";
+import { fieldTypeLabel } from "@/lib/field-types";
+import { AddFieldForm, EditFieldForm } from "./field-forms";
 import { getWorkspace, listCustomFields, listCustomValues } from "@/lib/data";
-import { addCustomField, deleteCustomField, deleteCustomValue, saveCustomValue } from "../actions";
+import { deleteCustomField, deleteCustomValue, saveCustomValue } from "../actions";
 
 export const metadata: Metadata = { title: "Custom fields" };
 
@@ -15,7 +17,7 @@ export default async function FieldsPage() {
       <section className="card grid gap-5 p-5 sm:p-6 md:grid-cols-[260px_1fr] [&>*]:min-w-0">
         <div>
           <h2 className="text-[16px] font-semibold">Custom fields</h2>
-          <p className="mt-1 text-[13.5px] text-muted">Extra details you keep on every contact, like budget or company size. Fill them in on the contact page, or with an “Update a field” workflow step.</p>
+          <p className="mt-1 text-[13.5px] text-muted">Extra details you keep on every contact, like budget, renewal date or service. Choose a type so the right box shows: dropdowns, dates, money and more. Fill them in on the contact page, or with an “Update a field” workflow step.</p>
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           {fields.length === 0 ? (
@@ -23,9 +25,16 @@ export default async function FieldsPage() {
           ) : (
             <ul className="divide-y divide-line rounded-xl border border-line">
               {fields.map((f) => (
-                <li key={f.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <span className="flex-1 text-[14px] font-medium">{f.label}</span>
+                <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[14px] font-medium">{f.label}</span>
+                    <span className="block text-[12px] text-muted">
+                      {fieldTypeLabel(f.type)}
+                      {f.options.length > 0 && `: ${f.options.slice(0, 4).join(", ")}${f.options.length > 4 ? ` and ${f.options.length - 4} more` : ""}`}
+                    </span>
+                  </span>
                   <code className="min-w-0 break-all rounded bg-surface px-2 py-0.5 text-[12px] text-muted">{`{{contact.${f.key}}}`}</code>
+                  {manager && <EditFieldForm id={f.id} label={f.label} type={f.type} options={f.options} />}
                   {manager && (
                     <ActionForm action={deleteCustomField}>
                       <input type="hidden" name="id" value={f.id} />
@@ -36,12 +45,7 @@ export default async function FieldsPage() {
               ))}
             </ul>
           )}
-          {manager && (
-            <ActionForm action={addCustomField} resetOnOk className="flex flex-wrap gap-2">
-              <input name="label" required maxLength={60} placeholder="New field, e.g. Budget" aria-label="Field name" className="field min-w-0 flex-1" />
-              <SubmitButton icon="plus" pendingText="Adding…">Add field</SubmitButton>
-            </ActionForm>
-          )}
+          {manager && <AddFieldForm />}
         </div>
       </section>
 

@@ -508,7 +508,35 @@ function StepFields({
             </select>
             to
           </div>
-          <MergeText value={step.value} onChange={(value) => onChange({ value })} fields={mf} maxLength={500} placeholder="New value (leave empty to clear)" label="New value" />
+          {(() => {
+            const cf = step.field.startsWith("custom:") ? customFields.find((f) => f.key === step.field.slice(7)) : undefined;
+            if (cf?.type === "select")
+              return (
+                <select value={step.value} onChange={(e) => onChange({ value: e.target.value })} className="field h-10" aria-label="New value">
+                  <option value="">Clear the field</option>
+                  {cf.options.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              );
+            if (cf?.type === "yes_no")
+              return (
+                <select value={step.value} onChange={(e) => onChange({ value: e.target.value })} className="field h-10" aria-label="New value">
+                  <option value="">Clear the field</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              );
+            if (cf?.type === "date")
+              return <input type="date" value={step.value} onChange={(e) => onChange({ value: e.target.value })} className="field h-10" aria-label="New value" />;
+            const hint =
+              cf?.type === "multi_select"
+                ? `Separate options with commas: ${cf.options.slice(0, 3).join(", ")}`
+                : cf?.type === "number" || cf?.type === "money"
+                  ? "A number, e.g. 2500"
+                  : "New value (leave empty to clear)";
+            return <MergeText value={step.value} onChange={(value) => onChange({ value })} fields={mf} maxLength={500} placeholder={hint} label="New value" />;
+          })()}
           {customFields.length === 0 && <span className="text-[12px] text-faint">Add your own fields in Settings, then Custom fields.</span>}
         </div>
       );
