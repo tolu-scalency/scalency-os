@@ -271,6 +271,13 @@ a.card:hover,
 .btn-ghost:active {
   transform: scale(0.97);
 }
+@keyframes drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.drawer-in {
+  animation: drawer-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 /* Children of a list appear one after another. */
 .stagger > * {
   animation: page-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -287,7 +294,7 @@ a.card:hover,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .connector, .skeleton, .rise, .fade-in, .page-in, .flyout, .stagger > * { animation: none; }
+  .connector, .skeleton, .rise, .fade-in, .page-in, .flyout, .drawer-in, .stagger > * { animation: none; }
   .card, .nav-item, .btn-primary, .btn-ghost { transition: none; }
   a.card:hover, .card-lift:hover, .btn-primary:active, .btn-ghost:active, .nav-item:active { transform: none; }
 }

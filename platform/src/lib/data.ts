@@ -178,7 +178,9 @@ function searchTerm(q: string) {
 }
 
 /** Contacts with their current pipeline stage, newest first. Optional search on name, email or phone. */
-export async function listContacts(accountId: string, q = "", limit = 200): Promise<ContactRow[]> {
+export type ContactFilters = { tag?: string; owner?: string; source?: string; from?: string; to?: string; has?: string };
+
+export async function listContacts(accountId: string, q = "", limit = 200, f: ContactFilters = {}): Promise<ContactRow[]> {
   const supabase = await createClient();
   let query = supabase
     .from("contacts")
@@ -186,6 +188,21 @@ export async function listContacts(accountId: string, q = "", limit = 200): Prom
     .eq("account_id", accountId)
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (f.tag) {
+    const { data: tagged } = await supabase.from("contact_tags").select("contact_id, tags!inner(name)").eq("account_id", accountId).ilike("tags.name", searchTerm(f.tag)).limit(5000);
+    const ids = (tagged ?? []).map((r) => r.contact_id as string);
+    if (!ids.length) return [];
+    query = query.in("id", ids.slice(0, 1000));
+  }
+  if (f.owner === "none") query = query.is("owner_id", null);
+  else if (f.owner && /^[0-9a-f-]{36}$/i.test(f.owner)) query = query.eq("owner_id", f.owner);
+  if (f.source) query = query.ilike("source", searchTerm(f.source));
+  if (f.from && /^\d{4}-\d{2}-\d{2}$/.test(f.from)) query = query.gte("created_at", f.from);
+  if (f.to && /^\d{4}-\d{2}-\d{2}$/.test(f.to)) query = query.lt("created_at", new Date(new Date(f.to).getTime() + 86400000).toISOString());
+  if (f.has === "email") query = query.not("email", "is", null);
+  if (f.has === "phone") query = query.not("phone", "is", null);
+  if (f.has === "no_email") query = query.is("email", null);
+  if (f.has === "no_phone") query = query.is("phone", null);
   const term = searchTerm(q);
   if (term) {
     query = query.or(`first_name.ilike.%${term}%,last_name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%`);
@@ -227,12 +244,39 @@ export async function listContacts(accountId: string, q = "", limit = 200): Prom
 export type Stage = { id: string; name: string; position: number };
 
 /** The workspace's pipeline and its stages, or null if it hasn't been set up yet. */
-export async function getPipeline(accountId: string) {
+export type PipelineSummary = { id: string; name: string; position: number };
+
+/** Every pipeline in the workspace, in order. */
+export async function listPipelines(accountId: string): Promise<PipelineSummary[]> {
   const supabase = await createClient();
-  const { data: pipeline } = await supabase.from("pipelines").select("id, name").eq("account_id", accountId).order("created_at").limit(1).maybeSingle();
-  if (!pipeline) return null;
+  const { data } = await supabase.from("pipelines").select("id, name, position, created_at").eq("account_id", accountId).order("position").order("created_at");
+  return (data ?? []).map((p) => ({ id: p.id as string, name: p.name as string, position: (p.position as number) ?? 0 }));
+}
+
+/** One pipeline with its stages: the one asked for, or the first. Null if there are none. */
+export async function getPipeline(accountId: string, pipelineId?: string | null): Promise<{ id: string; name: string; stages: Stage[] } | null> {
+  const supabase = await createClient();
+  let q = supabase.from("pipelines").select("id, name").eq("account_id", accountId);
+  q = pipelineId && /^[0-9a-f-]{36}$/i.test(pipelineId) ? q.eq("id", pipelineId) : q.order("position").order("created_at").limit(1);
+  const { data: pipeline } = await q.maybeSingle();
+  if (!pipeline) return pipelineId ? getPipeline(accountId) : null;
   const { data: stages } = await supabase.from("pipeline_stages").select("id, name, position").eq("pipeline_id", pipeline.id).order("position");
   return { id: pipeline.id as string, name: pipeline.name as string, stages: (stages ?? []) as Stage[] };
+}
+
+/** Every stage of every pipeline, labelled "Pipeline: Stage" when there's more than one pipeline. For workflow triggers and steps. */
+export async function listAllStages(accountId: string): Promise<{ id: string; name: string; pipelineId: string }[]> {
+  const supabase = await createClient();
+  const [pipes, stages] = await Promise.all([
+    supabase.from("pipelines").select("id, name, position").eq("account_id", accountId).order("position"),
+    supabase.from("pipeline_stages").select("id, name, position, pipeline_id").eq("account_id", accountId).order("position"),
+  ]);
+  const many = (pipes.data ?? []).length > 1;
+  const order = new Map((pipes.data ?? []).map((p, i) => [p.id as string, { i, name: p.name as string }]));
+  return (stages.data ?? [])
+    .filter((st) => order.has(st.pipeline_id as string))
+    .sort((a, b) => order.get(a.pipeline_id as string)!.i - order.get(b.pipeline_id as string)!.i || (a.position as number) - (b.position as number))
+    .map((st) => ({ id: st.id as string, pipelineId: st.pipeline_id as string, name: many ? `${order.get(st.pipeline_id as string)!.name}: ${st.name}` : (st.name as string) }));
 }
 
 /** One contact with everything shown on their record. Returns null if it doesn't exist or isn't theirs. */
@@ -285,34 +329,166 @@ export async function getContactDetail(id: string, accountId: string) {
   };
 }
 
-export type BoardCard = { opportunityId: string; contactId: string; name: string; initials: string; valuePence: number | null; updatedAt: string };
+export type BoardCard = {
+  opportunityId: string;
+  contactId: string;
+  name: string;
+  contactName: string;
+  email: string | null;
+  phone: string | null;
+  initials: string;
+  valuePence: number | null;
+  status: "open" | "won" | "lost" | "abandoned";
+  stageId: string;
+  ownerId: string | null;
+  ownerName: string | null;
+  source: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
 export type BoardColumn = { id: string; name: string; cards: BoardCard[] };
 
-/** The pipeline as columns of cards, or null if there's no pipeline yet. */
-export async function getPipelineBoard(accountId: string) {
-  const pipeline = await getPipeline(accountId);
+export type DealFilters = {
+  q?: string;
+  owner?: string; // a user id, "me" or "none"
+  status?: string; // open (default), won, lost, abandoned, all
+  source?: string;
+  tag?: string;
+  min?: string; // pounds
+  max?: string;
+  from?: string; // YYYY-MM-DD
+  to?: string;
+  sort?: string; // updated (default), created, value, name
+};
+
+/** The pipeline as columns of cards (or null if there's no pipeline yet), with filters. */
+export async function getPipelineBoard(accountId: string, pipelineId?: string | null, f: DealFilters = {}) {
+  const pipeline = await getPipeline(accountId, pipelineId);
   if (!pipeline) return null;
   const supabase = await createClient();
 
-  const { data: opps } = await supabase
+  let q = supabase
     .from("opportunities")
-    .select("id, contact_id, stage_id, value_pence, updated_at, contacts(first_name, last_name, email, phone)")
+    .select("id, name, contact_id, stage_id, status, value_pence, source, assigned_to, created_at, updated_at, contacts(first_name, last_name, email, phone)")
     .eq("pipeline_id", pipeline.id)
-    .eq("status", "open")
-    .order("updated_at", { ascending: false })
-    .limit(1000);
+    .limit(2000);
+  const status = f.status && ["open", "won", "lost", "abandoned", "all"].includes(f.status) ? f.status : "open";
+  if (status !== "all") q = q.eq("status", status);
+  if (f.owner === "none") q = q.is("assigned_to", null);
+  else if (f.owner && /^[0-9a-f-]{36}$/i.test(f.owner)) q = q.eq("assigned_to", f.owner);
+  if (f.source) q = q.ilike("source", searchTerm(f.source));
+  const min = Number(f.min);
+  const max = Number(f.max);
+  if (f.min && Number.isFinite(min)) q = q.gte("value_pence", Math.round(min * 100));
+  if (f.max && Number.isFinite(max)) q = q.lte("value_pence", Math.round(max * 100));
+  if (f.from && /^\d{4}-\d{2}-\d{2}$/.test(f.from)) q = q.gte("created_at", f.from);
+  if (f.to && /^\d{4}-\d{2}-\d{2}$/.test(f.to)) q = q.lt("created_at", new Date(new Date(f.to).getTime() + 86400000).toISOString());
+  const sort = f.sort ?? "updated";
+  q = sort === "created" ? q.order("created_at", { ascending: false }) : sort === "value" ? q.order("value_pence", { ascending: false, nullsFirst: false }) : sort === "name" ? q.order("name") : q.order("updated_at", { ascending: false });
+
+  const { data: rows } = await q;
+  let opps = rows ?? [];
+
+  const term = searchTerm(f.q ?? "").toLowerCase();
+  if (term) {
+    opps = opps.filter((o) => {
+      const c = o.contacts as unknown as { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
+      return [o.name, c?.first_name, c?.last_name, c?.email, c?.phone].some((v) => (v ?? "").toLowerCase().includes(term));
+    });
+  }
+
+  // Tags and owner names, in two quick lookups.
+  const contactIds = [...new Set(opps.map((o) => o.contact_id as string))];
+  const ownerIds = [...new Set(opps.map((o) => o.assigned_to as string | null).filter(Boolean) as string[])];
+  const [tagRows, owners] = await Promise.all([
+    contactIds.length ? supabase.from("contact_tags").select("contact_id, tags(name)").in("contact_id", contactIds.slice(0, 1000)) : Promise.resolve({ data: [] as { contact_id: string; tags: unknown }[] }),
+    ownerIds.length ? memberNames(accountId) : Promise.resolve({} as Record<string, string>),
+  ]);
+  const tagsBy = new Map<string, string[]>();
+  for (const r of (tagRows.data ?? []) as { contact_id: string; tags: unknown }[]) {
+    const name = (r.tags as { name: string } | null)?.name;
+    if (name) tagsBy.set(r.contact_id, [...(tagsBy.get(r.contact_id) ?? []), name]);
+  }
+  if (f.tag) {
+    const want = f.tag.toLowerCase();
+    opps = opps.filter((o) => (tagsBy.get(o.contact_id as string) ?? []).some((t) => t.toLowerCase() === want));
+  }
 
   const columns: BoardColumn[] = pipeline.stages.map((s) => ({ id: s.id, name: s.name, cards: [] }));
   const colById = new Map(columns.map((c) => [c.id, c]));
-  for (const o of opps ?? []) {
+  const cards: BoardCard[] = opps.map((o) => {
     const c = o.contacts as unknown as { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
-    const name = c ? fullName(c.first_name, c.last_name, c.email ?? c.phone ?? "Unnamed contact") : "Unknown contact";
-    colById.get(o.stage_id)?.cards.push({ opportunityId: o.id, contactId: o.contact_id, name, initials: initialsOf(name), valuePence: o.value_pence, updatedAt: o.updated_at });
-  }
+    const contactName = c ? fullName(c.first_name, c.last_name, c.email ?? c.phone ?? "Unnamed contact") : "Unknown contact";
+    const name = (o.name as string) || contactName;
+    return {
+      opportunityId: o.id as string,
+      contactId: o.contact_id as string,
+      name,
+      contactName,
+      email: c?.email ?? null,
+      phone: c?.phone ?? null,
+      initials: initialsOf(contactName),
+      valuePence: o.value_pence as number | null,
+      status: o.status as BoardCard["status"],
+      stageId: o.stage_id as string,
+      ownerId: (o.assigned_to as string | null) ?? null,
+      ownerName: o.assigned_to ? (owners[o.assigned_to as string] ?? null) : null,
+      source: (o.source as string | null) ?? null,
+      tags: tagsBy.get(o.contact_id as string) ?? [],
+      createdAt: o.created_at as string,
+      updatedAt: o.updated_at as string,
+    };
+  });
+  for (const card of cards) colById.get(card.stageId)?.cards.push(card);
 
-  const totalPence = (opps ?? []).reduce((sum, o) => sum + (o.value_pence ?? 0), 0);
-  return { pipeline, columns, openCount: opps?.length ?? 0, totalPence };
+  const totalPence = cards.reduce((sum, o) => sum + (o.valuePence ?? 0), 0);
+  return { pipeline, columns, cards, openCount: cards.length, totalPence, status };
 }
+
+/** Values used by the deal filters: sources and tags seen in this workspace. */
+export async function dealFilterOptions(accountId: string) {
+  const supabase = await createClient();
+  const [sources, tags] = await Promise.all([
+    supabase.from("opportunities").select("source").eq("account_id", accountId).not("source", "is", null).limit(1000),
+    supabase.from("tags").select("name").eq("account_id", accountId).order("name"),
+  ]);
+  return {
+    sources: [...new Set((sources.data ?? []).map((r) => (r.source as string).trim()).filter(Boolean))].sort().slice(0, 50),
+    tags: (tags.data ?? []).map((t) => t.name as string),
+  };
+}
+
+/** One deal with everything the deal panel edits. */
+export async function getDeal(accountId: string, id: string) {
+  const supabase = await createClient();
+  const { data: o } = await supabase
+    .from("opportunities")
+    .select("id, name, contact_id, pipeline_id, stage_id, status, value_pence, source, assigned_to, custom, lost_reason, created_at, contacts(first_name, last_name, email, phone)")
+    .eq("id", id)
+    .eq("account_id", accountId)
+    .maybeSingle();
+  if (!o) return null;
+  const c = o.contacts as unknown as { first_name: string | null; last_name: string | null; email: string | null; phone: string | null } | null;
+  return {
+    id: o.id as string,
+    name: o.name as string,
+    contactId: o.contact_id as string,
+    contactName: c ? fullName(c.first_name, c.last_name, c.email ?? c.phone ?? "Unnamed contact") : "Unknown contact",
+    email: c?.email ?? null,
+    phone: c?.phone ?? null,
+    pipelineId: o.pipeline_id as string,
+    stageId: o.stage_id as string,
+    status: o.status as BoardCard["status"],
+    valuePence: o.value_pence as number | null,
+    source: (o.source as string | null) ?? null,
+    ownerId: (o.assigned_to as string | null) ?? null,
+    custom: (o.custom ?? {}) as Record<string, unknown>,
+    lostReason: (o.lost_reason as string | null) ?? null,
+    createdAt: o.created_at as string,
+  };
+}
+export type Deal = NonNullable<Awaited<ReturnType<typeof getDeal>>>;
 
 /** Tasks for the workspace, open first, soonest due first. */
 export async function listTasks(accountId: string, show: "open" | "done" = "open", limit = 200): Promise<TaskRow[]> {
@@ -687,9 +863,9 @@ export type CustomField = { id: string; key: string; label: string; type: import
 export type CustomValue = { key: string; value: string };
 
 /** The workspace's own contact fields (like GoHighLevel custom fields). */
-export async function listCustomFields(accountId: string): Promise<CustomField[]> {
+export async function listCustomFields(accountId: string, object: "contact" | "opportunity" = "contact"): Promise<CustomField[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("custom_fields").select("id, key, label, type, options").eq("account_id", accountId).eq("object", "contact").order("position").order("created_at");
+  const { data } = await supabase.from("custom_fields").select("id, key, label, type, options").eq("account_id", accountId).eq("object", object).order("position").order("created_at");
   return (data ?? []).map((f) => ({ ...f, options: Array.isArray(f.options) ? (f.options as string[]) : [] })) as CustomField[];
 }
 
@@ -716,4 +892,11 @@ export async function workspaceCards(list: { id: string; name: string; role: str
       return { ...w, contacts: contacts.count ?? 0, openDeals: deals.count ?? 0, newLeads: leads.count ?? 0 };
     }),
   );
+}
+
+/** Sources seen on contacts, for the contacts filter. */
+export async function contactSources(accountId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase.from("contacts").select("source").eq("account_id", accountId).not("source", "is", null).limit(2000);
+  return [...new Set((data ?? []).map((r) => (r.source as string).trim()).filter(Boolean))].sort().slice(0, 50);
 }
