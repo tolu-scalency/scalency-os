@@ -9,8 +9,9 @@ import { TaskList } from "@/components/task-list";
 import { addTask } from "@/app/(app)/tasks/actions";
 import { formatPence, getContactDetail, getWorkspace, listCustomFields, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
 import { enrollContact } from "@/app/(app)/workflows/actions";
-import { addNote, addTag, removeTag, saveCustomFields, setDealStatus, setOwner, setStage, setValue } from "./actions";
+import { addNote, saveCustomFields, setDealStatus, setOwner, setStage, setValue } from "./actions";
 import { ContactEditor } from "./contact-editor";
+import { TagEditor } from "./tag-editor";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -215,32 +216,7 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
         <div className="flex flex-col gap-4">
           <section className="card p-5">
             <h2 className="mb-2 text-[16px] font-semibold">Tags</h2>
-            {c.tags.length > 0 && (
-              <ul className="mb-3 flex flex-wrap gap-1.5">
-                {c.tags.map((t) => (
-                  <li key={t.id}>
-                    <ActionForm action={removeTag} className="inline-flex items-center gap-1 rounded-full bg-chip py-1 pl-3 pr-1 text-[12.5px] font-medium text-brand">
-                      <input type="hidden" name="contact_id" value={c.id} />
-                      <input type="hidden" name="tag_id" value={t.id} />
-                      {t.name}
-                      <button type="submit" aria-label={`Remove ${t.name}`} title="Remove" className="inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-white">
-                        <Icon name="x" size={11} />
-                      </button>
-                    </ActionForm>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <ActionForm action={addTag} resetOnOk className="flex flex-wrap gap-2">
-              <input type="hidden" name="contact_id" value={c.id} />
-              <input name="tag" list="contact-tags" required maxLength={40} placeholder="Add a tag…" aria-label="Tag" className="field min-w-0 flex-1" />
-              <datalist id="contact-tags">
-                {allTags.filter((t) => !c.tags.some((x) => x.name === t)).map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-              <SubmitButton icon="plus" pendingText="Adding…">Add</SubmitButton>
-            </ActionForm>
+            <TagEditor contactId={c.id} tags={c.tags} allTags={allTags} />
             <h2 className="mb-2 mt-5 text-[16px] font-semibold">Owner</h2>
             <ActionForm action={setOwner} className="flex flex-wrap gap-2">
               <input type="hidden" name="contact_id" value={c.id} />

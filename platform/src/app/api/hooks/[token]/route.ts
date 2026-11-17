@@ -1,5 +1,5 @@
 import { adminClient } from "@/lib/admin";
-import { deliverPending } from "@/lib/deliver";
+import { runWorkflowsSoon } from "@/lib/run-soon";
 
 // Inbound webhook: other apps (a website form, Zapier, Make, Typeform, ad platforms) send leads here.
 // Each "When a webhook is received" workflow has its own secret address: /api/hooks/<token>.
@@ -106,8 +106,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ token: str
   }
 
   await admin.rpc("enroll_contact", { target_workflow: wf.id, target_contact: contactId });
-  await admin.rpc("run_due_workflows", { target_account: account });
-  await deliverPending(admin, account);
+  runWorkflowsSoon(admin, account);
   return json(200, { ok: true, contact_id: contactId });
 }
 

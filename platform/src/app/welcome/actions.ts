@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { GOALS, HEARD_FROM, INDUSTRIES, MONTHLY_LEADS, ROLES, TEAM_SIZES } from "./options";
+import { GOALS, HEARD_FROM, MONTHLY_LEADS, ROLES, TEAM_SIZES } from "./options";
 
 export type OnboardingState = { error?: string };
 

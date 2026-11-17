@@ -3,9 +3,9 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { deliverPending } from "@/lib/deliver";
 import { getWorkspace } from "@/lib/data";
 import { EMAIL, PHONE_HELP, normalisePhone, parsePounds, text, type ActionResult } from "@/lib/forms";
+import { runWorkflowsSoon } from "@/lib/run-soon";
 
 function readContact(fd: FormData) {
   const first = text(fd, "first_name", 80);
@@ -63,8 +63,7 @@ export async function addContact(_prev: ActionResult, fd: FormData): Promise<Act
   });
 
   // Run any workflow steps this contact just triggered, so follow-ups start straight away.
-  await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
-  await deliverPending(supabase, ws.account.id);
+  runWorkflowsSoon(supabase, ws.account.id);
   redirect(`/contacts/${contact.id}`);
 }
 
