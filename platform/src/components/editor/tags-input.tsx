@@ -22,10 +22,12 @@ export function TagsInput({ value, onChange, suggestions, max = 10, placeholder 
     setDraft("");
   }
 
-  const matches = suggestions.filter((s) => !has(s) && s.toLowerCase().includes(draft.trim().toLowerCase())).slice(0, 8);
+  const typed = draft.trim();
+  const matches = suggestions.filter((s) => !has(s) && s.toLowerCase().includes(typed.toLowerCase())).slice(0, 8);
+  const isNew = typed.length > 0 && !has(typed) && !suggestions.some((s) => s.toLowerCase() === typed.toLowerCase());
 
   return (
-    <div className="relative">
+    <div className={`relative ${focus ? "z-40" : ""}`}>
       <div
         onClick={() => input.current?.focus()}
         className={`field flex min-h-11 cursor-text flex-wrap items-center gap-1.5 py-1.5 ${focus ? "border-sky ring-2 ring-sky/20" : ""}`}
@@ -62,8 +64,24 @@ export function TagsInput({ value, onChange, suggestions, max = 10, placeholder 
           className="min-w-[120px] flex-1 bg-transparent p-0 text-[14px]"
         />
       </div>
-      {focus && matches.length > 0 && (
-        <ul id={listId} role="listbox" className="rise absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-white p-1 shadow-[var(--shadow-pop)]">
+      {focus && (matches.length > 0 || isNew) && (
+        <ul id={listId} role="listbox" className="rise absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-white p-1 shadow-[var(--shadow-pop)]">
+          {isNew && (
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={false}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  add(typed);
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[13.5px] font-medium text-brand hover:bg-chip"
+              >
+                <Icon name="plus" size={13} /> Add tag “{typed}”
+              </button>
+            </li>
+          )}
           {matches.map((m) => (
             <li key={m}>
               <button

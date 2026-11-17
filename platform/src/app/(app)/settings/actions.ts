@@ -116,14 +116,24 @@ export async function inviteMember(_prev: ActionResult, fd: FormData): Promise<A
   if (email === ws.userEmail.toLowerCase()) return { error: "That's you." };
   const role = access === "admin" ? "admin" : "member";
   const roleId = role === "member" && /^[0-9a-f-]{36}$/i.test(access) ? access : null;
+  // Ticked boxes in the access pop-up give this person their own permissions.
+  let custom: string[] | null = null;
+  const rawCustom = String(fd.get("permissions") ?? "");
+  if (role === "member" && rawCustom) {
+    try {
+      custom = cleanPermissions(JSON.parse(rawCustom) as unknown[]);
+    } catch {
+      custom = null;
+    }
+  }
   const supabase = await createClient();
   const { data: invite, error } = await supabase
     .from("account_invites")
-    .insert({ account_id: ws.account.id, email, role, role_id: roleId, invited_by: ws.userId })
+    .insert({ account_id: ws.account.id, email, role, role_id: roleId, permissions: custom, invited_by: ws.userId })
     .select("token")
     .single();
   if (error || !invite) return { error: error?.code === "23505" ? "That email is already invited. Use Send again below." : "We couldn't save the invite." };
-  const accessName = role === "admin" ? "Admin" : roleId ? ((await supabase.from("account_roles").select("name").eq("id", roleId).maybeSingle()).data?.name ?? "Team member") : "Team member";
+  const accessName = role === "admin" ? "Admin" : custom ? "Custom access" : roleId ? ((await supabase.from("account_roles").select("name").eq("id", roleId).maybeSingle()).data?.name ?? "Team member") : "Team member";
   const sent = await sendInviteEmail(email, invite.token as string, ws.account.name, ws.fullName ?? ws.userEmail, accessName);
   refresh();
   return sent.ok ? { ok: `Invite sent to ${email}.` } : { ok: `Invite saved, but the email couldn't be sent (${sent.reason}). Copy the invite link below and send it to them yourself.` };
@@ -207,6 +217,22 @@ export async function setMemberAccess(_prev: ActionResult, fd: FormData): Promis
   if (error) return { error: error.message.includes("owner") ? "The owner's access can't be changed." : "We couldn't change their access." };
   refresh();
   return { ok: "Access updated." };
+}
+
+/** Gives one person exactly the permissions ticked in the access pop-up. */
+export async function setMemberPermissions(userId: string, baseRole: string | null, permissions: string[]): Promise<ActionResult> {
+  const ws = await getWorkspace();
+  if (!canManage(ws, "team.manage")) return { error: NO_ACCESS };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_member_permissions", {
+    target_account: ws.account.id,
+    member: userId,
+    base_role: baseRole && /^[0-9a-f-]{36}$/i.test(baseRole) ? baseRole : null,
+    new_permissions: cleanPermissions(permissions),
+  });
+  if (error) return { error: error.message.includes("owner") ? "The owner's access can't be changed." : "We couldn't save their access." };
+  refresh();
+  return { ok: "Access saved." };
 }
 
 /** Creates or updates a role and its permissions. */

@@ -183,15 +183,77 @@ export function WorkflowEditor({
       setTrigger({ type: v } as WorkflowTrigger);
     });
   }
-  function save() {
+  // Last saved version, for Cancel.
+  const savedRef = useRef({ name: workflow.name, description: workflow.description, trigger: workflow.trigger, stopOnReply: workflow.stopOnReply, steps });
+  const backupKey = `scalency.wf-draft.${workflow.id}`;
+  const [restorable, setRestorable] = useState(false);
+
+  function save(auto = false) {
     start(async () => {
-      const result = await saveWorkflow(workflow.id, { name, description, trigger, steps, stopOnReply }).catch(() => ({ error: "We couldn't save. Check your connection and try again.", token: undefined }));
-      setMessage(result);
+      const snapshot = { name, description, trigger, steps, stopOnReply };
+      const result = await saveWorkflow(workflow.id, snapshot).catch(() => ({ error: "We couldn't save. Check your connection and try again.", token: undefined }));
+      if (auto && result.error) {
+        // Half-finished steps can't be saved yet. Keep them safe on this device and try again later.
+        setMessage({ error: `Not saved yet: ${result.error}` });
+        return;
+      }
+      setMessage(auto ? { ok: "All changes saved" } : result);
       if (!result.error) {
         setDirty(false);
+        savedRef.current = { ...snapshot, trigger: result.token ? { type: "webhook", token: result.token } : trigger };
+        try {
+          localStorage.removeItem(backupKey);
+        } catch {}
         if (result.token) setTrigger({ type: "webhook", token: result.token });
       }
     });
+  }
+
+  function cancel() {
+    const s0 = savedRef.current;
+    setName(s0.name);
+    setDescription(s0.description);
+    setTrigger(s0.trigger);
+    setStopOnReply(s0.stopOnReply);
+    setSteps(s0.steps);
+    setDirty(false);
+    setMessage({ ok: "Changes discarded" });
+    try {
+      localStorage.removeItem(backupKey);
+    } catch {}
+  }
+
+  // Autosave: two seconds after the last change. Also keep a copy on this device, so nothing is lost if the page closes.
+  useEffect(() => {
+    if (!dirty || locked) return;
+    try {
+      localStorage.setItem(backupKey, JSON.stringify({ at: Date.now(), name, description, trigger, steps, stopOnReply }));
+    } catch {}
+    const t = setTimeout(() => save(true), 2000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, name, description, trigger, steps, stopOnReply]);
+
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (localStorage.getItem(backupKey)) setRestorable(true);
+    } catch {}
+  }, [backupKey]);
+
+  function restore() {
+    try {
+      const b = JSON.parse(localStorage.getItem(backupKey) ?? "null");
+      if (b) {
+        setName(b.name);
+        setDescription(b.description);
+        setTrigger(b.trigger);
+        setStopOnReply(b.stopOnReply);
+        setSteps(b.steps);
+        setDirty(true);
+      }
+    } catch {}
+    setRestorable(false);
   }
   async function copy(text: string) {
     try {
@@ -238,6 +300,26 @@ export function WorkflowEditor({
           </p>
         )}
       </section>
+
+      {restorable && !disabled && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warn/30 bg-warn-bg p-3 text-[13.5px]">
+          <Icon name="refresh" size={15} />
+          <span className="min-w-0 flex-1">You have changes from last time that weren&apos;t saved.</span>
+          <button type="button" onClick={restore} className="btn-primary min-h-9 rounded-lg px-3 text-[13px] font-semibold">Restore them</button>
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                localStorage.removeItem(backupKey);
+              } catch {}
+              setRestorable(false);
+            }}
+            className="btn-ghost min-h-9 rounded-lg px-3 text-[13px] font-semibold"
+          >
+            Discard
+          </button>
+        </div>
+      )}
 
       {/* Zoom, so a whole build fits on screen (handy for screenshots). */}
       <ZoomBar zoom={zoom} setZoom={setZoom} onFit={fit} />
@@ -355,11 +437,16 @@ export function WorkflowEditor({
 
       {!disabled && (
         <div className="sticky bottom-[calc(var(--nav-h)+12px)] z-20 mx-auto flex w-full max-w-[680px] items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 pl-4 shadow-[var(--shadow-pop)] backdrop-blur">
-          <span className={`text-[13px] ${message.error ? "text-bad" : message.ok ? "text-ok" : "text-muted"}`}>
-            {message.error ?? message.ok ?? (dirty ? "You have unsaved changes." : "Use “Insert field” to personalise messages.")}
+          <span className={`min-w-0 flex-1 text-[13px] ${message.error ? "text-bad" : message.ok ? "text-ok" : "text-muted"}`}>
+            {pending ? "Saving…" : (message.error ?? message.ok ?? (dirty ? "Saving automatically…" : "Changes save automatically."))}
           </span>
-          <button type="button" onClick={save} disabled={pending} className="btn-primary inline-flex min-h-10 items-center gap-2 rounded-xl px-5 text-[13.5px] font-semibold disabled:opacity-70">
-            <Icon name="check" size={15} /> {pending ? "Saving…" : "Save"}
+          {dirty && (
+            <button type="button" onClick={cancel} disabled={pending} className="btn-ghost inline-flex min-h-10 items-center rounded-xl px-4 text-[13.5px] font-semibold">
+              Cancel
+            </button>
+          )}
+          <button type="button" onClick={() => save()} disabled={pending} className="btn-primary inline-flex min-h-10 items-center gap-2 rounded-xl px-5 text-[13.5px] font-semibold disabled:opacity-70">
+            <Icon name="check" size={15} /> Save
           </button>
         </div>
       )}

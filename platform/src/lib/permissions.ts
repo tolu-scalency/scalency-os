@@ -7,9 +7,12 @@ export const PERMISSIONS = [
   { key: "contacts.view_all", group: "Contacts", label: "See all contacts", hint: "Without this, people only see the contacts they own." },
   { key: "contacts.edit", group: "Contacts", label: "Add and edit contacts", hint: "Includes tags, notes and custom field values." },
   { key: "contacts.delete", group: "Contacts", label: "Delete contacts", hint: "" },
+  { key: "contacts.import", group: "Contacts", label: "Import contacts", hint: "Bring contacts in from a spreadsheet.", soon: true },
+  { key: "contacts.export", group: "Contacts", label: "Export contacts", hint: "Download contacts as a spreadsheet.", soon: true },
   { key: "deals.edit", group: "Pipeline", label: "Add and move deals", hint: "Create deals, change stages, values and won or lost." },
   { key: "pipeline.manage", group: "Pipeline", label: "Change pipeline stages", hint: "Add, rename, reorder and remove stages." },
   { key: "inbox.send", group: "Inbox", label: "Send emails and texts", hint: "" },
+  { key: "calls.make", group: "Inbox", label: "Make and log calls", hint: "Call leads from Scalency and log the outcome." },
   { key: "workflows.manage", group: "Automation", label: "Manage workflows", hint: "Create, edit and switch workflows on or off." },
   { key: "calendars.manage", group: "Calendar", label: "Manage calendars and bookings", hint: "Calendars, booking pages and appointments.", soon: true },
   { key: "payments.manage", group: "Payments", label: "Manage payments", hint: "Invoices, products, subscriptions and refunds.", soon: true },
@@ -39,8 +42,9 @@ export const DEFAULT_MEMBER_PERMISSIONS: Permission[] = [
   "reporting.view",
 ];
 
-export function permissionsFor(role: string, rolePermissions: string[] | null | undefined): Permission[] {
+export function permissionsFor(role: string, rolePermissions: string[] | null | undefined, own?: string[] | null): Permission[] {
   if (role === "owner" || role === "admin") return [...ALL_PERMISSIONS];
+  if (own) return own.filter((p): p is Permission => (ALL_PERMISSIONS as string[]).includes(p));
   if (rolePermissions) return rolePermissions.filter((p): p is Permission => (ALL_PERMISSIONS as string[]).includes(p));
   return [...DEFAULT_MEMBER_PERMISSIONS];
 }

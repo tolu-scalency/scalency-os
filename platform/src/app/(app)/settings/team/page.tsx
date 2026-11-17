@@ -61,7 +61,7 @@ export default async function TeamPage() {
                 <div className="truncate text-[12.5px] text-muted">{m.email ?? "No profile yet"}</div>
               </div>
               {manager && m.role !== "owner" && !m.isYou ? (
-                <AccessSelect userId={m.userId} name={m.name} value={m.role === "admin" ? "admin" : (m.roleId ?? defaultRole)} options={options} />
+                <AccessSelect userId={m.userId} name={m.name} value={m.role === "admin" ? "admin" : (m.roleId ?? defaultRole)} options={options} own={m.permissions} />
               ) : (
                 <Pill tone={m.role === "owner" ? "blue" : "neutral"}>{m.access}</Pill>
               )}

@@ -212,6 +212,10 @@ Migration `20261119090000_workspace_rules_multi_tags`.
 - `create_workspace` now refuses people who are only members (not owner or admin) in every workspace they belong to. `can_create_workspace()` tells the app whether to show the button.
 - Workflow "Add a tag" and "Remove a tag" steps take a list (`tags`). Older steps with a single `tag` still work.
 
+## Custom access per person
+
+Migration `20261119120000_custom_access`. `account_members.permissions` and `account_invites.permissions` hold a person's own permission list, set by ticking boxes in the access pop-up. When present it wins over their role (owners and admins still have everything). `set_member_permissions(account, member, base_role, permissions)` saves it; choosing a role again with `set_member_access` clears it. New permissions: `contacts.import`, `contacts.export`, `calls.make`.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

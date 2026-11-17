@@ -2,22 +2,52 @@
 
 import { useState, useTransition } from "react";
 import { Icon } from "@/components/icon";
-import { inviteLink, setMemberAccess } from "../actions";
+import { inviteLink, setMemberAccess, setMemberPermissions } from "../actions";
 import { AccessPreview, type RoleOption } from "./access-preview";
 
 
 type Option = RoleOption;
 
 /** Changes someone's access as soon as a new option is picked. */
-export function AccessSelect({ userId, value, options, name }: { userId: string; value: string; options: Option[]; name: string }) {
+export function AccessSelect({ userId, value, options, name, own }: { userId: string; value: string; options: Option[]; name: string; own: string[] | null }) {
   const [current, setCurrent] = useState(value);
   const [msg, setMsg] = useState("");
   const [pending, start] = useTransition();
   const [show, setShow] = useState(false);
+  const [mine, setMine] = useState<string[] | null>(own);
+  const [saving, startSave] = useTransition();
   const role = options.find((o) => o.value === current);
   return (
     <span className="inline-flex items-center gap-2">
-      {show && role && <AccessPreview role={role} onClose={() => setShow(false)} />}
+      {show && role && (
+        <AccessPreview
+          role={role}
+          value={mine ?? undefined}
+          title={`${name}'s access`}
+          saving={saving}
+          onClose={() => setShow(false)}
+          onSave={(p) =>
+            startSave(async () => {
+              const same = [...p].sort().join() === [...role.permissions].sort().join();
+              if (same && !mine) return setShow(false);
+              const res = same
+                ? await (() => {
+                    const fd = new FormData();
+                    fd.set("user_id", userId);
+                    fd.set("access", role.value);
+                    return setMemberAccess({}, fd);
+                  })()
+                : await setMemberPermissions(userId, role.value === "admin" ? null : role.value, p);
+              if (res.error) setMsg(res.error);
+              else {
+                setMine(same ? null : p);
+                setMsg("Saved");
+                setShow(false);
+              }
+            })
+          }
+        />
+      )}
       <select
         value={current}
         disabled={pending}
@@ -36,6 +66,7 @@ export function AccessSelect({ userId, value, options, name }: { userId: string;
               setCurrent(before);
               setMsg(res.error);
             } else {
+              setMine(null);
               setMsg("Saved");
               setShow(true);
             }
@@ -52,6 +83,7 @@ export function AccessSelect({ userId, value, options, name }: { userId: string;
       <button type="button" onClick={() => setShow(true)} aria-label={`What ${role?.label ?? "this role"} can do`} title="What can they do?" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-brand">
         <Icon name="shield" size={15} />
       </button>
+      {mine && <span className="rounded-full bg-chip px-2 py-0.5 text-[11px] font-semibold text-brand">Custom</span>}
       {msg && <span className={`text-[12px] ${msg === "Saved" ? "text-ok" : "text-bad"}`}>{msg}</span>}
     </span>
   );
