@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/components/password-input";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -23,7 +24,7 @@ function plain(message: string) {
 // Log in with email and password, or ask for a one-time login link by email.
 export function LoginForm() {
   const router = useRouter();
-  const [next, setNext] = useState("/dashboard");
+  const [next, setNext] = useState("/workspaces");
   const [mode, setMode] = useState<"password" | "link" | "reset">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -107,7 +108,7 @@ export function LoginForm() {
       {mode === "password" && (
         <label className="flex flex-col gap-2">
           <span className="text-[13px] font-semibold">Password</span>
-          <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
+          <PasswordInput required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
         </label>
       )}
       <button type="submit" disabled={state === "busy"} className="btn-primary flex min-h-[50px] items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-70">
@@ -133,5 +134,5 @@ export function LoginForm() {
 
 /** Only allow redirects inside the app, never to another site. */
 function safeNext(value: string | null) {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/workspaces";
 }

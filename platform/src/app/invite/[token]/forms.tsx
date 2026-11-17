@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { PasswordInput } from "@/components/password-input";
 import type { ActionResult } from "@/lib/forms";
 import { acceptInvite, createAccountAndJoin } from "./actions";
 
@@ -38,11 +39,11 @@ export function CreateAccountForm({ token, email, workspace }: { token: string; 
       </label>
       <label className="flex flex-col gap-1.5">
         <span className="text-[13px] font-medium">Create a password</span>
-        <input name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="At least 8 characters" className="field h-12" />
+        <PasswordInput name="password" required minLength={8} autoComplete="new-password" placeholder="At least 8 characters" className="field h-12" />
       </label>
       <label className="flex flex-col gap-1.5">
         <span className="text-[13px] font-medium">Confirm password</span>
-        <input name="confirm" type="password" required minLength={8} autoComplete="new-password" className="field h-12" />
+        <PasswordInput name="confirm" required minLength={8} autoComplete="new-password" className="field h-12" />
       </label>
       <Problem state={state} />
       <button type="submit" disabled={pending} className={button}>

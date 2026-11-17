@@ -21,6 +21,7 @@ export type ShellUser = {
   leadsThisWeek: number;
   workspaces: { id: string; name: string; role: string }[];
   invites: { id: string; workspace: string; role: string }[];
+  canCreateWorkspace: boolean;
 };
 
 const allHrefs = [...NAV, SETTINGS_NAV].flatMap((g) => [g.href, ...(g.links ?? []).map((l) => l.href)]);
@@ -407,7 +408,11 @@ function WorkspaceSwitcher({ user, collapsed }: { user: ShellUser; collapsed: bo
             )}
 
             <div className="my-1 h-px bg-line" />
-            {creating ? (
+            <a href="/workspaces" className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13.5px] text-navy hover:bg-surface">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-surface text-muted"><Icon name="grip" size={14} /></span>
+              All workspaces
+            </a>
+            {!user.canCreateWorkspace ? null : creating ? (
               <ActionForm action={createWorkspace} className="flex flex-col gap-2 p-1.5">
                 <input name="name" required autoFocus placeholder="Workspace name, e.g. a client" className="field h-10 min-h-0" />
                 <div className="flex justify-end gap-1.5">

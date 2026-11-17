@@ -205,6 +205,13 @@ The workflow engine and webhooks run as the server, so roles don't limit them.
 
 Migration `20261118180000_more_permissions` adds permissions for areas that are coming: `calendars.manage`, `payments.manage`, `marketing.manage`, `sites.manage`, `ai.manage` and `reporting.view`. Roles can switch them on now; each feature checks its permission when it goes live.
 
+## Workspace rules and multi-tag steps
+
+Migration `20261119090000_workspace_rules_multi_tags`.
+
+- `create_workspace` now refuses people who are only members (not owner or admin) in every workspace they belong to. `can_create_workspace()` tells the app whether to show the button.
+- Workflow "Add a tag" and "Remove a tag" steps take a list (`tags`). Older steps with a single `tag` still work.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
