@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ActionForm, SubmitButton } from "@/components/action-form";
-import { getProfile, getWorkspace } from "@/lib/data";
+import { can, getProfile, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { isPlatformAdmin, providersReady } from "@/lib/deliver";
 import { updateProfile, updateWorkspace } from "./actions";
@@ -43,7 +43,7 @@ async function General() {
   const supabase = await createClient();
   const { data: acc } = await supabase.from("accounts").select("test_email, test_phone, timezone, sms_window_start, sms_window_end").eq("id", ws.account.id).single();
   const ready = providersReady();
-  const manager = ws.account.role === "owner" || ws.account.role === "admin";
+  const manager = can(ws, "settings.manage");
 
   return (
     <div className="flex flex-col gap-4">

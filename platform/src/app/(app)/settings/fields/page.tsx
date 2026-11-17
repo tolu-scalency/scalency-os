@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ActionForm, ConfirmSubmit, SubmitButton } from "@/components/action-form";
 import { fieldTypeLabel } from "@/lib/field-types";
 import { AddFieldForm, EditFieldForm } from "./field-forms";
-import { getWorkspace, listCustomFields, listCustomValues } from "@/lib/data";
+import { can, getWorkspace, listCustomFields, listCustomValues } from "@/lib/data";
 import { deleteCustomField, deleteCustomValue, saveCustomValue } from "../actions";
 
 export const metadata: Metadata = { title: "Custom fields" };
@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Custom fields" };
 export default async function FieldsPage() {
   const ws = await getWorkspace();
   const [fields, values] = await Promise.all([listCustomFields(ws.account.id), listCustomValues(ws.account.id)]);
-  const manager = ws.account.role === "owner" || ws.account.role === "admin";
+  const manager = can(ws, "settings.manage");
 
   return (
     <div className="flex flex-col gap-4">

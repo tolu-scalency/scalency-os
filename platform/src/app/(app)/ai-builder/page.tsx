@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Button, Page, PageHeader } from "@/components/ui";
-import { getPipeline, getWorkspace } from "@/lib/data";
+import { can, getPipeline, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { SETUP_TEMPLATES } from "@/lib/setup";
 import { SetupWizard, type LastSetup } from "./setup-wizard";
@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "AI setup" };
 export default async function AiSetupPage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
   const { welcome } = await searchParams;
   const ws = await getWorkspace();
-  const manager = ws.account.role === "owner" || ws.account.role === "admin";
+  const manager = can(ws, "settings.manage");
   const supabase = await createClient();
 
   const [pipeline, last] = await Promise.all([
@@ -49,7 +49,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
           welcome={Boolean(welcome)}
         />
       ) : (
-        <p className="card p-6 text-[14px] text-muted">Only the workspace owner or an admin can run the AI setup. Ask them to open this page.</p>
+        <p className="card p-6 text-[14px] text-muted">Running the AI setup needs permission to change workspace settings. Ask the workspace owner.</p>
       )}
     </Page>
   );
