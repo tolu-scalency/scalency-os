@@ -116,7 +116,7 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
   const [memberships, profile, jar] = await Promise.all([
     supabase
       .from("account_members")
-      .select("role, created_at, accounts(id, name, test_mode), account_roles(name, permissions)")
+      .select("role, permissions, created_at, accounts(id, name, test_mode), account_roles(name, permissions)")
       .eq("user_id", userId)
       .order("created_at", { ascending: true }),
     supabase.from("profiles").select("full_name").eq("user_id", userId).maybeSingle(),
@@ -128,8 +128,11 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
       role: m.role as Role,
       acc: m.accounts as unknown as { id: string; name: string; test_mode: boolean } | null,
       custom: m.account_roles as unknown as { name: string; permissions: string[] } | null,
+      own: (m.permissions as string[] | null) ?? null,
     }))
-    .filter((m): m is { role: Role; acc: { id: string; name: string; test_mode: boolean }; custom: { name: string; permissions: string[] } | null } => Boolean(m.acc));
+    .filter(
+      (m): m is { role: Role; acc: { id: string; name: string; test_mode: boolean }; custom: { name: string; permissions: string[] } | null; own: string[] | null } => Boolean(m.acc),
+    );
   if (!rows.length) redirect("/welcome");
 
   // Use the workspace they picked last; otherwise the first one they joined.
@@ -148,8 +151,8 @@ export const getWorkspace = cache(async (): Promise<Workspace> => {
       name: current.acc.name,
       testMode: current.acc.test_mode,
       role: current.role,
-      roleName: current.role === "owner" ? "Owner" : current.role === "admin" ? "Admin" : (current.custom?.name ?? "Team member"),
-      permissions: permissionsFor(current.role, current.custom?.permissions),
+      roleName: current.role === "owner" ? "Owner" : current.role === "admin" ? "Admin" : current.own ? "Custom access" : (current.custom?.name ?? "Team member"),
+      permissions: permissionsFor(current.role, current.custom?.permissions, current.own),
     },
     workspaces: rows.map((r) => ({ id: r.acc.id, name: r.acc.name, role: r.role })),
   };
@@ -376,16 +379,16 @@ export async function getDashboard(accountId: string) {
   };
 }
 
-export type Member = { userId: string; role: Role; roleId: string | null; access: string; name: string; email: string | null; joinedAt: string; isYou: boolean };
+export type Member = { userId: string; role: Role; roleId: string | null; permissions: string[] | null; access: string; name: string; email: string | null; joinedAt: string; isYou: boolean };
 
 /** Members of the workspace and open invites. */
 export async function getTeam(accountId: string, userId: string) {
   const supabase = await createClient();
   const [members, invites] = await Promise.all([
-    supabase.from("account_members").select("user_id, role, role_id, created_at, account_roles(name)").eq("account_id", accountId).order("created_at"),
+    supabase.from("account_members").select("user_id, role, role_id, permissions, created_at, account_roles(name)").eq("account_id", accountId).order("created_at"),
     supabase
       .from("account_invites")
-      .select("id, email, role, created_at, expires_at, account_roles(name)")
+      .select("id, email, role, permissions, created_at, expires_at, account_roles(name)")
       .eq("account_id", accountId)
       .is("accepted_at", null)
       .order("created_at", { ascending: false }),
@@ -401,7 +404,15 @@ export async function getTeam(accountId: string, userId: string) {
         userId: m.user_id,
         role: m.role as Role,
         roleId: (m.role_id as string | null) ?? null,
-        access: m.role === "owner" ? "Owner" : m.role === "admin" ? "Admin" : ((m.account_roles as unknown as { name: string } | null)?.name ?? "Team member"),
+        permissions: (m.permissions as string[] | null) ?? null,
+        access:
+          m.role === "owner"
+            ? "Owner"
+            : m.role === "admin"
+              ? "Admin"
+              : m.permissions
+                ? "Custom access"
+                : ((m.account_roles as unknown as { name: string } | null)?.name ?? "Team member"),
         name: p?.full_name ?? (m.user_id === userId ? "You" : "Teammate"),
         email: p?.email ?? null,
         joinedAt: m.created_at,
@@ -411,7 +422,7 @@ export async function getTeam(accountId: string, userId: string) {
     invites: (invites.data ?? []).map((i) => ({
       id: i.id as string,
       email: i.email as string,
-      access: i.role === "admin" ? "Admin" : ((i.account_roles as unknown as { name: string } | null)?.name ?? "Team member"),
+      access: i.role === "admin" ? "Admin" : i.permissions ? "Custom access" : ((i.account_roles as unknown as { name: string } | null)?.name ?? "Team member"),
       createdAt: i.created_at as string,
       expired: new Date(i.expires_at as string).getTime() < Date.now(),
     })),
