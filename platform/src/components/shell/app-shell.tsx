@@ -8,6 +8,8 @@ import { Logo } from "@/components/logo";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { acceptInvite, createWorkspace, switchWorkspace } from "@/app/(app)/workspace-actions";
 import { CommandBar } from "./command";
+import { NavList } from "./nav-list";
+import { NAV, SETTINGS_NAV } from "@/lib/nav";
 
 export type ShellUser = {
   name: string;
@@ -21,64 +23,7 @@ export type ShellUser = {
   invites: { id: string; workspace: string; role: string }[];
 };
 
-type Item = { href: string; label: string; icon: IconName; soon?: boolean };
-type Section = { title?: string; items: Item[] };
-
-// The whole product, grouped. Items marked "soon" open a preview of what's coming.
-const sections: Section[] = [
-  {
-    items: [
-      { href: "/dashboard", label: "Home", icon: "home" },
-      { href: "/inbox", label: "Inbox", icon: "inbox" },
-      { href: "/tasks", label: "Tasks", icon: "tasks" },
-      { href: "/calendar", label: "Calendar", icon: "calendar", soon: true },
-    ],
-  },
-  {
-    title: "Records",
-    items: [
-      { href: "/contacts", label: "Contacts", icon: "users" },
-      { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
-      { href: "/notes", label: "Notes", icon: "edit" },
-      { href: "/companies", label: "Companies", icon: "building", soon: true },
-    ],
-  },
-  {
-    title: "Growth",
-    items: [
-      { href: "/funnels", label: "Funnels and pages", icon: "funnel", soon: true },
-      { href: "/forms", label: "Forms and surveys", icon: "form", soon: true },
-      { href: "/contracts", label: "Proposals", icon: "card", soon: true },
-      { href: "/onboarding", label: "Client onboarding", icon: "onboarding", soon: true },
-    ],
-  },
-  {
-    title: "Marketing",
-    items: [
-      { href: "/campaigns", label: "Campaigns", icon: "megaphone", soon: true },
-      { href: "/ads", label: "Ads insights", icon: "chart", soon: true },
-      { href: "/reports", label: "Reports", icon: "activity", soon: true },
-    ],
-  },
-  {
-    title: "Automation",
-    items: [
-      { href: "/workflows", label: "Workflows", icon: "zap" },
-      { href: "/ai-builder", label: "AI setup", icon: "spark" },
-      { href: "/agents", label: "AI agents", icon: "user", soon: true },
-    ],
-  },
-  {
-    title: "Team",
-    items: [
-      { href: "/chat", label: "Team chat", icon: "hash" },
-      { href: "/settings/team", label: "Members", icon: "team" },
-      { href: "/settings", label: "Settings", icon: "settings" },
-    ],
-  },
-];
-
-const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));
+const allHrefs = [...NAV, SETTINGS_NAV].flatMap((g) => [g.href, ...(g.links ?? []).map((l) => l.href)]);
 function activeHref(pathname: string) {
   return allHrefs.filter((h) => pathname === h || pathname.startsWith(h + "/")).sort((a, b) => b.length - a.length)[0];
 }
@@ -127,7 +72,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      <aside className={`sticky top-0 hidden h-screen flex-none transition-[width] duration-200 ease-out lg:block ${collapsed ? "w-[76px]" : "w-[256px]"}`}>
+      <aside className={`sticky top-0 z-40 hidden h-screen flex-none transition-[width] duration-200 ease-out lg:block ${collapsed ? "w-[76px]" : "w-[256px]"}`}>
         <Sidebar pathname={pathname} user={user} collapsed={collapsed} onToggle={toggle} />
       </aside>
 
@@ -143,7 +88,11 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
         <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} />
-        <div className="flex-1 pb-[var(--nav-h)]">{children}</div>
+        <div className="flex-1 pb-[var(--nav-h)]">
+          <div key={pathname} className="page-in">
+            {children}
+          </div>
+        </div>
       </div>
       <MobileTabBar pathname={pathname} onMore={() => setMobileOpen(true)} />
     </div>
@@ -251,43 +200,10 @@ function Sidebar({ pathname, user, collapsed, onToggle, mobile = false }: { path
         </Link>
       </div>
 
-      <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-3 pb-3 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.25)_transparent]">
-        {sections.map((section, si) => (
-          <div key={si} className={si === 0 ? "" : "mt-4"}>
-            {section.title &&
-              (collapsed ? <div className="mx-auto mb-2 h-px w-8 bg-white/15" /> : <div className="px-2.5 pb-1.5 text-[11px] font-medium text-white/55">{section.title}</div>)}
-            <ul className="flex flex-col gap-0.5">
-              {section.items.map((item) => {
-                const on = item.href === current;
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      title={collapsed ? item.label : undefined}
-                      aria-current={on ? "page" : undefined}
-                      className={`flex h-9 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] transition-all duration-150 ${collapsed ? "justify-center" : ""} ${
-                        on
-                          ? "bg-white font-semibold text-brand shadow-[0_6px_18px_-8px_rgba(2,30,80,0.55)]"
-                          : item.soon
-                            ? "text-white/60 hover:bg-white/10 hover:text-white"
-                            : "font-medium text-white/90 hover:bg-white/10 hover:text-white"
-                      }`}
-                    >
-                      <Icon name={item.icon} size={17} strokeWidth={on ? 2 : 1.7} />
-                      {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-                      {!collapsed && item.soon && (
-                        <span className={`rounded-md px-1.5 py-px text-[10px] font-medium ${on ? "bg-chip text-brand" : "bg-white/10 text-white/70"}`}>Soon</span>
-                      )}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </div>
+      <NavList pathname={pathname} collapsed={collapsed} mobile={mobile} />
 
       <div className="flex-none border-t border-white/10 px-3 py-3">
+        <NavList pathname={pathname} collapsed={collapsed} mobile={mobile} groups={[SETTINGS_NAV]} flat />
         <form action="/auth/signout" method="post">
           <button
             type="submit"

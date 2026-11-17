@@ -3,16 +3,21 @@
 import { useState, useTransition } from "react";
 import { Icon } from "@/components/icon";
 import { inviteLink, setMemberAccess } from "../actions";
+import { AccessPreview, type RoleOption } from "./access-preview";
 
-type Option = { value: string; label: string };
+
+type Option = RoleOption;
 
 /** Changes someone's access as soon as a new option is picked. */
 export function AccessSelect({ userId, value, options, name }: { userId: string; value: string; options: Option[]; name: string }) {
   const [current, setCurrent] = useState(value);
   const [msg, setMsg] = useState("");
   const [pending, start] = useTransition();
+  const [show, setShow] = useState(false);
+  const role = options.find((o) => o.value === current);
   return (
     <span className="inline-flex items-center gap-2">
+      {show && role && <AccessPreview role={role} onClose={() => setShow(false)} />}
       <select
         value={current}
         disabled={pending}
@@ -30,7 +35,10 @@ export function AccessSelect({ userId, value, options, name }: { userId: string;
             if (res.error) {
               setCurrent(before);
               setMsg(res.error);
-            } else setMsg("Saved");
+            } else {
+              setMsg("Saved");
+              setShow(true);
+            }
           });
         }}
         className="field h-9 w-auto min-w-[150px] py-0 text-[13px]"
@@ -41,6 +49,9 @@ export function AccessSelect({ userId, value, options, name }: { userId: string;
           </option>
         ))}
       </select>
+      <button type="button" onClick={() => setShow(true)} aria-label={`What ${role?.label ?? "this role"} can do`} title="What can they do?" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-brand">
+        <Icon name="shield" size={15} />
+      </button>
       {msg && <span className={`text-[12px] ${msg === "Saved" ? "text-ok" : "text-bad"}`}>{msg}</span>}
     </span>
   );

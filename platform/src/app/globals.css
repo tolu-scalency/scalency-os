@@ -230,8 +230,66 @@ body {
   animation: flow-down 0.8s linear infinite;
 }
 
+/* A little life: pages slide up gently, panels pop in, cards lift and buttons press. Kept subtle. */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@utility page-in {
+  animation: page-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes flyout-in {
+  from { opacity: 0; transform: translateX(-6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.flyout {
+  animation: flyout-in 0.16s ease-out both;
+  transform-origin: left top;
+}
+.nav-item {
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.nav-item:active {
+  transform: scale(0.98);
+}
+.card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+a.card:hover,
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px -18px rgba(11, 36, 71, 0.35);
+}
+.btn-primary,
+.btn-ghost {
+  transition: transform 0.12s ease, box-shadow 0.2s ease, background-color 0.15s ease, filter 0.15s ease;
+}
+.btn-primary:hover {
+  filter: brightness(1.05);
+}
+.btn-primary:active,
+.btn-ghost:active {
+  transform: scale(0.97);
+}
+/* Children of a list appear one after another. */
+.stagger > * {
+  animation: page-in 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(2) { animation-delay: 0.04s; }
+.stagger > *:nth-child(3) { animation-delay: 0.08s; }
+.stagger > *:nth-child(4) { animation-delay: 0.12s; }
+.stagger > *:nth-child(5) { animation-delay: 0.16s; }
+.stagger > *:nth-child(n + 6) { animation-delay: 0.2s; }
+/* The pipeline's sideways scroll bar: easy to see and grab. */
+.board-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #b8c4d6 transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .connector, .skeleton, .rise, .fade-in { animation: none; }
+  .connector, .skeleton, .rise, .fade-in, .page-in, .flyout, .stagger > * { animation: none; }
+  .card, .nav-item, .btn-primary, .btn-ghost { transition: none; }
+  a.card:hover, .card-lift:hover, .btn-primary:active, .btn-ghost:active, .nav-item:active { transform: none; }
 }
 
 @media (min-width: 1024px) {

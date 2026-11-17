@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Icon } from "@/components/icon";
 import type { BoardColumn } from "@/lib/data";
 import { moveCard } from "./actions";
@@ -19,6 +19,20 @@ export function Board({ columns: initial, children }: { columns: BoardColumn[]; 
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // On bigger screens the board fills the window, so its sideways scroll bar sits at the bottom of the screen.
+  const scroller = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  useEffect(() => {
+    function fit() {
+      const el = scroller.current;
+      if (!el || window.innerWidth < 640) return setHeight(null);
+      const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0;
+      setHeight(Math.max(320, window.innerHeight - el.getBoundingClientRect().top - nav - 12));
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
   const [, startTransition] = useTransition();
 
   function move(cardId: string, toStage: string) {
@@ -43,8 +57,12 @@ export function Board({ columns: initial, children }: { columns: BoardColumn[]; 
       <p className="flex items-center gap-1.5 text-[12.5px] text-muted sm:hidden">
         <Icon name="arrowRight" size={13} /> Swipe to see every stage. Tap someone to move them.
       </p>
-      <div className="-mx-4 snap-x snap-mandatory overflow-x-auto scroll-px-4 px-4 pb-3 sm:-mx-7 sm:snap-none sm:px-7">
-        <div className="flex min-w-min items-start gap-3">
+      <div
+        ref={scroller}
+        style={height ? { height } : undefined}
+        className="board-scroll -mx-4 snap-x snap-mandatory overflow-x-auto scroll-px-4 px-4 pb-3 sm:-mx-7 sm:snap-none sm:px-7"
+      >
+        <div className="flex h-full min-w-min items-start gap-3 sm:items-stretch">
           {columns.map((col, i) => {
             const total = col.cards.reduce((s, k) => s + (k.valuePence ?? 0), 0);
             return (
@@ -63,7 +81,7 @@ export function Board({ columns: initial, children }: { columns: BoardColumn[]; 
                   setDragging(null);
                   if (id) move(id, col.id);
                 }}
-                className={`flex min-h-[300px] w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col sm:min-h-[420px] sm:w-[280px] gap-2 rounded-2xl p-2.5 transition-colors ${
+                className={`flex min-h-[300px] w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col gap-2 rounded-2xl p-2.5 transition-colors sm:max-h-full sm:min-h-[420px] sm:w-[280px] sm:overflow-y-auto sm:[scrollbar-width:thin] ${
                   over === col.id ? "bg-chip ring-2 ring-sky/50" : "bg-[#eaeff6]"
                 }`}
               >

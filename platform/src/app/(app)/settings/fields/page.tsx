@@ -4,6 +4,7 @@ import { fieldTypeLabel } from "@/lib/field-types";
 import { AddFieldForm, EditFieldForm } from "./field-forms";
 import { can, getWorkspace, listCustomFields, listCustomValues } from "@/lib/data";
 import { deleteCustomField, deleteCustomValue, saveCustomValue } from "../actions";
+import { CopyId } from "@/components/copy-id";
 
 export const metadata: Metadata = { title: "Custom fields" };
 
@@ -34,6 +35,7 @@ export default async function FieldsPage() {
                     </span>
                   </span>
                   <code className="min-w-0 break-all rounded bg-surface px-2 py-0.5 text-[12px] text-muted">{`{{contact.${f.key}}}`}</code>
+                  <CopyId label="Field ID" id={f.id} className="hidden lg:inline-flex" />
                   {manager && <EditFieldForm id={f.id} label={f.label} type={f.type} options={f.options} />}
                   {manager && (
                     <ActionForm action={deleteCustomField}>

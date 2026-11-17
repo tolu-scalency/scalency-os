@@ -4,6 +4,8 @@ import { ActionForm, IconSubmit, SubmitButton } from "@/components/action-form";
 import { Avatar, Pill } from "@/components/ui";
 import { can, getTeam, getWorkspace, initialsOf, listRoles, timeAgo } from "@/lib/data";
 import { cancelInvite, inviteMember, removeMember, resendInvite } from "../actions";
+import { ALL_PERMISSIONS } from "@/lib/permissions";
+import { InviteAccessPicker, type RoleOption } from "./access-preview";
 import { AccessSelect, CopyInviteLink } from "./team-controls";
 
 export const metadata: Metadata = { title: "Team" };
@@ -13,7 +15,10 @@ export default async function TeamPage() {
   const [team, roles] = await Promise.all([getTeam(ws.account.id, ws.userId), listRoles(ws.account.id)]);
   const manager = can(ws, "team.manage");
   const owner = ws.account.role === "owner";
-  const options = [{ value: "admin", label: "Admin (full access)" }, ...roles.map((r) => ({ value: r.id, label: r.name }))];
+  const options: RoleOption[] = [
+    { value: "admin", label: "Admin (full access)", description: "Can do everything, including settings and the team.", permissions: [...ALL_PERMISSIONS] },
+    ...roles.map((r) => ({ value: r.id, label: r.name, description: r.description, permissions: r.permissions })),
+  ];
   const defaultRole = roles.find((r) => r.name === "Team member")?.id ?? roles[0]?.id ?? "admin";
 
   return (
@@ -30,13 +35,7 @@ export default async function TeamPage() {
           </p>
           <ActionForm action={inviteMember} resetOnOk className="mt-4 flex flex-wrap gap-2">
             <input name="email" type="email" required placeholder="colleague@company.com" aria-label="Email" className="field min-w-0 flex-[2_1_240px]" />
-            <select name="access" defaultValue={defaultRole} aria-label="Access" className="field w-auto flex-[0_1_200px]">
-              {options.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            <InviteAccessPicker options={options} defaultValue={defaultRole} />
             <SubmitButton icon="plus" pendingText="Inviting…">
               Invite
             </SubmitButton>

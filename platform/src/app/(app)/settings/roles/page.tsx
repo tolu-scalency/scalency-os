@@ -22,6 +22,7 @@ function PermissionBoxes({ role, disabled }: { role?: AccessRole; disabled: bool
                 <input type="checkbox" name="permissions" value={p.key} defaultChecked={role?.permissions.includes(p.key)} disabled={disabled} className="mt-0.5 h-4 w-4 flex-none" />
                 <span>
                   <span className="font-medium">{p.label}</span>
+                  {"soon" in p && p.soon && <span className="ml-1.5 rounded-md bg-surface px-1.5 py-px text-[10px] font-medium text-muted">Soon</span>}
                   {p.hint && <span className="block text-[12px] text-muted">{p.hint}</span>}
                 </span>
               </label>
