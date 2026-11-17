@@ -203,6 +203,8 @@ Migration `20261118150000_roles_and_invites`.
 
 The workflow engine and webhooks run as the server, so roles don't limit them.
 
+Migration `20261118180000_more_permissions` adds permissions for areas that are coming: `calendars.manage`, `payments.manage`, `marketing.manage`, `sites.manage`, `ai.manage` and `reporting.view`. Roles can switch them on now; each feature checks its permission when it goes live.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

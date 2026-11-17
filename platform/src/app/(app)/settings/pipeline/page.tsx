@@ -4,6 +4,7 @@ import { ActionForm, IconSubmit, SubmitButton } from "@/components/action-form";
 import { getPipeline, getWorkspace } from "@/lib/data";
 import { addStage } from "../../pipeline/actions";
 import { deleteStage, renameStage, reorderStage } from "../actions";
+import { CopyId } from "@/components/copy-id";
 
 export const metadata: Metadata = { title: "Pipeline settings" };
 
@@ -34,6 +35,7 @@ async function Stages() {
       <div className="mb-4">
         <h2 className="text-[16px] font-semibold">Stages</h2>
         <p className="text-[13.5px] text-muted">Rename, reorder or remove the stages of your {pipeline.name.toLowerCase()} pipeline.</p>
+        <CopyId label="Pipeline ID" id={pipeline.id} className="mt-2" />
       </div>
       <ol className="flex flex-col gap-2">
         {pipeline.stages.map((s, i) => (
@@ -44,6 +46,7 @@ async function Stages() {
               <input name="name" defaultValue={s.name} required aria-label={`Stage ${i + 1} name`} className="field h-10 min-h-0" />
               <SubmitButton variant="ghost" pendingText="…" className="min-h-10 px-3">Save</SubmitButton>
             </ActionForm>
+            <CopyId label="Stage ID" id={s.id} className="hidden xl:inline-flex" />
             <div className="flex items-center">
               <ActionForm action={reorderStage}>
                 <input type="hidden" name="id" value={s.id} />

@@ -92,7 +92,7 @@ async function Home() {
         </section>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+      <div className="stagger grid grid-cols-2 gap-3 sm:gap-4 lg:[grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         {stats.map((k) => (
           <Link key={k.label} href={k.href} className="card group flex flex-col-reverse items-start justify-between gap-3 p-4 transition-shadow hover:shadow-[var(--shadow-pop)] sm:flex-row sm:p-5">
             <div className="min-w-0">

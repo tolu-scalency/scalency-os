@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Icon } from "@/components/icon";
 import { Page, Tile } from "@/components/ui";
-import { FEATURES } from "@/lib/features";
+import { FEATURES, type Feature } from "@/lib/features";
 
 export function comingSoonMetadata(key: string): Metadata {
   return { title: FEATURES[key]?.title ?? "Coming soon" };
@@ -12,6 +12,10 @@ export function comingSoonMetadata(key: string): Metadata {
 export function ComingSoon({ feature: key, bare = false }: { feature: string; bare?: boolean }) {
   const f = FEATURES[key];
   if (!f) return null;
+  return <ComingSoonView f={f} bare={bare} />;
+}
+
+export function ComingSoonView({ f, bare = false }: { f: Feature; bare?: boolean }) {
   const Wrap = bare ? Bare : Page;
   return (
     <Wrap>
@@ -43,7 +47,7 @@ export function ComingSoon({ feature: key, bare = false }: { feature: string; ba
           <div key={p.title} className="card p-5">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[12px] font-semibold text-brand">{i + 1}</span>
             <h2 className="mt-3 text-[15px] font-semibold">{p.title}</h2>
-            <p className="mt-1 text-[13.5px] text-muted">{p.text}</p>
+            {p.text && <p className="mt-1 text-[13.5px] text-muted">{p.text}</p>}
           </div>
         ))}
       </div>

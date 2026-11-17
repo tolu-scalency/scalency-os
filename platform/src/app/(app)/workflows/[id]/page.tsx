@@ -9,6 +9,7 @@ import { getPipeline, getWorkflow, getWorkspace, listCustomFields, listCustomVal
 import { runDueNow, setWorkflowStatus } from "../actions";
 import { actionLabel } from "../labels";
 import { WorkflowEditor } from "./editor";
+import { CopyId } from "@/components/copy-id";
 
 export const metadata: Metadata = { title: "Workflow" };
 
@@ -74,6 +75,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
             <SubmitButton variant="plain" pendingText="Archiving…">Archive</SubmitButton>
           </ActionForm>
         </div>
+        <CopyId label="Workflow ID" id={wf.id} className="mt-3" />
       </section>
 
       <WorkflowEditor

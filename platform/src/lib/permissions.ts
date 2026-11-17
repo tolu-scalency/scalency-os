@@ -1,6 +1,8 @@
 // What each permission lets someone do. The database enforces the same list
 // (see the roles_and_invites migration), so this file only labels and checks.
 
+export type PermissionInfo = { key: string; group: string; label: string; hint: string; soon?: boolean };
+
 export const PERMISSIONS = [
   { key: "contacts.view_all", group: "Contacts", label: "See all contacts", hint: "Without this, people only see the contacts they own." },
   { key: "contacts.edit", group: "Contacts", label: "Add and edit contacts", hint: "Includes tags, notes and custom field values." },
@@ -9,6 +11,12 @@ export const PERMISSIONS = [
   { key: "pipeline.manage", group: "Pipeline", label: "Change pipeline stages", hint: "Add, rename, reorder and remove stages." },
   { key: "inbox.send", group: "Inbox", label: "Send emails and texts", hint: "" },
   { key: "workflows.manage", group: "Automation", label: "Manage workflows", hint: "Create, edit and switch workflows on or off." },
+  { key: "calendars.manage", group: "Calendar", label: "Manage calendars and bookings", hint: "Calendars, booking pages and appointments.", soon: true },
+  { key: "payments.manage", group: "Payments", label: "Manage payments", hint: "Invoices, products, subscriptions and refunds.", soon: true },
+  { key: "marketing.manage", group: "Marketing", label: "Manage marketing", hint: "Campaigns, social planner and templates.", soon: true },
+  { key: "sites.manage", group: "Sites", label: "Manage sites and forms", hint: "Funnels, websites, forms and surveys.", soon: true },
+  { key: "ai.manage", group: "AI", label: "Manage AI", hint: "AI agents, voice receptionist and creative studio.", soon: true },
+  { key: "reporting.view", group: "Reporting", label: "See reports", hint: "Dashboards and reports.", soon: true },
   { key: "settings.manage", group: "Settings", label: "Change workspace settings", hint: "Custom fields, saved details, tags, sending and AI setup." },
   { key: "team.manage", group: "Settings", label: "Manage the team", hint: "Invite and remove people, and change roles." },
 ] as const;
@@ -25,6 +33,10 @@ export const DEFAULT_MEMBER_PERMISSIONS: Permission[] = [
   "pipeline.manage",
   "inbox.send",
   "workflows.manage",
+  "calendars.manage",
+  "marketing.manage",
+  "sites.manage",
+  "reporting.view",
 ];
 
 export function permissionsFor(role: string, rolePermissions: string[] | null | undefined): Permission[] {

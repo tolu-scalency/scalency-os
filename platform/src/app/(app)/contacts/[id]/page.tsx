@@ -12,6 +12,7 @@ import { enrollContact } from "@/app/(app)/workflows/actions";
 import { addNote, saveCustomFields, setDealStatus, setOwner, setStage, setValue } from "./actions";
 import { ContactEditor } from "./contact-editor";
 import { TagEditor } from "./tag-editor";
+import { CopyId } from "@/components/copy-id";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -74,6 +75,7 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
                 {c.phone && <span className="inline-flex items-center gap-1.5 tabular-nums"><Icon name="phone" size={14} />{c.phone}</span>}
                 <span>Added {timeAgo(c.createdAt).toLowerCase()}</span>
               </div>
+              <CopyId label="Contact ID" id={c.id} className="mt-2" />
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href={`/inbox?c=${c.id}`} className="btn-ghost inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold">

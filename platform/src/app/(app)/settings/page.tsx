@@ -4,6 +4,7 @@ import { can, getProfile, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { isPlatformAdmin, providersReady } from "@/lib/deliver";
 import { updateProfile, updateWorkspace } from "./actions";
+import { CopyId } from "@/components/copy-id";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -47,6 +48,14 @@ async function General() {
 
   return (
     <div className="flex flex-col gap-4">
+      <section className="card flex flex-wrap items-center gap-3 p-5 sm:p-6">
+        <div className="min-w-0 flex-[1_1_240px]">
+          <h2 className="text-[16px] font-semibold">{ws.account.name}</h2>
+          <p className="text-[13px] text-muted">Use these IDs when connecting other tools or asking for support.</p>
+        </div>
+        <CopyId label="Workspace ID" id={ws.account.id} />
+        <CopyId label="Your user ID" id={ws.userId} />
+      </section>
       <Section title="Your profile" text="How you appear to your team.">
         <ActionForm action={updateProfile} className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
