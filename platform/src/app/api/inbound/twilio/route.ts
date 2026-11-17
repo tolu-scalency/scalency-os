@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { adminClient } from "@/lib/admin";
-import { deliverPending } from "@/lib/deliver";
+import { runWorkflowsSoon } from "@/lib/run-soon";
 
 // Twilio calls this when someone texts the Scalency number ("A message comes in" webhook).
 // The reply is matched to the contact who was last texted from that number, saved in the
@@ -84,7 +84,6 @@ export async function POST(request: Request) {
   if (STOP.has(word)) await admin.from("contacts").update({ sms_unsubscribed_at: new Date().toISOString() }).eq("id", contact);
   else if (START.has(word)) await admin.from("contacts").update({ sms_unsubscribed_at: null }).eq("id", contact);
 
-  await admin.rpc("run_due_workflows", { target_account: account });
-  await deliverPending(admin, account);
+  runWorkflowsSoon(admin, account);
   return empty();
 }

@@ -3,9 +3,9 @@
 import { parseFieldValue } from "@/lib/field-types";
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { deliverPending } from "@/lib/deliver";
 import { getWorkspace } from "@/lib/data";
 import { parsePounds, text, type ActionResult } from "@/lib/forms";
+import { runWorkflowsSoon } from "@/lib/run-soon";
 
 /** Moves a contact to a stage. Adds them to the pipeline if they aren't in it yet. */
 export async function setStage(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -50,8 +50,7 @@ export async function setStage(_prev: ActionResult, fd: FormData): Promise<Actio
     type: "stage.changed",
     summary: `Moved to ${stage.name}`,
   });
-  await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
-  await deliverPending(supabase, ws.account.id);
+  runWorkflowsSoon(supabase, ws.account.id);
   refresh();
   return {};
 }
@@ -88,9 +87,8 @@ export async function addNote(_prev: ActionResult, fd: FormData): Promise<Action
   return { ok: "Note added." };
 }
 
-async function runNow(supabase: Awaited<ReturnType<typeof createClient>>, accountId: string) {
-  await supabase.rpc("run_due_workflows", { target_account: accountId });
-  await deliverPending(supabase, accountId);
+function runNow(supabase: Awaited<ReturnType<typeof createClient>>, accountId: string) {
+  runWorkflowsSoon(supabase, accountId);
 }
 
 /** Adds a tag to a contact, creating the tag if it's new. Tag workflows start straight away. */
@@ -109,7 +107,7 @@ export async function addTag(_prev: ActionResult, fd: FormData): Promise<ActionR
   }
   const { error } = await supabase.from("contact_tags").upsert({ account_id: ws.account.id, contact_id: contactId, tag_id: tagId }, { onConflict: "contact_id,tag_id", ignoreDuplicates: true });
   if (error) return { error: "We couldn't add the tag." };
-  await runNow(supabase, ws.account.id);
+  runNow(supabase, ws.account.id);
   refresh();
   return { ok: "Tag added." };
 }
@@ -122,7 +120,7 @@ export async function removeTag(_prev: ActionResult, fd: FormData): Promise<Acti
   const supabase = await createClient();
   const { error } = await supabase.from("contact_tags").delete().eq("contact_id", contactId).eq("tag_id", tagId).eq("account_id", ws.account.id);
   if (error) return { error: "We couldn't remove the tag." };
-  await runNow(supabase, ws.account.id);
+  runNow(supabase, ws.account.id);
   refresh();
   return {};
 }
@@ -154,7 +152,7 @@ export async function setDealStatus(_prev: ActionResult, fd: FormData): Promise<
   const { data: opp, error } = await supabase.from("opportunities").update({ status }).eq("id", oppId).eq("account_id", ws.account.id).select("contact_id").maybeSingle();
   if (error || !opp) return { error: "We couldn't update the deal." };
   await supabase.from("activity").insert({ account_id: ws.account.id, contact_id: opp.contact_id, opportunity_id: oppId, type: "deal.status", summary: status === "open" ? "Deal reopened" : `Deal marked ${status}` });
-  await runNow(supabase, ws.account.id);
+  runNow(supabase, ws.account.id);
   refresh();
   return {};
 }

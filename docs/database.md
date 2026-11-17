@@ -180,6 +180,10 @@ Migration `20261117090000_ai_setup`, plus the edge function `supabase/functions/
 
 Nothing changes in a workspace until someone reviews the proposal and clicks Build.
 
+## Workspace names in sign-in emails
+
+Migration `20261118120000_workspace_name_in_emails`. Each user's auth metadata holds `workspace_name`: the first workspace they joined. `sync_workspace_name(user)` sets it, and triggers keep it current when someone joins or leaves a workspace (`account_members_workspace_name`) or a workspace is renamed (`accounts_workspace_name`). The sign-in, password, code and email-change templates in `supabase/templates` read it, so they say "Sign in to Maximus HQ" rather than "Scalency OS".
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
