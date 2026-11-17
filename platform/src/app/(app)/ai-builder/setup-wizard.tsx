@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import { createClient } from "@/lib/supabase/browser";
+import { FIELD_TYPES, OPTION_TYPES, type FieldType } from "@/lib/field-types";
 import type { Blueprint, SetupResult } from "@/lib/setup";
 import { applySetup, undoSetup } from "./actions";
 
@@ -635,9 +636,44 @@ function Review({
         </div>
       </Section>
 
-      <Section icon="form" title="Contact fields" hint="Extra details saved on every contact.">
-        <Chips items={plan.fields.map((f) => f.label)} empty="No extra fields." onRemove={(i) => set({ fields: plan.fields.filter((_, j) => j !== i) })} />
-        <AddRow placeholder="Add a field, e.g. Budget" onAdd={(v) => set({ fields: [...plan.fields, { label: v }] })} />
+      <Section icon="form" title="Contact fields" hint="Extra details saved on every contact. Pick a type so the right box shows.">
+        {plan.fields.length === 0 ? (
+          <p className="text-[13px] text-muted">No extra fields.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {plan.fields.map((f, i) => {
+              const type = f.type ?? "text";
+              const patch = (p: Partial<Blueprint["fields"][number]>) => set({ fields: plan.fields.map((x, j) => (j === i ? { ...x, ...p } : x)) });
+              return (
+                <li key={i} className="flex flex-col gap-2 rounded-xl border border-line p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input value={f.label} maxLength={60} onChange={(e) => patch({ label: e.target.value })} aria-label="Field name" className="field min-w-0 flex-[1_1_180px]" />
+                    <select value={type} onChange={(e) => patch({ type: e.target.value as FieldType })} aria-label={`Type for ${f.label}`} className="field w-auto min-w-0 flex-[0_1_170px]">
+                      {FIELD_TYPES.map((t) => (
+                        <option key={t.type} value={t.type}>
+                          {t.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => set({ fields: plan.fields.filter((_, j) => j !== i) })} aria-label={`Remove ${f.label}`} className="rounded-lg p-2 text-muted hover:bg-surface hover:text-bad">
+                      <Icon name="trash" size={14} />
+                    </button>
+                  </div>
+                  {(OPTION_TYPES as string[]).includes(type) && (
+                    <input
+                      defaultValue={(f.options ?? []).join(", ")}
+                      onBlur={(e) => patch({ options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean) })}
+                      placeholder="Options, separated by commas"
+                      aria-label={`Options for ${f.label}`}
+                      className="field text-[13px]"
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <AddRow placeholder="Add a field, e.g. Budget" onAdd={(v) => set({ fields: [...plan.fields, { label: v, type: "text", options: [] }] })} />
       </Section>
 
       <Section icon="tag" title="Tags" hint="Labels for sorting contacts, like lead source.">

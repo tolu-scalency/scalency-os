@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FieldInput } from "@/components/field-input";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon, type IconName } from "@/components/icon";
@@ -289,10 +290,10 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
               <ActionForm action={saveCustomFields} className="flex flex-col gap-2.5">
                 <input type="hidden" name="contact_id" value={c.id} />
                 {customFields.map((f) => (
-                  <label key={f.key} className="flex flex-col gap-1">
+                  <div key={f.key} className="flex flex-col gap-1">
                     <span className="text-[12.5px] font-medium text-muted">{f.label}</span>
-                    <input name={`cf_${f.key}`} defaultValue={c.custom[f.key] != null ? String(c.custom[f.key]) : ""} maxLength={500} className="field" />
-                  </label>
+                    <FieldInput field={f} value={c.custom[f.key]} />
+                  </div>
                 ))}
                 <div className="flex justify-end">
                   <SubmitButton variant="ghost" pendingText="Saving…">Save fields</SubmitButton>

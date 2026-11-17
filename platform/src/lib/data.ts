@@ -629,14 +629,14 @@ export async function listTags(accountId: string): Promise<string[]> {
   return (data ?? []).map((t) => t.name as string);
 }
 
-export type CustomField = { id: string; key: string; label: string };
+export type CustomField = { id: string; key: string; label: string; type: import("@/lib/field-types").FieldType; options: string[] };
 export type CustomValue = { key: string; value: string };
 
 /** The workspace's own contact fields (like GoHighLevel custom fields). */
 export async function listCustomFields(accountId: string): Promise<CustomField[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("custom_fields").select("id, key, label").eq("account_id", accountId).eq("object", "contact").order("position").order("created_at");
-  return (data ?? []) as CustomField[];
+  const { data } = await supabase.from("custom_fields").select("id, key, label, type, options").eq("account_id", accountId).eq("object", "contact").order("position").order("created_at");
+  return (data ?? []).map((f) => ({ ...f, options: Array.isArray(f.options) ? (f.options as string[]) : [] })) as CustomField[];
 }
 
 /** Reusable values for messages, like a booking link (like GoHighLevel custom values). */

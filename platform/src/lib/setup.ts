@@ -1,6 +1,7 @@
 // The AI setup assistant's proposal ("blueprint") and how it becomes a plan
 // for the database. Shared by the page (client) and the Build action (server).
 
+import { cleanOptions, isFieldType, OPTION_TYPES, type FieldType } from "@/lib/field-types";
 import { SETUP_TEMPLATE_KEYS, TEMPLATES } from "@/lib/workflow-templates";
 
 export type Blueprint = {
@@ -8,7 +9,7 @@ export type Blueprint = {
   business_name?: string;
   industry?: string;
   pipeline: { name: string; stages: string[] };
-  fields: { label: string; key?: string; why?: string }[];
+  fields: { label: string; key?: string; why?: string; type?: FieldType; options?: string[] }[];
   tags: string[];
   workflows: { template: string; why?: string }[];
   tasks: { title: string; due_in_days: number }[];
@@ -44,7 +45,17 @@ export function cleanBlueprint(raw: unknown): Blueprint | string {
   if (stages.length < 2) return "Add at least two pipeline stages.";
 
   const fields = uniqueBy(
-    (Array.isArray(b.fields) ? b.fields : []).map((f) => ({ label: str((f as Obj)?.label, 60), key: toKey(str((f as Obj)?.label, 60)) })),
+    (Array.isArray(b.fields) ? b.fields : []).map((f) => {
+      const o = f as Obj;
+      const type: FieldType = isFieldType(o?.type) ? o.type : "text";
+      const options = OPTION_TYPES.includes(type) ? cleanOptions(o?.options) : [];
+      return {
+        label: str(o?.label, 60),
+        key: toKey(str(o?.label, 60)),
+        type: OPTION_TYPES.includes(type) && options.length < 2 ? ("text" as FieldType) : type,
+        options,
+      };
+    }),
     (f) => f.key,
   ).slice(0, 20);
 
@@ -86,7 +97,7 @@ export function cleanBlueprint(raw: unknown): Blueprint | string {
 export function buildPlan(b: Blueprint, replaceStages: boolean, hookToken: () => string) {
   return {
     pipeline: { name: b.pipeline.name, stages: b.pipeline.stages, replace: replaceStages },
-    fields: b.fields.map((f) => ({ key: f.key || toKey(f.label), label: f.label })),
+    fields: b.fields.map((f) => ({ key: f.key || toKey(f.label), label: f.label, type: f.type ?? "text", options: f.options ?? [] })),
     tags: b.tags,
     workflows: b.workflows.map(({ template }) => {
       const t = TEMPLATES[template];

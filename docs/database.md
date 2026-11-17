@@ -158,6 +158,14 @@ Migration `20261114090000_email_builder_fields`.
 
 Custom fields (`custom_fields`, object "contact") and custom values (`custom_values`) are managed in Settings, then Custom fields.
 
+### Field types
+
+Migration `20261118090000_field_types`. Each custom field has a type: short text, long text, number, money, date, dropdown (`select`), multi-select, yes/no, website link, email or phone. Dropdowns keep their choices in `options` (up to 50).
+
+Values live in `contacts.custom` in their proper shape: numbers and money as numbers, yes/no as true/false, multi-select as a list, dates as `YYYY-MM-DD`. The trigger `contacts_shape_custom` (function `shape_contact_custom`) shapes every write, including workflow "Update a field" steps, using `coerce_field_value`. Anything it can't read is kept as text, so nothing is lost. `render_template` shows these nicely in messages: lists as "a, b", Yes/No, dates as "1 Dec 2026", money with two decimals.
+
+The AI setup assistant can now create typed fields and dropdown options.
+
 ## AI setup assistant
 
 Migration `20261117090000_ai_setup`, plus the edge function `supabase/functions/ai-setup`.

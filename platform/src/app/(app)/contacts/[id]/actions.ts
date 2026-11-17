@@ -1,5 +1,6 @@
 "use server";
 
+import { parseFieldValue } from "@/lib/field-types";
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { deliverPending } from "@/lib/deliver";
@@ -164,15 +165,19 @@ export async function saveCustomFields(_prev: ActionResult, fd: FormData): Promi
   const ws = await getWorkspace();
   const supabase = await createClient();
   const [{ data: fields }, { data: contact }] = await Promise.all([
-    supabase.from("custom_fields").select("key").eq("account_id", ws.account.id).eq("object", "contact"),
+    supabase.from("custom_fields").select("key, label, type, options").eq("account_id", ws.account.id).eq("object", "contact"),
     supabase.from("contacts").select("custom").eq("id", contactId).eq("account_id", ws.account.id).maybeSingle(),
   ]);
   if (!contact) return { error: "That contact no longer exists." };
   const custom = { ...((contact.custom as Record<string, unknown>) ?? {}) };
   for (const f of fields ?? []) {
-    const v = text(fd, `cf_${f.key}`, 500);
-    if (v) custom[f.key] = v;
-    else delete custom[f.key];
+    const name = `cf_${f.key}`;
+    if (!fd.has(name) && !fd.has(`${name}__multi`)) continue;
+    const raw = f.type === "multi_select" ? fd.getAll(name).map(String) : String(fd.get(name) ?? "");
+    const parsed = parseFieldValue(f.type, Array.isArray(f.options) ? (f.options as string[]) : [], raw, f.label);
+    if ("error" in parsed) return { error: parsed.error };
+    if (parsed.value === null) delete custom[f.key];
+    else custom[f.key] = parsed.value;
   }
   const { error } = await supabase.from("contacts").update({ custom }).eq("id", contactId).eq("account_id", ws.account.id);
   if (error) return { error: "We couldn't save the fields." };

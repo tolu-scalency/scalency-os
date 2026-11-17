@@ -1,5 +1,6 @@
 "use server";
 
+import { cleanOptions, isFieldType, OPTION_TYPES } from "@/lib/field-types";
 import { refresh } from "next/cache";
 import { headers } from "next/headers";
 import { adminClient } from "@/lib/admin";
@@ -199,14 +200,40 @@ export async function addCustomField(_prev: ActionResult, fd: FormData): Promise
   const label = text(fd, "label", 60);
   const key = keyFrom(label);
   if (!label || !key) return { error: "Give the field a name that starts with a letter." };
+  const typeRaw = text(fd, "type", 20) || "text";
+  if (!isFieldType(typeRaw)) return { error: "Choose a field type." };
+  const options = OPTION_TYPES.includes(typeRaw) ? cleanOptions(String(fd.get("options") ?? "")) : [];
+  if (OPTION_TYPES.includes(typeRaw) && options.length < 2) return { error: "Add at least two options, one per line." };
   const ws = await getWorkspace();
   if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change fields." };
   const supabase = await createClient();
   const { count } = await supabase.from("custom_fields").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("object", "contact");
-  const { error } = await supabase.from("custom_fields").insert({ account_id: ws.account.id, object: "contact", key, label, type: "text", position: count ?? 0 });
+  const { error } = await supabase.from("custom_fields").insert({ account_id: ws.account.id, object: "contact", key, label, type: typeRaw, options, position: count ?? 0 });
   if (error) return { error: error.code === "23505" ? "You already have a field with that name." : "We couldn't add the field." };
   refresh();
   return { ok: `Added. Use {{contact.${key}}} in messages.` };
+}
+
+/** Renames a field, or changes its dropdown options. The key (used in messages) stays the same. */
+export async function updateCustomField(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const id = text(fd, "id", 40);
+  const label = text(fd, "label", 60);
+  if (!label) return { error: "Give the field a name." };
+  const ws = await getWorkspace();
+  if (!canManage(ws.account.role)) return { error: "Only the owner or an admin can change fields." };
+  const supabase = await createClient();
+  const { data: field } = await supabase.from("custom_fields").select("type").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  if (!field) return { error: "That field no longer exists." };
+  const patch: Record<string, unknown> = { label, updated_at: new Date().toISOString() };
+  if ((OPTION_TYPES as string[]).includes(field.type)) {
+    const options = cleanOptions(String(fd.get("options") ?? ""));
+    if (options.length < 2) return { error: "Keep at least two options, one per line." };
+    patch.options = options;
+  }
+  const { error } = await supabase.from("custom_fields").update(patch).eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't save the field." };
+  refresh();
+  return { ok: "Saved." };
 }
 
 export async function deleteCustomField(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
