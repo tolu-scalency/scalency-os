@@ -4,7 +4,9 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { deliverPending } from "@/lib/deliver";
-import { getWorkspace, type WorkflowStep, type WorkflowTrigger, listAllStages } from "@/lib/data";
+import { getWorkspace, type Condition, type WorkflowStep, type WorkflowTrigger, listAllStages } from "@/lib/data";
+import { compile, countNodes, MAX_BRANCHES, MAX_NODES, newId, toTree, type FlowNode } from "@/lib/flow";
+import { actionLabel } from "./labels";
 import { text, type ActionResult } from "@/lib/forms";
 import { TEMPLATES, newHookToken } from "@/lib/workflow-templates";
 
@@ -31,7 +33,8 @@ const STEP_TYPES = new Set([
   "add_tag", "remove_tag", "assign", "if_else", "add_to_workflow", "remove_from_workflow", "webhook", "end",
   "update_field", "email_team",
 ]);
-const CONDITIONS = new Set(["has_tag", "has_email", "has_phone", "replied", "in_stage", "deal_status", "source_is", "has_owner"]);
+const CONDITIONS = new Set(["has_tag", "has_email", "has_phone", "replied", "in_stage", "deal_status", "source_is", "has_owner", "contact_field", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day"]);
+const OPS = new Set(["is", "is_not", "contains", "not_contains", "empty", "not_empty", "gt", "lt"]);
 const UNITS = ["minutes", "hours", "days"];
 
 function stepId() {
@@ -51,7 +54,7 @@ function safeUrl(raw: string) {
   }
 }
 
-type Ctx = { stageIds: Set<string>; memberIds: Set<string>; workflowIds: Set<string>; fieldKeys: Set<string>; selfId: string };
+type Ctx = { stageIds: Set<string>; pipelineIds: Set<string>; memberIds: Set<string>; workflowIds: Set<string>; fieldKeys: Set<string>; selfId: string };
 
 /** Plain text from HTML, for the text copy sent alongside a designed email. */
 function stripHtml(html: string) {
@@ -68,138 +71,195 @@ function stripHtml(html: string) {
     .trim();
 }
 
-function cleanSteps(raw: unknown, ctx: Ctx): WorkflowStep[] | string {
-  if (!Array.isArray(raw)) return "Steps are missing.";
-  if (raw.length > 50) return "Keep it to 50 steps or fewer.";
+/** Checks one action step. Returns the clean step, or a message saying what's missing. */
+function cleanStep(s: unknown, ctx: Ctx, seen: Set<string>): WorkflowStep | string {
+  if (!s || typeof s !== "object" || !STEP_TYPES.has((s as { type: string }).type) || (s as { type: string }).type === "if_else") return "One of the steps isn't valid.";
+  const st = s as Record<string, unknown>;
+  const str = (k: string, max: number) => String(st[k] ?? "").slice(0, max);
+  let id = str("id", 20).replace(/[^a-z0-9]/gi, "");
+  if (!id || seen.has(id)) id = stepId();
+  seen.add(id);
+  const label = str("label", 60).trim() || undefined;
+  const n = `"${label ?? actionLabel[String(st.type)] ?? "A step"}"`;
   const out: WorkflowStep[] = [];
-  const seen = new Set<string>();
-  for (const [i, s] of raw.entries()) {
-    const n = i + 1;
-    if (!s || typeof s !== "object" || !STEP_TYPES.has((s as { type: string }).type)) return `Step ${n} isn't valid.`;
-    const st = s as Record<string, unknown>;
-    const str = (k: string, max: number) => String(st[k] ?? "").slice(0, max);
-    let id = str("id", 20).replace(/[^a-z0-9]/gi, "");
-    if (!id || seen.has(id)) id = stepId();
-    seen.add(id);
-    const amount = Math.round(Number(st.amount));
-    const unit = (UNITS.includes(String(st.unit)) ? st.unit : "hours") as "hours";
-    switch (st.type) {
-      case "wait":
-      case "wait_for_reply":
-        if (!(amount >= 1 && amount <= 365)) return `Step ${n}: wait between 1 and 365.`;
-        out.push({ id, type: st.type, amount, unit });
-        break;
-      case "wait_until": {
-        const hour = Math.round(Number(st.hour));
-        const minute = Math.round(Number(st.minute) || 0);
-        if (!(hour >= 0 && hour <= 23) || !(minute >= 0 && minute <= 59)) return `Step ${n}: choose a time.`;
-        out.push({ id, type: "wait_until", hour, minute, weekdays_only: Boolean(st.weekdays_only) });
-        break;
-      }
-      case "email": {
-        const mode = ["text", "design", "code"].includes(String(st.mode)) ? (st.mode as "text") : st.html ? "design" : "text";
-        const subject = str("subject", 200);
-        if (!subject.trim()) return `Step ${n}: the email needs a subject.`;
-        if (mode === "text") {
-          if (!str("body", 5000).trim()) return `Step ${n}: the email needs a message.`;
-          out.push({ id, type: "email", subject, body: str("body", 5000), mode });
-        } else {
-          const html = String(st.html ?? "");
-          if (html.length > 200000) return `Step ${n}: the design is too big. Keep it under 200 KB.`;
-          const body = stripHtml(html).slice(0, 5000);
-          if (!body.trim() && !/<img/i.test(html)) return `Step ${n}: the email design is empty.`;
-          out.push({ id, type: "email", subject, body: body || " ", html, mode });
-        }
-        break;
-      }
-      case "email_team": {
-        const to = str("to", 40);
-        if (to !== "owner" && to !== "everyone" && !ctx.memberIds.has(to)) return `Step ${n}: choose who to email.`;
-        if (!str("subject", 200).trim() || !str("body", 5000).trim()) return `Step ${n}: the team email needs a subject and a message.`;
-        out.push({ id, type: "email_team", to, subject: str("subject", 200), body: str("body", 5000) });
-        break;
-      }
-      case "update_field": {
-        const field = str("field", 60);
-        const ok = ["first_name", "last_name", "source"].includes(field) || (field.startsWith("custom:") && ctx.fieldKeys.has(field.slice(7)));
-        if (!ok) return `Step ${n}: choose a field to update.`;
-        out.push({ id, type: "update_field", field, value: str("value", 500) });
-        break;
-      }
-      case "sms":
-        if (!str("body", 640).trim()) return `Step ${n}: the text needs a message.`;
-        out.push({ id, type: "sms", body: str("body", 640) });
-        break;
-      case "task":
-        if (!str("title", 200).trim()) return `Step ${n}: the task needs a title.`;
-        out.push({ id, type: "task", title: str("title", 200), due_in_days: Math.max(0, Math.min(365, Math.round(Number(st.due_in_days) || 0))) });
-        break;
-      case "move_stage":
-        if (!ctx.stageIds.has(str("stage_id", 40))) return `Step ${n}: choose a stage.`;
-        out.push({ id, type: "move_stage", stage_id: str("stage_id", 40) });
-        break;
-      case "set_status": {
-        const status = str("status", 10);
-        if (!["open", "won", "lost"].includes(status)) return `Step ${n}: choose won, lost or open.`;
-        out.push({ id, type: "set_status", status: status as "won" });
-        break;
-      }
-      case "note":
-        if (!str("text", 2000).trim()) return `Step ${n}: the note is empty.`;
-        out.push({ id, type: "note", text: str("text", 2000) });
-        break;
-      case "notify_team":
-        out.push({ id, type: "notify_team", text: str("text", 1000) || "New lead: {{name}}" });
-        break;
-      case "add_tag":
-      case "remove_tag": {
-        const list = (Array.isArray(st.tags) ? st.tags : [st.tag])
-          .map((t) => String(t ?? "").trim().slice(0, 40))
-          .filter((t, i, all) => t && all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === i)
-          .slice(0, 10);
-        if (!list.length) return `Step ${n}: add at least one tag.`;
-        out.push({ id, type: st.type, tags: list });
-        break;
-      }
-      case "assign": {
-        const user = str("user_id", 40);
-        if (user !== "round_robin" && !ctx.memberIds.has(user)) return `Step ${n}: choose who to assign.`;
-        out.push({ id, type: "assign", user_id: user });
-        break;
-      }
-      case "if_else": {
-        const c = (st.condition ?? {}) as Record<string, unknown>;
-        const field = String(c.field ?? "");
-        if (!CONDITIONS.has(field)) return `Step ${n}: choose a condition.`;
-        const value = String(c.value ?? "").slice(0, 60).trim();
-        if (["has_tag", "source_is", "in_stage", "deal_status"].includes(field) && !value) return `Step ${n}: finish the condition.`;
-        if (field === "in_stage" && !ctx.stageIds.has(value)) return `Step ${n}: choose a stage.`;
-        out.push({ id, type: "if_else", condition: { field: field as "has_tag", value: value || undefined, negate: Boolean(c.negate) }, else: str("else", 20) || "end" });
-        break;
-      }
-      case "add_to_workflow":
-      case "remove_from_workflow": {
-        const wf = str("workflow_id", 40);
-        if (!ctx.workflowIds.has(wf) || wf === ctx.selfId) return `Step ${n}: choose another workflow.`;
-        out.push({ id, type: st.type, workflow_id: wf });
-        break;
-      }
-      case "webhook": {
-        const url = safeUrl(str("url", 500));
-        if (!url) return `Step ${n}: enter a web address starting with https://`;
-        out.push({ id, type: "webhook", url });
-        break;
-      }
-      case "end":
-        out.push({ id, type: "end" });
-        break;
+  const amount = Math.round(Number(st.amount));
+  const unit = (UNITS.includes(String(st.unit)) ? st.unit : "hours") as "hours";
+  switch (st.type) {
+    case "wait":
+    case "wait_for_reply":
+      if (!(amount >= 1 && amount <= 365)) return `${n}: wait between 1 and 365.`;
+      out.push({ id, type: st.type, amount, unit });
+      return { ...out[0], label } as WorkflowStep;
+    case "wait_until": {
+      const hour = Math.round(Number(st.hour));
+      const minute = Math.round(Number(st.minute) || 0);
+      if (!(hour >= 0 && hour <= 23) || !(minute >= 0 && minute <= 59)) return `${n}: choose a time.`;
+      out.push({ id, type: "wait_until", hour, minute, weekdays_only: Boolean(st.weekdays_only) });
+      return { ...out[0], label } as WorkflowStep;
     }
+    case "email": {
+      const mode = ["text", "design", "code"].includes(String(st.mode)) ? (st.mode as "text") : st.html ? "design" : "text";
+      const subject = str("subject", 200);
+      if (!subject.trim()) return `${n}: the email needs a subject.`;
+      if (mode === "text") {
+        if (!str("body", 5000).trim()) return `${n}: the email needs a message.`;
+        out.push({ id, type: "email", subject, body: str("body", 5000), mode });
+      } else {
+        const html = String(st.html ?? "");
+        if (html.length > 200000) return `${n}: the design is too big. Keep it under 200 KB.`;
+        const body = stripHtml(html).slice(0, 5000);
+        if (!body.trim() && !/<img/i.test(html)) return `${n}: the email design is empty.`;
+        out.push({ id, type: "email", subject, body: body || " ", html, mode });
+      }
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "email_team": {
+      const to = str("to", 40);
+      if (to !== "owner" && to !== "everyone" && !ctx.memberIds.has(to)) return `${n}: choose who to email.`;
+      if (!str("subject", 200).trim() || !str("body", 5000).trim()) return `${n}: the team email needs a subject and a message.`;
+      out.push({ id, type: "email_team", to, subject: str("subject", 200), body: str("body", 5000) });
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "update_field": {
+      const field = str("field", 60);
+      const ok = ["first_name", "last_name", "source"].includes(field) || (field.startsWith("custom:") && ctx.fieldKeys.has(field.slice(7)));
+      if (!ok) return `${n}: choose a field to update.`;
+      out.push({ id, type: "update_field", field, value: str("value", 500) });
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "sms":
+      if (!str("body", 640).trim()) return `${n}: the text needs a message.`;
+      out.push({ id, type: "sms", body: str("body", 640) });
+      return { ...out[0], label } as WorkflowStep;
+    case "task":
+      if (!str("title", 200).trim()) return `${n}: the task needs a title.`;
+      out.push({ id, type: "task", title: str("title", 200), due_in_days: Math.max(0, Math.min(365, Math.round(Number(st.due_in_days) || 0))) });
+      return { ...out[0], label } as WorkflowStep;
+    case "move_stage":
+      if (!ctx.stageIds.has(str("stage_id", 40))) return `${n}: choose a stage.`;
+      out.push({ id, type: "move_stage", stage_id: str("stage_id", 40) });
+      return { ...out[0], label } as WorkflowStep;
+    case "set_status": {
+      const status = str("status", 10);
+      if (!["open", "won", "lost"].includes(status)) return `${n}: choose won, lost or open.`;
+      out.push({ id, type: "set_status", status: status as "won" });
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "note":
+      if (!str("text", 2000).trim()) return `${n}: the note is empty.`;
+      out.push({ id, type: "note", text: str("text", 2000) });
+      return { ...out[0], label } as WorkflowStep;
+    case "notify_team":
+      out.push({ id, type: "notify_team", text: str("text", 1000) || "New lead: {{name}}" });
+      return { ...out[0], label } as WorkflowStep;
+    case "add_tag":
+    case "remove_tag": {
+      const list = (Array.isArray(st.tags) ? st.tags : [st.tag])
+        .map((t) => String(t ?? "").trim().slice(0, 40))
+        .filter((t, i, all) => t && all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === i)
+        .slice(0, 10);
+      if (!list.length) return `${n}: add at least one tag.`;
+      out.push({ id, type: st.type, tags: list });
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "assign": {
+      const user = str("user_id", 40);
+      if (user !== "round_robin" && !ctx.memberIds.has(user)) return `${n}: choose who to assign.`;
+      out.push({ id, type: "assign", user_id: user });
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "add_to_workflow":
+    case "remove_from_workflow": {
+      const wf = str("workflow_id", 40);
+      if (!ctx.workflowIds.has(wf) || wf === ctx.selfId) return `${n}: choose another workflow.`;
+      out.push({ id, type: st.type, workflow_id: wf });
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "webhook": {
+      const url = safeUrl(str("url", 500));
+      if (!url) return `${n}: enter a web address starting with https://`;
+      out.push({ id, type: "webhook", url });
+      return { ...out[0], label } as WorkflowStep;
+    }
+    case "end":
+      out.push({ id, type: "end" });
+      return { ...out[0], label } as WorkflowStep;
   }
-  // "Otherwise" in an if/else may only jump forward to a step that exists.
-  for (const [i, s] of out.entries()) {
-    if (s.type !== "if_else" || s.else === "end") continue;
-    const j = out.findIndex((x) => x.id === s.else);
-    if (j <= i) return `Step ${i + 1}: choose a later step for "otherwise".`;
+  return "One of the steps isn't valid.";
+}
+
+/** Checks one condition in an If / else branch. */
+function cleanCondition(raw: unknown, ctx: Ctx, where: string): Condition | string {
+  const c = (raw ?? {}) as Record<string, unknown>;
+  const field = String(c.field ?? "");
+  if (!CONDITIONS.has(field)) return `${where}: choose what to check.`;
+  const op = OPS.has(String(c.op)) ? (String(c.op) as Condition["op"]) : undefined;
+  const value = String(c.value ?? "").slice(0, 100).trim();
+  const key = String(c.key ?? "").slice(0, 60);
+  const out: Condition = { field: field as Condition["field"], negate: Boolean(c.negate) || undefined, op, value: value || undefined };
+  const needsValue = ["has_tag", "source_is", "in_stage", "deal_status", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day"].includes(field) || (field === "contact_field" && op !== "empty" && op !== "not_empty");
+  if (needsValue && !value) return `${where}: finish the condition.`;
+  if (field === "in_stage" && !ctx.stageIds.has(value)) return `${where}: choose a stage.`;
+  if (field === "in_pipeline" && !ctx.pipelineIds.has(value)) return `${where}: choose a pipeline.`;
+  if (field === "owner_is" && !ctx.memberIds.has(value)) return `${where}: choose a team member.`;
+  if (field === "deal_status" && !["open", "won", "lost"].includes(value)) return `${where}: choose a deal status.`;
+  if ((field === "deal_value" || ((op === "gt" || op === "lt") && field === "contact_field")) && Number.isNaN(Number(value))) return `${where}: enter a number.`;
+  if (field === "deal_value" && !op) out.op = "gt";
+  if (field === "day_of_week" && !/^[1-7](,[1-7])*$/.test(value)) return `${where}: pick at least one day.`;
+  if (field === "time_of_day") {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return `${where}: choose a time.`;
+    if (op !== "gt" && op !== "lt") out.op = "lt";
+  }
+  if (field === "contact_field") {
+    if (!(["first_name", "last_name", "email", "phone", "source"].includes(key) || (key.startsWith("custom:") && ctx.fieldKeys.has(key.slice(7))))) return `${where}: choose a field.`;
+    out.key = key;
+    if (!op) out.op = "is";
+  }
+  return out;
+}
+
+/** Checks the whole tree: action steps, and If / else branches with their own steps. */
+function cleanTree(raw: unknown, ctx: Ctx, seen: Set<string>, depth = 0): FlowNode[] | string {
+  if (!Array.isArray(raw)) return "Steps are missing.";
+  if (depth > 8) return "If / else steps can only be nested 8 deep.";
+  const out: FlowNode[] = [];
+  for (const node of raw) {
+    const n = (node ?? {}) as Record<string, unknown>;
+    if (n.type !== "branch") {
+      const step = cleanStep(n, ctx, seen);
+      if (typeof step === "string") return step;
+      out.push(step as FlowNode);
+      continue;
+    }
+    let id = String(n.id ?? "").replace(/[^a-z0-9]/gi, "").slice(0, 20);
+    if (!id || seen.has(id)) id = newId();
+    seen.add(id);
+    const label = String(n.label ?? "").slice(0, 60).trim() || undefined;
+    const title = `"${label ?? "If / else"}"`;
+    const routes = Array.isArray(n.branches) ? n.branches : [];
+    if (!routes.length) return `${title}: add at least one branch.`;
+    if (routes.length > MAX_BRANCHES) return `${title}: keep it to ${MAX_BRANCHES} branches.`;
+    const branches = [];
+    for (const [i, r0] of routes.entries()) {
+      const r = (r0 ?? {}) as Record<string, unknown>;
+      const name = String(r.name ?? "").trim().slice(0, 40) || `Branch ${i + 1}`;
+      const where = `${title}, branch "${name}"`;
+      const conds = Array.isArray(r.conditions) ? r.conditions.slice(0, 10) : [];
+      if (!conds.length) return `${where}: add a condition.`;
+      const conditions: Condition[] = [];
+      for (const c of conds) {
+        const cc = cleanCondition(c, ctx, where);
+        if (typeof cc === "string") return cc;
+        conditions.push(cc);
+      }
+      const steps = cleanTree(r.steps ?? [], ctx, seen, depth + 1);
+      if (typeof steps === "string") return steps;
+      branches.push({ id: String(r.id ?? "").replace(/[^a-z0-9]/gi, "").slice(0, 20) || newId(), name, match: r.match === "any" ? ("any" as const) : ("all" as const), conditions, steps });
+    }
+    const o = (n.otherwise ?? {}) as Record<string, unknown>;
+    const otherSteps = cleanTree(o.steps ?? [], ctx, seen, depth + 1);
+    if (typeof otherSteps === "string") return otherSteps;
+    out.push({ id, type: "branch", label, branches, otherwise: { name: String(o.name ?? "").trim().slice(0, 40) || "None", steps: otherSteps } });
   }
   return out;
 }
@@ -207,29 +267,35 @@ function cleanSteps(raw: unknown, ctx: Ctx): WorkflowStep[] | string {
 /** Saves the workflow from the editor. */
 export async function saveWorkflow(
   id: string,
-  input: { name: string; description: string; trigger: WorkflowTrigger; steps: unknown; stopOnReply?: boolean },
+  input: { name: string; description: string; trigger: WorkflowTrigger; graph?: unknown; steps?: unknown; stopOnReply?: boolean },
 ): Promise<ActionResult & { token?: string }> {
   const name = String(input.name ?? "").trim().slice(0, 80);
   if (!name) return { error: "Give the workflow a name." };
   const ws = await getWorkspace();
   const supabase = await createClient();
-  const [pipeline, { data: members }, { data: flows }, { data: current }, { data: cf }] = await Promise.all([
+  const [pipeline, { data: members }, { data: flows }, { data: current }, { data: cf }, { data: pipes }] = await Promise.all([
     listAllStages(ws.account.id),
     supabase.from("account_members").select("user_id").eq("account_id", ws.account.id),
     supabase.from("workflows").select("id").eq("account_id", ws.account.id).neq("status", "archived"),
     supabase.from("workflows").select("trigger").eq("id", id).eq("account_id", ws.account.id).maybeSingle(),
     supabase.from("custom_fields").select("key").eq("account_id", ws.account.id).eq("object", "contact"),
+    supabase.from("pipelines").select("id").eq("account_id", ws.account.id),
   ]);
   if (!current) return { error: "This workflow no longer exists." };
   const stageIds = new Set(pipeline.map((s) => s.id));
-  const steps = cleanSteps(input.steps, {
+  // The builder sends a tree; older pages may still send a flat list.
+  const rawTree = Array.isArray(input.graph) ? input.graph : toTree(Array.isArray(input.steps) ? (input.steps as WorkflowStep[]) : []);
+  if (countNodes(rawTree as FlowNode[]) > MAX_NODES) return { error: `Keep it to ${MAX_NODES} steps or fewer.` };
+  const graph = cleanTree(rawTree, {
     stageIds,
+    pipelineIds: new Set((pipes ?? []).map((p) => p.id as string)),
     memberIds: new Set((members ?? []).map((m) => m.user_id as string)),
     workflowIds: new Set((flows ?? []).map((f) => f.id as string)),
     fieldKeys: new Set((cf ?? []).map((f) => f.key as string)),
     selfId: id,
-  });
-  if (typeof steps === "string") return { error: steps };
+  }, new Set());
+  if (typeof graph === "string") return { error: graph };
+  const steps = compile(graph);
 
   const t = (input.trigger ?? { type: "manual" }) as Record<string, unknown>;
   let trigger: WorkflowTrigger = { type: "manual" };
@@ -262,7 +328,7 @@ export async function saveWorkflow(
 
   const { error } = await supabase
     .from("workflows")
-    .update({ name, description: String(input.description ?? "").slice(0, 300) || null, trigger, steps, stop_on_reply: input.stopOnReply !== false })
+    .update({ name, description: String(input.description ?? "").slice(0, 300) || null, trigger, steps, graph, stop_on_reply: input.stopOnReply !== false })
     .eq("id", id)
     .eq("account_id", ws.account.id);
   if (error) return { error: error.code === "23505" ? "You already have a workflow with that name." : "We couldn't save the workflow." };

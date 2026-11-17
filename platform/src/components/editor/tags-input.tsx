@@ -4,7 +4,8 @@ import { useId, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
 
 /** Type a tag and press Enter (or comma) to add it. Existing tags are suggested as you type. */
-export function TagsInput({ value, onChange, suggestions, max = 10, placeholder = "Type a tag and press Enter" }: { value: string[]; onChange: (v: string[]) => void; suggestions: string[]; max?: number; placeholder?: string }) {
+/** `inline` shows suggestions in the flow (inside panels that scroll) instead of floating over the page. */
+export function TagsInput({ value, onChange, suggestions, max = 10, placeholder = "Type a tag and press Enter", inline = false }: { value: string[]; onChange: (v: string[]) => void; suggestions: string[]; max?: number; placeholder?: string; inline?: boolean }) {
   const [draft, setDraft] = useState("");
   const [focus, setFocus] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -65,7 +66,7 @@ export function TagsInput({ value, onChange, suggestions, max = 10, placeholder 
         />
       </div>
       {focus && (matches.length > 0 || isNew) && (
-        <ul id={listId} role="listbox" className="rise absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-white p-1 shadow-[var(--shadow-pop)]">
+        <ul id={listId} role="listbox" className={`rise ${inline ? "relative" : "absolute left-0 right-0 top-full z-50"} mt-1 max-h-56 overflow-y-auto rounded-xl border border-line bg-white p-1 shadow-[var(--shadow-pop)]`}>
           {isNew && (
             <li>
               <button

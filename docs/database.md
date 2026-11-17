@@ -220,6 +220,14 @@ Migration `20261119120000_custom_access`. `account_members.permissions` and `acc
 
 Migration `20261120090000_pipelines_upgrade`. Workspaces can have up to 20 pipelines (`pipelines.position` orders them). Deals (`opportunities`) use their existing `name`, `value_pence`, `status`, `source`, `assigned_to` (owner) and `custom` (deal fields, `custom_fields.object = 'opportunity'`), plus a new `lost_reason`. `delete_pipeline(id)` removes a pipeline only when it has no deals and isn't the last one. Workflow stage triggers and steps can use stages from any pipeline.
 
+## Workflow branches
+
+Migration `20261121090000_workflow_branches`.
+
+- `workflows.graph` (jsonb) keeps the builder's layout: a tree where each If / else has named branches with their own steps. The app compiles it into `workflows.steps`, the flat list the engine runs. Workflows saved before this keep working; the builder converts them when opened.
+- New step types in `steps`: `branch` (`routes` with `name`, `match` all or any, `conditions`, `goto`, plus `otherwise_name` and `otherwise_goto`) and `goto` (`target`). Jumps only go forward, so a workflow can't loop. `goto` steps aren't written to the run history; a `branch` step records which branch was taken.
+- More conditions in `wf_condition`: any contact field (is, is not, contains, does not contain, empty, not empty, more than, less than), assigned user, deal value, pipeline, day of the week and time of day (in the workspace's time zone). `wf_match` checks a list with AND or OR. Helpers: `wf_compare`, `wf_step_index`. None of these can be called from the app directly.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
