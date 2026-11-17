@@ -27,7 +27,7 @@ function nextFor(type: string | null, explicit: string | null, redirectTo: strin
       next = null;
     }
   }
-  return next ?? (type === "invite" || type === "signup" ? "/welcome" : type === "recovery" ? "/reset-password" : "/dashboard");
+  return next ?? (type === "invite" || type === "signup" ? "/welcome" : type === "recovery" ? "/reset-password" : "/workspaces");
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
   const fd = await request.formData();
   const tokenHash = String(fd.get("token_hash") ?? "");
   const type = String(fd.get("type") ?? "") as EmailOtpType;
-  const next = safePath(String(fd.get("next") ?? "")) ?? "/dashboard";
+  const next = safePath(String(fd.get("next") ?? "")) ?? "/workspaces";
   if (tokenHash && TYPES.includes(type)) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });

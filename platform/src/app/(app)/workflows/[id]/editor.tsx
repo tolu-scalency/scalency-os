@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { TagsInput } from "@/components/editor/tags-input";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import type { Condition, ConditionField, CustomField, CustomValue, Stage, StepType, WorkflowStep, WorkflowTrigger } from "@/lib/data";
 import { mergeFields, type MergeField } from "@/lib/merge-fields";
@@ -64,8 +65,8 @@ function blank(type: StepType, stages: Stage[], members: Option[], workflows: Op
     case "set_status": return { id, type, status: "won" };
     case "note": return { id, type, text: "" };
     case "notify_team": return { id, type, text: "New lead: {{name}}" };
-    case "add_tag": return { id, type, tag: "" };
-    case "remove_tag": return { id, type, tag: "" };
+    case "add_tag": return { id, type, tags: [] };
+    case "remove_tag": return { id, type, tags: [] };
     case "assign": return { id, type, user_id: members.length > 1 ? "round_robin" : (members[0]?.id ?? "round_robin") };
     case "if_else": return { id, type, condition: { field: "replied" }, else: "end" };
     case "add_to_workflow": return { id, type, workflow_id: workflows[0]?.id ?? "" };
@@ -104,6 +105,31 @@ export function WorkflowEditor({
   customValues: CustomValue[];
 }) {
   const fieldsList = mergeFields(customFields, customValues);
+  const flowRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoomState] = useState(1);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem("scalency.wf-zoom"));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (saved >= 0.3 && saved <= 1.5) setZoomState(saved);
+    } catch {}
+  }, []);
+  function setZoom(z: number) {
+    const next = Math.round(Math.min(1.5, Math.max(0.3, z)) * 100) / 100;
+    setZoomState(next);
+    try {
+      localStorage.setItem("scalency.wf-zoom", String(next));
+    } catch {}
+  }
+  function fit() {
+    const el = flowRef.current;
+    if (!el) return;
+    const natural = el.scrollHeight;
+    const top = el.getBoundingClientRect().top;
+    const room = window.innerHeight - Math.max(top, 80) - 110;
+    setZoom(Math.min(1, room / natural));
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   const [name, setName] = useState(workflow.name);
   const [description, setDescription] = useState(workflow.description);
   const [trigger, setTrigger] = useState<WorkflowTrigger>(workflow.trigger);
@@ -213,8 +239,11 @@ export function WorkflowEditor({
         )}
       </section>
 
+      {/* Zoom, so a whole build fits on screen (handy for screenshots). */}
+      <ZoomBar zoom={zoom} setZoom={setZoom} onFit={fit} />
+
       {/* The flow */}
-      <div className="relative mx-auto flex w-full max-w-[680px] flex-col items-stretch">
+      <div ref={flowRef} style={{ zoom }} className="relative mx-auto flex w-full max-w-[680px] flex-col items-stretch transition-[zoom] duration-150">
         <div className="rounded-2xl border-2 border-dashed border-sky/50 bg-white p-4 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-3">
             <span className="tile h-10 w-10 rounded-xl"><Icon name="play" size={17} /></span>
@@ -306,7 +335,7 @@ export function WorkflowEditor({
                   )}
                 </div>
                 <fieldset disabled={disabled} className="flex flex-col gap-2.5">
-                  <StepFields step={step} index={i} steps={steps} stages={stages} members={members} workflows={others} fields={fieldsList} customFields={customFields} onChange={(p) => update(i, p)} />
+                  <StepFields step={step} index={i} steps={steps} stages={stages} members={members} workflows={others} fields={fieldsList} customFields={customFields} allTags={tags} onChange={(p) => update(i, p)} />
                 </fieldset>
               </div>
               <Connector
@@ -419,8 +448,10 @@ function StepFields({
   workflows,
   fields: mf,
   customFields,
+  allTags,
   onChange,
 }: {
+  allTags: string[];
   step: WorkflowStep;
   index: number;
   steps: WorkflowStep[];
@@ -588,7 +619,14 @@ function StepFields({
       );
     case "add_tag":
     case "remove_tag":
-      return <input list="wf-tags" value={step.tag} onChange={(e) => onChange({ tag: e.target.value })} placeholder="Tag name, e.g. Hot lead" className="field" aria-label="Tag" />;
+      return (
+        <TagsInput
+          value={step.tags ?? (step.tag ? [step.tag] : [])}
+          onChange={(tags) => onChange({ tags, tag: undefined } as Partial<WorkflowStep>)}
+          suggestions={allTags}
+          placeholder={step.type === "add_tag" ? "Type a tag and press Enter, e.g. Hot lead" : "Tags to remove"}
+        />
+      );
     case "assign":
       return (
         <select value={step.user_id} onChange={(e) => onChange({ user_id: e.target.value })} className="field" aria-label="Assign to">
@@ -670,4 +708,26 @@ function StepFields({
     case "end":
       return <p className="text-[13px] text-muted">The workflow stops here for this contact.</p>;
   }
+}
+
+
+function ZoomBar({ zoom, setZoom, onFit }: { zoom: number; setZoom: (z: number) => void; onFit: () => void }) {
+  const btn = "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px] font-semibold text-navy transition-colors hover:bg-surface disabled:opacity-40";
+  return (
+    <div className="sticky top-20 z-20 mx-auto flex w-fit items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-[var(--shadow-card)] backdrop-blur">
+      <button type="button" onClick={() => setZoom(zoom - 0.1)} disabled={zoom <= 0.3} aria-label="Zoom out" className={btn}>
+        −
+      </button>
+      <button type="button" onClick={() => setZoom(1)} aria-label="Reset zoom to 100%" title="Back to 100%" className={`${btn} w-14 tabular-nums`}>
+        {Math.round(zoom * 100)}%
+      </button>
+      <button type="button" onClick={() => setZoom(zoom + 0.1)} disabled={zoom >= 1.5} aria-label="Zoom in" className={btn}>
+        +
+      </button>
+      <span className="mx-1 h-5 w-px bg-line" />
+      <button type="button" onClick={onFit} className={`${btn} gap-1.5`}>
+        <Icon name="panel" size={14} /> Fit to screen
+      </button>
+    </div>
+  );
 }

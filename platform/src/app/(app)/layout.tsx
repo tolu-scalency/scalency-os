@@ -23,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         leadsThisWeek: leads,
         workspaces: ws.workspaces,
         invites,
+        canCreateWorkspace: ws.workspaces.some((w) => w.role === "owner" || w.role === "admin"),
       }}
     >
       {children}

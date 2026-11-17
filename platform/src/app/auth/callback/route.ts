@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next");
   // Only allow redirects inside the app, never to another website.
-  const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/workspaces";
 
   if (code) {
     const supabase = await createClient();

@@ -25,7 +25,13 @@ export async function createWorkspace(_prev: ActionResult, fd: FormData): Promis
   if (name.length < 2) return { error: "Name it with at least 2 characters." };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("create_workspace", { workspace_name: name });
-  if (error || !data) return { error: error?.message.includes("25 workspaces") ? "You can own up to 25 workspaces." : "We couldn't create the workspace." };
+  if (error || !data) return {
+      error: error?.message.includes("25 workspaces")
+        ? "You can own up to 25 workspaces."
+        : error?.message.includes("owners and admins")
+          ? "Only workspace owners and admins can create new workspaces."
+          : "We couldn't create the workspace.",
+    };
   await remember(data as string);
   redirect("/dashboard");
 }

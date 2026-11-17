@@ -495,8 +495,8 @@ export type WorkflowStep = StepBase &
     | { type: "set_status"; status: "open" | "won" | "lost" }
     | { type: "note"; text: string }
     | { type: "notify_team"; text: string }
-    | { type: "add_tag"; tag: string }
-    | { type: "remove_tag"; tag: string }
+    | { type: "add_tag"; tag?: string; tags?: string[] }
+    | { type: "remove_tag"; tag?: string; tags?: string[] }
     | { type: "assign"; user_id: string }
     | { type: "if_else"; condition: Condition; else: string }
     | { type: "add_to_workflow"; workflow_id: string }
@@ -687,4 +687,22 @@ export async function listCustomValues(accountId: string): Promise<CustomValue[]
   const supabase = await createClient();
   const { data } = await supabase.from("custom_values").select("key, value").eq("account_id", accountId).order("key");
   return (data ?? []) as CustomValue[];
+}
+
+export type WorkspaceCard = { id: string; name: string; role: string; contacts: number; openDeals: number; newLeads: number };
+
+/** Quick numbers for each workspace on the "All workspaces" page. */
+export async function workspaceCards(list: { id: string; name: string; role: string }[]): Promise<WorkspaceCard[]> {
+  const supabase = await createClient();
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  return Promise.all(
+    list.slice(0, 30).map(async (w) => {
+      const [contacts, deals, leads] = await Promise.all([
+        supabase.from("contacts").select("id", { count: "exact", head: true }).eq("account_id", w.id),
+        supabase.from("opportunities").select("id", { count: "exact", head: true }).eq("account_id", w.id).eq("status", "open"),
+        supabase.from("contacts").select("id", { count: "exact", head: true }).eq("account_id", w.id).gte("created_at", weekAgo),
+      ]);
+      return { ...w, contacts: contacts.count ?? 0, openDeals: deals.count ?? 0, newLeads: leads.count ?? 0 };
+    }),
+  );
 }

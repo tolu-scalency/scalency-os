@@ -153,9 +153,12 @@ function cleanSteps(raw: unknown, ctx: Ctx): WorkflowStep[] | string {
         break;
       case "add_tag":
       case "remove_tag": {
-        const tag = str("tag", 40).trim();
-        if (!tag) return `Step ${n}: type a tag.`;
-        out.push({ id, type: st.type, tag });
+        const list = (Array.isArray(st.tags) ? st.tags : [st.tag])
+          .map((t) => String(t ?? "").trim().slice(0, 40))
+          .filter((t, i, all) => t && all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === i)
+          .slice(0, 10);
+        if (!list.length) return `Step ${n}: add at least one tag.`;
+        out.push({ id, type: st.type, tags: list });
         break;
       }
       case "assign": {
