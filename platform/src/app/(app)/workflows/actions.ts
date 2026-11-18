@@ -297,18 +297,33 @@ export async function saveWorkflow(
   if (typeof graph === "string") return { error: graph };
   const steps = compile(graph);
 
-  const t = (input.trigger ?? { type: "manual" }) as Record<string, unknown>;
-  let trigger: WorkflowTrigger = { type: "manual" };
+  const t = (input.trigger ?? { type: "none" }) as Record<string, unknown>;
+  const pipelineIds = new Set((pipes ?? []).map((p) => p.id as string));
+  const pipeFilter = () => (pipelineIds.has(String(t.pipeline_id ?? "")) ? { pipeline_id: String(t.pipeline_id) } : {});
+  let trigger: WorkflowTrigger = { type: "none" };
   switch (t.type) {
+    case "manual":
+      trigger = { type: "manual" };
+      break;
     case "contact_created":
-    case "deal_won":
-    case "deal_lost":
       trigger = { type: t.type };
       break;
-    case "stage_entered":
-      if (!stageIds.has(String(t.stage_id ?? ""))) return { error: "Choose the stage that starts this workflow." };
-      trigger = { type: "stage_entered", stage_id: String(t.stage_id) };
+    case "deal_created":
+    case "deal_won":
+    case "deal_lost":
+      trigger = { type: t.type, ...pipeFilter() };
       break;
+    case "stage_entered": {
+      if (t.stage_id === "any") {
+        if (!pipelineIds.has(String(t.pipeline_id ?? ""))) return { error: "Choose the pipeline that starts this workflow." };
+        trigger = { type: "stage_entered", stage_id: "any", pipeline_id: String(t.pipeline_id) };
+        break;
+      }
+      const st = pipeline.find((s) => s.id === String(t.stage_id ?? ""));
+      if (!st) return { error: "Choose the stage that starts this workflow." };
+      trigger = { type: "stage_entered", stage_id: st.id, pipeline_id: st.pipelineId };
+      break;
+    }
     case "tag_added":
     case "tag_removed": {
       const tag = String(t.tag ?? "").trim().slice(0, 40);
@@ -343,8 +358,10 @@ export async function setWorkflowStatus(_prev: ActionResult, fd: FormData): Prom
   const ws = await getWorkspace();
   const supabase = await createClient();
   if (status === "active") {
-    const { data: wf } = await supabase.from("workflows").select("steps").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+    const { data: wf } = await supabase.from("workflows").select("steps, trigger").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
     if (!wf || !(wf.steps as unknown[]).length) return { error: "Add at least one step before turning it on." };
+    if ((wf.trigger as { type?: string } | null)?.type === "none")
+      return { error: "Choose a trigger first. If it should only start when someone is added to it, choose “Added by hand or by another workflow”." };
     const { error } = await supabase
       .from("workflows")
       .update({ status: "active", client_approved_at: new Date().toISOString(), client_approved_by: ws.fullName ?? ws.userEmail })

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { ActionForm, SubmitButton } from "@/components/action-form";
@@ -152,10 +152,9 @@ function MobileTabBar({ pathname, onMore }: { pathname: string; onMore: () => vo
 }
 
 function Sidebar({ pathname, user, collapsed, onToggle, mobile = false }: { pathname: string; user: ShellUser; collapsed: boolean; onToggle: () => void; mobile?: boolean }) {
-  const current = activeHref(pathname);
-
   return (
-    <nav aria-label="Main" className="sidebar-blue relative flex h-full flex-col text-white">
+    <nav aria-label="Main" className="sidebar-blue relative isolate flex h-full flex-col overflow-hidden text-white">
+      <SidebarGlow />
       <div className={`flex flex-none items-center px-4 pb-4 pt-4 ${collapsed ? "flex-col gap-3" : "justify-between"}`}>
         <Link href="/dashboard" className="flex items-center" aria-label="Scalency OS home">
           {collapsed ? (
@@ -434,5 +433,59 @@ function WorkspaceSwitcher({ user, collapsed }: { user: ShellUser; collapsed: bo
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * A soft light that follows the pointer around the sidebar, easing behind it,
+ * and drifts slowly when the pointer is elsewhere. Off for people who prefer less motion.
+ */
+function SidebarGlow() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    const nav = el?.parentElement;
+    if (!el || !nav || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let x = 0.3, y = 0.15, tx = 0.3, ty = 0.15, inside = false, frame = 0, t0 = performance.now();
+    const move = (e: PointerEvent) => {
+      const r = nav.getBoundingClientRect();
+      tx = (e.clientX - r.left) / r.width;
+      ty = (e.clientY - r.top) / r.height;
+      inside = true;
+    };
+    const leave = () => (inside = false);
+    const tick = (now: number) => {
+      if (!inside) {
+        // Idle drift: a slow loop around the upper half.
+        const t = (now - t0) / 1000;
+        tx = 0.5 + Math.sin(t / 3.2) * 0.35;
+        ty = 0.3 + Math.cos(t / 4.1) * 0.22;
+      }
+      x += (tx - x) * 0.08;
+      y += (ty - y) * 0.08;
+      el.style.setProperty("--gx", `${(x * 100).toFixed(2)}%`);
+      el.style.setProperty("--gy", `${(y * 100).toFixed(2)}%`);
+      frame = requestAnimationFrame(tick);
+    };
+    nav.addEventListener("pointermove", move);
+    nav.addEventListener("pointerleave", leave);
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      nav.removeEventListener("pointermove", move);
+      nav.removeEventListener("pointerleave", leave);
+      t0 = 0;
+    };
+  }, []);
+  return (
+    <div
+      ref={ref}
+      aria-hidden
+      className="pointer-events-none absolute inset-0 -z-10"
+      style={{
+        background:
+          "radial-gradient(340px circle at var(--gx, 30%) var(--gy, 15%), rgba(85, 227, 236, 0.38), transparent 65%), radial-gradient(420px circle at calc(100% - var(--gx, 30%)) calc(100% - var(--gy, 15%)), rgba(124, 92, 255, 0.22), transparent 70%)",
+      }}
+    />
   );
 }
