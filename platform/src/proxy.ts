@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { FRESH_SIGN_IN, KEEP_COOKIE, POLICY, SEEN_COOKIE } from "@/lib/session-policy";
 
 // Runs before every page. It keeps the login session fresh and sends anyone who isn't signed in to /login.
 // This is a quick first check only: every data read is also protected by row-level security in the database.
@@ -42,6 +43,44 @@ export async function proxy(request: NextRequest) {
     const login = new URL("/login", request.url);
     if (path !== "/") login.searchParams.set("next", path);
     return NextResponse.redirect(login);
+  }
+
+  // Sign people out after too long, or after too long without using the app.
+  // /auth and /api are left alone: they're part of signing in, or called by other services.
+  if (signedIn && !path.startsWith("/auth") && !path.startsWith("/api")) {
+    const claims = data!.claims as { amr?: { timestamp?: number }[]; iat?: number };
+    const now = Math.floor(Date.now() / 1000);
+    const signedInAt = Math.max(0, ...(claims.amr ?? []).map((a) => Number(a.timestamp) || 0)) || Number(claims.iat) || now;
+    const keep = request.cookies.get(KEEP_COOKIE)?.value === "1";
+    const rule = keep ? POLICY.keep : POLICY.normal;
+    const seen = Number(request.cookies.get(SEEN_COOKIE)?.value) || 0;
+    const fresh = now - signedInAt < FRESH_SIGN_IN;
+
+    const tooOld = now - signedInAt > rule.maxAge;
+    const idle = seen ? now - seen > rule.idle : !fresh; // no record (browser closed) and not a new sign-in
+    if (tooOld || idle) {
+      await supabase.auth.signOut({ scope: "local" });
+      const login = new URL("/login", request.url);
+      login.searchParams.set("error", "expired");
+      if (!isPublic && path !== "/") login.searchParams.set("next", path);
+      const out = NextResponse.redirect(login);
+      for (const c of response.cookies.getAll()) out.cookies.set(c);
+      out.cookies.delete(SEEN_COOKIE);
+      out.cookies.delete(KEEP_COOKIE);
+      return out;
+    }
+
+    // Note activity at most once a minute. Without "keep me signed in" this is a
+    // browser-session cookie, so closing the browser signs you out.
+    if (!seen || now - seen > 60) {
+      response.cookies.set(SEEN_COOKIE, String(now), {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        secure: request.nextUrl.protocol === "https:",
+        ...(keep ? { maxAge: POLICY.keep.maxAge } : {}),
+      });
+    }
   }
 
   if (signedIn && (path === "/login" || path === "/signup")) {

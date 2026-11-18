@@ -7,9 +7,11 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { Notice, inputClass } from "@/components/auth-shell";
 import { createClient } from "@/lib/supabase/browser";
+import { KEEP_COOKIE } from "@/lib/session-policy";
 
 const errors: Record<string, string> = {
   link: "That login link has expired or was already used. Log in with your password, or ask for a new link.",
+  expired: "You were signed out to keep your account safe. Please log in again.",
   setup: "Scalency OS isn't connected to its database yet. Add the Supabase settings in Netlify, then redeploy.",
 };
 
@@ -30,6 +32,13 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent">("idle");
   const [message, setMessage] = useState("");
+  const [keep, setKeep] = useState(false);
+
+  // Remembered for the proxy, which decides how long this browser stays signed in.
+  function rememberChoice() {
+    const secure = window.location.protocol === "https:" ? "; secure" : "";
+    document.cookie = keep ? `${KEEP_COOKIE}=1; path=/; max-age=${30 * 86400}; samesite=lax${secure}` : `${KEEP_COOKIE}=; path=/; max-age=0; samesite=lax${secure}`;
+  }
 
   // Read ?next= and ?error= after the page shows, so the form appears straight away instead of a blank box.
   useEffect(() => {
@@ -47,6 +56,7 @@ export function LoginForm() {
     setState("busy");
     setMessage("");
     const supabase = createClient();
+    if (mode !== "reset") rememberChoice();
     if (mode === "password") {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) {
@@ -109,6 +119,14 @@ export function LoginForm() {
         <label className="flex flex-col gap-2">
           <span className="text-[13px] font-semibold">Password</span>
           <PasswordInput required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} />
+        </label>
+      )}
+      {mode !== "reset" && (
+        <label className="flex cursor-pointer items-center gap-2.5 text-[13.5px]">
+          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="h-4 w-4 accent-[#0a5fe3]" />
+          <span>
+            Keep me signed in for 30 days <span className="text-muted">(only on your own device)</span>
+          </span>
         </label>
       )}
       <button type="submit" disabled={state === "busy"} className="btn-primary flex min-h-[50px] items-center justify-center gap-2 rounded-xl text-[15px] font-semibold disabled:opacity-70">
