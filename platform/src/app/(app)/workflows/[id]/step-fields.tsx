@@ -83,6 +83,7 @@ function Amount({ amount, unit, onChange }: { amount: number; unit: string; onCh
 export function StepFields({
   step,
   stages,
+  pipelines = [],
   members,
   workflows,
   fields: mf,
@@ -93,6 +94,7 @@ export function StepFields({
   allTags: string[];
   step: WorkflowStep;
   stages: Stage[];
+  pipelines?: Option[];
   members: Option[];
   workflows: Option[];
   fields: MergeField[];
@@ -226,11 +228,7 @@ export function StepFields({
       );
     case "move_stage":
       return stages.length ? (
-        <select value={step.stage_id} onChange={(e) => onChange({ stage_id: e.target.value })} className="field" aria-label="Stage">
-          {stages.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
+        <StagePicker stages={stages} pipelines={pipelines} value={step.stage_id} onChange={(v) => onChange({ stage_id: v.stageId })} />
       ) : (
         <p className="text-[13px] text-muted">Set up your pipeline first.</p>
       );
@@ -374,4 +372,60 @@ export function problem(step: WorkflowStep): string | null {
     default:
       return null;
   }
+}
+
+/** Strips "Pipeline: " from a stage name when it's shown under its pipeline. */
+export function shortStage(s: Stage, pipelines: Option[]) {
+  const p = pipelines.find((x) => x.id === s.pipelineId);
+  return p && s.name.startsWith(`${p.name}: `) ? s.name.slice(p.name.length + 2) : s.name;
+}
+
+/** Choose a pipeline, then a stage in it. `allowAny` adds "Any stage". */
+export function StagePicker({
+  stages,
+  pipelines,
+  value,
+  pipelineId,
+  onChange,
+  allowAny = false,
+}: {
+  stages: Stage[];
+  pipelines: Option[];
+  value: string;
+  pipelineId?: string;
+  onChange: (v: { pipelineId: string; stageId: string }) => void;
+  allowAny?: boolean;
+}) {
+  const current = stages.find((s) => s.id === value);
+  const pipe = current?.pipelineId ?? pipelineId ?? pipelines[0]?.id ?? stages[0]?.pipelineId ?? "";
+  const inPipe = stages.filter((s) => !s.pipelineId || s.pipelineId === pipe);
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <label className="flex flex-col gap-1.5 text-[12px] font-medium text-muted">
+        Pipeline
+        <select
+          value={pipe}
+          onChange={(e) => {
+            const first = stages.find((s) => s.pipelineId === e.target.value);
+            onChange({ pipelineId: e.target.value, stageId: allowAny ? "any" : (first?.id ?? "") });
+          }}
+          className="field h-10 text-[13.5px] font-normal text-ink"
+        >
+          {pipelines.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </label>
+      <label className="flex flex-col gap-1.5 text-[12px] font-medium text-muted">
+        Stage
+        <select value={value} onChange={(e) => onChange({ pipelineId: pipe, stageId: e.target.value })} className="field h-10 text-[13.5px] font-normal text-ink">
+          {allowAny && <option value="any">Any stage</option>}
+          {!allowAny && !current && <option value="">Choose a stage</option>}
+          {inPipe.map((s) => (
+            <option key={s.id} value={s.id}>{shortStage(s, pipelines)}</option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
 }

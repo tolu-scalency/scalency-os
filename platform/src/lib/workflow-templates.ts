@@ -66,7 +66,7 @@ export const TEMPLATES: Record<string, WorkflowTemplate> = {
     trigger: { type: "contact_created" },
     steps: [{ id: "a1", type: "notify_team", text: "New lead: {{name}} · {{email}} · {{phone}}" }],
   },
-  blank: { name: "Untitled workflow", description: "", trigger: { type: "manual" }, steps: [] },
+  blank: { name: "Untitled workflow", description: "", trigger: { type: "none" }, steps: [] },
 };
 
 

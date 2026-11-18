@@ -1,26 +1,32 @@
 import type { WorkflowTrigger } from "@/lib/data";
 
 /** Plain-English description of what starts a workflow. */
-export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: string }[]) {
+export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: string }[], pipelines: { id: string; name: string }[] = []) {
+  const pipe = (id?: string) => (id && id !== "any" ? pipelines.find((p) => p.id === id)?.name : undefined);
   switch (t.type) {
+    case "none":
+      return "No trigger yet";
     case "contact_created":
       return "When a contact is added";
+    case "deal_created":
+      return pipe(t.pipeline_id) ? `When a deal is created in ${pipe(t.pipeline_id)}` : "When a deal is created";
     case "stage_entered":
+      if (t.stage_id === "any") return `When a deal moves stage in ${pipe(t.pipeline_id) ?? "a pipeline"}`;
       return `When a contact enters ${stages.find((s) => s.id === t.stage_id)?.name ?? "a stage"}`;
     case "tag_added":
       return `When the tag “${t.tag}” is added`;
     case "tag_removed":
       return `When the tag “${t.tag}” is removed`;
     case "deal_won":
-      return "When a deal is won";
+      return pipe(t.pipeline_id) ? `When a deal is won in ${pipe(t.pipeline_id)}` : "When a deal is won";
     case "deal_lost":
-      return "When a deal is lost";
+      return pipe(t.pipeline_id) ? `When a deal is lost in ${pipe(t.pipeline_id)}` : "When a deal is lost";
     case "message_received":
       return t.channel === "sms" ? "When the lead replies by text" : t.channel === "email" ? "When the lead replies by email" : "When the lead replies";
     case "webhook":
       return "When a webhook is received";
     default:
-      return "When you add someone by hand";
+      return "Added by hand or by another workflow";
   }
 }
 

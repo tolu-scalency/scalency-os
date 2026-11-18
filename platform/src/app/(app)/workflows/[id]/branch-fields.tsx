@@ -6,7 +6,7 @@
 import { Icon } from "@/components/icon";
 import type { Condition, ConditionField, ConditionOp, CustomField, Stage } from "@/lib/data";
 import { MAX_BRANCHES, newId, type BranchNode, type Route } from "@/lib/flow";
-import type { Option } from "./step-fields";
+import { StagePicker, type Option } from "./step-fields";
 
 type Input = "none" | "tag" | "text" | "stage" | "pipeline" | "deal_status" | "member" | "number" | "days" | "time" | "field";
 type OpChoice = { key: string; label: string; op?: ConditionOp; negate?: boolean; noValue?: boolean };
@@ -303,11 +303,9 @@ function ValueInput({
       return <input list="wf-tags" value={v} maxLength={40} onChange={(e) => set({ value: e.target.value })} placeholder="Tag name" className={cls} aria-label="Tag" />;
     case "stage":
       return (
-        <select value={v} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Stage">
-          {stages.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
+        <div className="w-full">
+          <StagePicker stages={stages} pipelines={pipelines} value={v} onChange={(x) => set({ value: x.stageId })} />
+        </div>
       );
     case "pipeline":
       return (

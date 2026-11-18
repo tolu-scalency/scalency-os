@@ -4,6 +4,7 @@
 // remembers where you left it. "Dock" puts it back on the right.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/icon";
 
 type Pos = { x: number; y: number; w: number };
@@ -74,8 +75,9 @@ export function FloatingPanel({ title, subtitle, icon, tone, onClose, children, 
   }
 
   if (!pos) return null;
-  // On phones the panel is a sheet at the bottom instead.
-  return (
+  // On phones the panel is a sheet at the bottom instead. Drawn at the top of the
+  // page so nothing on the page can clip or cover it.
+  return createPortal(
     <div
       role="dialog"
       aria-label={title}
@@ -115,6 +117,7 @@ export function FloatingPanel({ title, subtitle, icon, tone, onClose, children, 
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
       {footer && <div className="flex items-center gap-2 border-t border-line bg-white px-4 py-3">{footer}</div>}
-    </div>
+    </div>,
+    document.body,
   );
 }

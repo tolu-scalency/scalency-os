@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icon";
 import { Page, PageHeader, Pill, Tile, type Tone } from "@/components/ui";
-import { getWorkspace, listWorkflows, timeAgo, listAllStages } from "@/lib/data";
+import { getWorkspace, listWorkflows, timeAgo, listAllStages, listPipelines } from "@/lib/data";
 import { createWorkflow } from "./actions";
 import { triggerLabel } from "./labels";
 
@@ -22,7 +22,7 @@ const statusTone = { active: "green", draft: "neutral", paused: "amber", archive
 
 export default async function WorkflowsPage() {
   const ws = await getWorkspace();
-  const [workflows, pipeline] = await Promise.all([listWorkflows(ws.account.id), listAllStages(ws.account.id)]);
+  const [workflows, pipeline, pipes] = await Promise.all([listWorkflows(ws.account.id), listAllStages(ws.account.id), listPipelines(ws.account.id)]);
   const stages = pipeline;
 
   return (
@@ -64,7 +64,7 @@ export default async function WorkflowsPage() {
                 <div className="min-w-0 flex-[1_1_220px]">
                   <div className="truncate text-[14.5px] font-semibold">{w.name}</div>
                   <div className="truncate text-[12.5px] text-muted">
-                    {triggerLabel(w.trigger, stages)} · {w.steps.length} step{w.steps.length === 1 ? "" : "s"}
+                    {triggerLabel(w.trigger, stages, pipes)} · {w.steps.filter((x) => x.type !== "goto").length} step{w.steps.filter((x) => x.type !== "goto").length === 1 ? "" : "s"}
                   </div>
                 </div>
                 <div className="text-[12.5px] text-muted">

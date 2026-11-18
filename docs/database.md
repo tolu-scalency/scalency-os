@@ -228,6 +228,13 @@ Migration `20261121090000_workflow_branches`.
 - New step types in `steps`: `branch` (`routes` with `name`, `match` all or any, `conditions`, `goto`, plus `otherwise_name` and `otherwise_goto`) and `goto` (`target`). Jumps only go forward, so a workflow can't loop. `goto` steps aren't written to the run history; a `branch` step records which branch was taken.
 - More conditions in `wf_condition`: any contact field (is, is not, contains, does not contain, empty, not empty, more than, less than), assigned user, deal value, pipeline, day of the week and time of day (in the workspace's time zone). `wf_match` checks a list with AND or OR. Helpers: `wf_compare`, `wf_step_index`. None of these can be called from the app directly.
 
+## Editable home page and pipeline triggers
+
+Migration `20261122090000_dashboard_and_triggers`.
+
+- `accounts.dashboard` (jsonb) holds the workspace's home page layout: a list of widgets (`id`, `type`, `size`, `settings`). Empty means the default layout. `save_dashboard(account, layout)` saves it and needs `settings.manage`.
+- Workflow triggers can now be `deal_created` (optionally in one pipeline), `stage_entered` with `stage_id = 'any'` plus a `pipeline_id` (any stage move in that pipeline), and `deal_won` / `deal_lost` limited to one pipeline. New workflows start with trigger `none` and can't be turned on until one is chosen.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

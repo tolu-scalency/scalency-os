@@ -241,7 +241,7 @@ export async function listContacts(accountId: string, q = "", limit = 200, f: Co
   });
 }
 
-export type Stage = { id: string; name: string; position: number };
+export type Stage = { id: string; name: string; position: number; pipelineId?: string };
 
 /** The workspace's pipeline and its stages, or null if it hasn't been set up yet. */
 export type PipelineSummary = { id: string; name: string; position: number };
@@ -702,12 +702,14 @@ export type WorkflowStep = StepBase &
 export type StepType = WorkflowStep["type"];
 
 export type WorkflowTrigger =
+  | { type: "none" }
   | { type: "contact_created" }
-  | { type: "stage_entered"; stage_id: string }
+  | { type: "stage_entered"; stage_id: string; pipeline_id?: string }
+  | { type: "deal_created"; pipeline_id?: string }
   | { type: "tag_added"; tag: string }
   | { type: "tag_removed"; tag: string }
-  | { type: "deal_won" }
-  | { type: "deal_lost" }
+  | { type: "deal_won"; pipeline_id?: string }
+  | { type: "deal_lost"; pipeline_id?: string }
   | { type: "message_received"; channel: "any" | "sms" | "email" }
   | { type: "webhook"; token: string }
   | { type: "manual" };
@@ -906,4 +908,65 @@ export async function contactSources(accountId: string) {
   const supabase = await createClient();
   const { data } = await supabase.from("contacts").select("source").eq("account_id", accountId).not("source", "is", null).limit(2000);
   return [...new Set((data ?? []).map((r) => (r.source as string).trim()).filter(Boolean))].sort().slice(0, 50);
+}
+
+/** Data for the home page widgets that aren't in getDashboard. Only what the layout uses is loaded. */
+export async function getDashboardExtras(accountId: string, types: Set<string>, pipelineIds: string[]) {
+  const supabase = await createClient();
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const days = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
+
+  const [won, closed, recent, open, boards] = await Promise.all([
+    types.has("stat_won_month")
+      ? supabase.from("opportunities").select("value_pence").eq("account_id", accountId).eq("status", "won").gte("updated_at", monthStart).limit(5000)
+      : null,
+    types.has("stat_win_rate")
+      ? supabase.from("opportunities").select("status").eq("account_id", accountId).in("status", ["won", "lost"]).gte("updated_at", days(90)).limit(10000)
+      : null,
+    types.has("leads_chart") || types.has("leads_by_source")
+      ? supabase.from("contacts").select("created_at, source").eq("account_id", accountId).gte("created_at", days(30)).order("created_at", { ascending: false }).limit(5000)
+      : null,
+    types.has("deals_by_owner") ? supabase.from("opportunities").select("assigned_to, value_pence").eq("account_id", accountId).eq("status", "open").limit(10000) : null,
+    Promise.all([...new Set(pipelineIds)].map(async (id) => [id, await getPipelineBoard(accountId, id)] as const)),
+  ]);
+
+  const wonRows = won?.data ?? [];
+  const closedRows = closed?.data ?? [];
+  const wonCount = closedRows.filter((r) => r.status === "won").length;
+
+  // Leads per day for the last 30 days (oldest first), in UK time.
+  const dayKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
+  const perDay = new Map<string, number>();
+  for (let i = 29; i >= 0; i--) perDay.set(dayKey(new Date(Date.now() - i * 86400000)), 0);
+  const bySource = new Map<string, number>();
+  for (const c of recent?.data ?? []) {
+    const k = dayKey(new Date(c.created_at as string));
+    if (perDay.has(k)) perDay.set(k, (perDay.get(k) ?? 0) + 1);
+    const src = ((c.source as string | null) ?? "").trim() || "Unknown";
+    bySource.set(src, (bySource.get(src) ?? 0) + 1);
+  }
+
+  let owners: { name: string; count: number; valuePence: number }[] = [];
+  if (open?.data) {
+    const names = await memberNames(accountId);
+    const m = new Map<string, { count: number; valuePence: number }>();
+    for (const o of open.data) {
+      const k = (o.assigned_to as string | null) ?? "";
+      const cur = m.get(k) ?? { count: 0, valuePence: 0 };
+      cur.count++;
+      cur.valuePence += (o.value_pence as number | null) ?? 0;
+      m.set(k, cur);
+    }
+    owners = [...m.entries()].map(([k, v]) => ({ name: k ? (names[k] ?? "Teammate") : "Nobody yet", ...v })).sort((a, b) => b.valuePence - a.valuePence || b.count - a.count);
+  }
+
+  return {
+    wonMonth: { count: wonRows.length, valuePence: wonRows.reduce((n, r) => n + ((r.value_pence as number | null) ?? 0), 0) },
+    winRate: closedRows.length ? { rate: Math.round((wonCount / closedRows.length) * 100), won: wonCount, closed: closedRows.length } : null,
+    leadsPerDay: [...perDay.entries()].map(([day, count]) => ({ day, count })),
+    leadsBySource: [...bySource.entries()].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count),
+    owners,
+    boards: Object.fromEntries(boards) as Record<string, Awaited<ReturnType<typeof getPipelineBoard>>>,
+  };
 }

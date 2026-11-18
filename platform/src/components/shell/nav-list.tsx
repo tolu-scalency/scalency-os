@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
 import { activeGroup, activeLink, NAV, type NavGroup } from "@/lib/nav";
 
@@ -24,9 +24,22 @@ export function NavList({
   flat?: boolean;
 }) {
   const current = activeGroup(pathname);
-  const [hover, setHover] = useState<{ key: string; top: number; left: number } | null>(null);
+  const [hover, setHover] = useState<{ key: string; top: number; left: number; itemTop: number; itemBottom: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(current ?? null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const insidePanel = useRef(false);
+
+  // Line the panel up with the item; if it would run off the bottom, line up its bottom edge instead.
+  useLayoutEffect(() => {
+    const el = panel.current;
+    if (!el || !hover) return;
+    const h = el.offsetHeight;
+    let top = hover.itemTop - 10;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, Math.min(hover.itemBottom + 10, window.innerHeight - 8) - h);
+    el.style.top = `${top}px`;
+  }, [hover]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -36,16 +49,30 @@ export function NavList({
   function open(key: string, el: HTMLElement) {
     if (mobile) return;
     if (closeTimer.current) clearTimeout(closeTimer.current);
-    const r = el.getBoundingClientRect();
-    const aside = el.closest("aside")?.getBoundingClientRect();
-    setHover({ key, top: Math.max(8, Math.min(r.top - 8, window.innerHeight - 420)), left: (aside?.right ?? r.right) + 6 });
+    if (openTimer.current) clearTimeout(openTimer.current);
+    const show = () => {
+      const r = el.getBoundingClientRect();
+      const aside = el.closest("aside")?.getBoundingClientRect();
+      setHover({ key, top: r.top - 10, left: aside?.right ?? r.right, itemTop: r.top, itemBottom: r.bottom });
+    };
+    // When another panel is already open, wait a moment: the pointer may just be
+    // passing over this item on its way across to that panel.
+    if (hover && hover.key !== key) openTimer.current = setTimeout(() => !insidePanel.current && show(), 180);
+    else show();
   }
   function closeSoon() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = setTimeout(() => setHover(null), 160);
+    if (openTimer.current) clearTimeout(openTimer.current);
+    closeTimer.current = setTimeout(() => !insidePanel.current && setHover(null), 350);
   }
   function keepOpen() {
+    insidePanel.current = true;
     if (closeTimer.current) clearTimeout(closeTimer.current);
+    if (openTimer.current) clearTimeout(openTimer.current);
+  }
+  function leavePanel() {
+    insidePanel.current = false;
+    closeSoon();
   }
 
   const panelGroup = hover ? groups.find((g) => g.key === hover.key) : null;
@@ -121,11 +148,14 @@ export function NavList({
         <div
           role="menu"
           aria-label={`${panelGroup.label} pages`}
+          ref={panel}
           onMouseEnter={keepOpen}
-          onMouseLeave={closeSoon}
+          onMouseLeave={leavePanel}
           style={{ top: hover.top, left: hover.left }}
-          className="flyout fixed z-[60] w-[260px] rounded-2xl border border-line bg-white p-2 text-navy shadow-[0_20px_50px_-12px_rgba(11,27,58,0.35)]"
+          className="flyout fixed z-[60] pl-2"
         >
+          {/* The padding on the left is an invisible bridge from the sidebar to the panel. */}
+          <div className="w-[260px] rounded-2xl border border-line bg-white p-2 text-navy shadow-[0_20px_50px_-12px_rgba(11,27,58,0.35)]">
           <div className="flex items-center gap-2 px-2.5 pb-2 pt-1.5">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-chip text-brand">
               <Icon name={panelGroup.icon} size={15} />
@@ -140,7 +170,10 @@ export function NavList({
                   <Link
                     role="menuitem"
                     href={l.href}
-                    onClick={() => setHover(null)}
+                    onClick={() => {
+                      insidePanel.current = false;
+                      setHover(null);
+                    }}
                     className={`flex h-9 items-center gap-2 rounded-lg px-2.5 text-[13.5px] transition-colors ${on ? "bg-chip font-semibold text-brand" : "text-navy hover:bg-surface"}`}
                   >
                     <span className="min-w-0 flex-1 truncate">{l.label}</span>
@@ -150,6 +183,7 @@ export function NavList({
               );
             })}
           </ul>
+          </div>
         </div>
       )}
     </div>

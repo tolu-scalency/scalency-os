@@ -14,38 +14,13 @@ import { saveWorkflow } from "../actions";
 import { blank, groups, kinds, problem, StepFields, summary, type Option } from "./step-fields";
 import { BranchFields, conditionText, newRoute } from "./branch-fields";
 import { FloatingPanel } from "./panel";
+import { newTrigger, triggerDef, TriggerFilters, TriggerPicker } from "./trigger-fields";
+import { triggerLabel } from "../labels";
 
 type Editable = { id: string; name: string; description: string; trigger: WorkflowTrigger; steps: WorkflowStep[]; graph: unknown[] | null; stopOnReply: boolean };
 type Selection = { t: "trigger" } | { t: "node"; id: string } | { t: "add"; list: string; index: number } | { t: "settings" } | null;
 
 const BRANCH_TONE = "from-[#c4b5fd] to-[#7c3aed]";
-
-function triggerValue(t: WorkflowTrigger) {
-  return t.type === "stage_entered" ? `stage:${t.stage_id}` : t.type;
-}
-
-function triggerText(t: WorkflowTrigger, stages: Stage[]) {
-  switch (t.type) {
-    case "contact_created":
-      return "When a contact is added";
-    case "stage_entered":
-      return `When a contact enters “${stages.find((s) => s.id === t.stage_id)?.name ?? "a stage"}”`;
-    case "tag_added":
-      return t.tag ? `When “${t.tag}” is added` : "When a tag is added";
-    case "tag_removed":
-      return t.tag ? `When “${t.tag}” is removed` : "When a tag is removed";
-    case "deal_won":
-      return "When a deal is won";
-    case "deal_lost":
-      return "When a deal is lost";
-    case "message_received":
-      return "When the lead replies";
-    case "webhook":
-      return "When a webhook is received";
-    default:
-      return "When you add someone by hand";
-  }
-}
 
 function initialTree(w: Editable): FlowNode[] {
   if (Array.isArray(w.graph) && w.graph.length) return w.graph as FlowNode[];
@@ -87,6 +62,7 @@ export function WorkflowEditor({
   const [sel, setSel] = useState<Selection>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropOver, setDropOver] = useState<string | null>(null);
+  const [choosingTrigger, setChoosingTrigger] = useState(false);
   const [message, setMessage] = useState<{ error?: string; ok?: string }>({});
   const [dirty, setDirty] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -323,14 +299,10 @@ export function WorkflowEditor({
     setDropOver(null);
   }
 
-  function setTriggerFrom(v: string) {
-    change(() => {
-      if (v.startsWith("stage:")) return setTrigger({ type: "stage_entered", stage_id: v.slice(6) });
-      if (v === "tag_added" || v === "tag_removed") return setTrigger({ type: v, tag: trigger.type === "tag_added" || trigger.type === "tag_removed" ? trigger.tag : "" });
-      if (v === "message_received") return setTrigger({ type: v, channel: "any" });
-      if (v === "webhook") return setTrigger({ type: v, token: workflow.trigger.type === "webhook" ? workflow.trigger.token : "" });
-      setTrigger({ type: v } as WorkflowTrigger);
-    });
+  function pickTrigger(type: string) {
+    const old = workflow.trigger.type === "webhook" ? workflow.trigger.token : undefined;
+    change(() => setTrigger(newTrigger(type, stages, pipelines, old)));
+    setChoosingTrigger(false);
   }
 
   async function copy(text: string) {
@@ -512,70 +484,66 @@ export function WorkflowEditor({
           </fieldset>
         </FloatingPanel>
       );
-    if (sel.t === "trigger")
+    if (sel.t === "trigger") {
+      const picking = !disabled && (choosingTrigger || trigger.type === "none");
+      const def = triggerDef(trigger.type);
       return (
-        <FloatingPanel title="Trigger" subtitle="What starts this workflow" icon={<Icon name="play" size={15} />} onClose={() => setSel(null)}>
-          <fieldset disabled={disabled} className="flex flex-col gap-3">
-            <select value={triggerValue(trigger)} onChange={(e) => setTriggerFrom(e.target.value)} aria-label="Trigger" className="field h-11 font-semibold">
-              <optgroup label="Contacts">
-                <option value="contact_created">When a contact is added</option>
-                <option value="tag_added">When a tag is added</option>
-                <option value="tag_removed">When a tag is removed</option>
-              </optgroup>
-              <optgroup label="Pipeline">
-                {stages.map((s) => (
-                  <option key={s.id} value={`stage:${s.id}`}>When a contact enters “{s.name}”</option>
-                ))}
-                <option value="deal_won">When a deal is won</option>
-                <option value="deal_lost">When a deal is lost</option>
-              </optgroup>
-              <optgroup label="Conversations">
-                <option value="message_received">When the lead replies</option>
-              </optgroup>
-              <optgroup label="Other">
-                <option value="webhook">When a webhook is received (other apps)</option>
-                <option value="manual">When you add someone by hand</option>
-              </optgroup>
-            </select>
-            {(trigger.type === "tag_added" || trigger.type === "tag_removed") && (
-              <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-                Tag
-                <input list="wf-tags" value={trigger.tag} onChange={(e) => change(() => setTrigger({ ...trigger, tag: e.target.value }))} placeholder="e.g. Hot lead" className="field h-10 font-normal" />
-              </label>
-            )}
-            {trigger.type === "message_received" && (
-              <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-                Replies by
-                <select value={trigger.channel} onChange={(e) => change(() => setTrigger({ type: "message_received", channel: e.target.value as "any" }))} className="field h-10 font-normal">
-                  <option value="any">text or email</option>
-                  <option value="sms">text only</option>
-                  <option value="email">email only</option>
-                </select>
-              </label>
-            )}
-            {trigger.type === "webhook" && (
-              <div className="rounded-xl bg-surface p-3 text-[13px]">
-                {hookUrl ? (
-                  <>
-                    <div className="mb-1.5 font-medium">Send leads to this address (POST):</div>
-                    <div className="flex items-center gap-2">
-                      <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-2 text-[12px] ring-1 ring-line">{hookUrl}</code>
-                      <button type="button" onClick={() => copy(hookUrl)} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
-                        <Icon name={copied ? "check" : "link"} size={13} /> {copied ? "Copied" : "Copy"}
-                      </button>
-                    </div>
-                    <p className="mt-2 text-muted">
-                      Send JSON with <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>phone</code>, and optionally <code>source</code> and <code>tags</code>. Keep this address private.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-muted">Save to get the address other apps send leads to.</p>
+        <FloatingPanel
+          title={picking ? "Choose a trigger" : (def?.label ?? "Trigger")}
+          subtitle={picking ? "What starts this workflow" : "What starts this workflow"}
+          icon={<Icon name={picking ? "play" : (def?.icon ?? "play")} size={15} />}
+          onClose={() => {
+            setSel(null);
+            setChoosingTrigger(false);
+          }}
+        >
+          {picking ? (
+            <>
+              {trigger.type !== "none" && (
+                <button type="button" onClick={() => setChoosingTrigger(false)} className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand">
+                  <Icon name="arrowLeft" size={13} /> Keep “{def?.label}”
+                </button>
+              )}
+              <TriggerPicker onPick={pickTrigger} />
+            </>
+          ) : (
+            <fieldset disabled={disabled} className="flex flex-col gap-3">
+              <div className="flex items-center gap-3 rounded-xl bg-surface p-3">
+                <span className="tile h-9 w-9 rounded-xl"><Icon name={def?.icon ?? "play"} size={16} /></span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13.5px] font-semibold">{def?.label}</div>
+                  <div className="text-[12px] text-muted">{def?.hint}</div>
+                </div>
+                {!disabled && (
+                  <button type="button" onClick={() => setChoosingTrigger(true)} className="btn-ghost inline-flex min-h-9 items-center rounded-xl px-3 text-[12.5px] font-semibold">Change</button>
                 )}
               </div>
-            )}
-          </fieldset>
+              <TriggerFilters trigger={trigger} onChange={(t) => change(() => setTrigger(t))} stages={stages} pipelines={pipelines} />
+              {trigger.type === "webhook" && (
+                <div className="rounded-xl bg-surface p-3 text-[13px]">
+                  {hookUrl ? (
+                    <>
+                      <div className="mb-1.5 font-medium">Send leads to this address (POST):</div>
+                      <div className="flex items-center gap-2">
+                        <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-2 text-[12px] ring-1 ring-line">{hookUrl}</code>
+                        <button type="button" onClick={() => copy(hookUrl)} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
+                          <Icon name={copied ? "check" : "link"} size={13} /> {copied ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-muted">
+                        Send JSON with <code>first_name</code>, <code>last_name</code>, <code>email</code>, <code>phone</code>, and optionally <code>source</code> and <code>tags</code>. Keep this address private.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-muted">Save to get the address other apps send leads to.</p>
+                  )}
+                </div>
+              )}
+            </fieldset>
+          )}
         </FloatingPanel>
       );
+    }
     if (!selected) return null;
     const isBranch = selected.type === "branch";
     const k = isBranch ? null : (kinds.find((x) => x.type === selected.type) ?? kinds[0]);
@@ -634,6 +602,7 @@ export function WorkflowEditor({
                 workflows={others}
                 fields={fieldsList}
                 customFields={customFields}
+                pipelines={pipelines}
                 allTags={tags}
                 onChange={(p) => edit((n) => updateNode(n, selected.id, (x) => ({ ...x, ...p }) as FlowNode))}
               />
@@ -683,7 +652,7 @@ export function WorkflowEditor({
         <span className={`min-w-0 flex-1 truncate text-[12.5px] ${message.error ? "text-bad" : message.ok ? "text-ok" : "text-muted"}`}>
           {locked ? (
             <span className="inline-flex items-center gap-1.5"><Icon name="lock" size={13} /> On. Pause it to make changes.</span>
-          ) : pending ? "Saving…" : (message.error ?? message.ok ?? (dirty ? "Saving automatically…" : issues ? `${issues} step${issues === 1 ? "" : "s"} still to finish` : "Changes save automatically"))}
+          ) : pending ? "Saving…" : (message.error ?? message.ok ?? (dirty ? "Saving automatically…" : trigger.type === "none" ? "Choose a trigger to start" : issues ? `${issues} step${issues === 1 ? "" : "s"} still to finish` : "Changes save automatically"))}
         </span>
         <div className="flex items-center gap-0.5 rounded-xl bg-surface p-0.5">
           <button type="button" onClick={() => setZoom(zoom - 0.1)} disabled={zoom <= 0.25} aria-label="Zoom out" className={zbtn}>−</button>
@@ -720,13 +689,15 @@ export function WorkflowEditor({
               type="button"
               data-node
               onClick={() => setSel({ t: "trigger" })}
-              className={`w-[300px] rounded-2xl border-2 border-dashed bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 ${sel?.t === "trigger" ? "border-brand" : "border-sky/60"}`}
+              className={`w-[300px] rounded-2xl border-2 border-dashed bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 ${sel?.t === "trigger" ? "border-brand" : trigger.type === "none" ? "border-warn/60" : "border-sky/60"}`}
             >
               <div className="flex items-center gap-2.5">
-                <span className="tile h-9 w-9 rounded-xl"><Icon name="play" size={16} /></span>
+                <span className={`h-9 w-9 rounded-xl ${trigger.type === "none" ? "inline-flex items-center justify-center bg-warn-bg text-warn" : "tile"}`}>
+                  <Icon name={trigger.type === "none" ? "plus" : (triggerDef(trigger.type)?.icon ?? "play")} size={16} />
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-brand">Trigger</div>
-                  <div className="truncate text-[13.5px] font-semibold">{triggerText(trigger, stages)}</div>
+                  <div className="truncate text-[13.5px] font-semibold">{trigger.type === "none" ? "Add a trigger" : triggerLabel(trigger, stages, pipelines)}</div>
                 </div>
               </div>
             </button>

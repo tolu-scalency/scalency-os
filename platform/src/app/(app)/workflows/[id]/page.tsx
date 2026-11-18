@@ -83,7 +83,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
       <WorkflowEditor
         key={wf.id}
         workflow={{ id: wf.id, name: wf.name, description: wf.description, trigger: wf.trigger, steps: wf.steps, graph: wf.graph, stopOnReply: wf.stopOnReply }}
-        stages={pipeline.map((s, i) => ({ id: s.id, name: s.name, position: i + 1 }))}
+        stages={pipeline.map((s, i) => ({ id: s.id, name: s.name, position: i + 1, pipelineId: s.pipelineId }))}
         pipelines={pipes.map((p) => ({ id: p.id, name: p.name }))}
         members={Object.entries(names).map(([mid, name]) => ({ id: mid, name }))}
         workflows={flows.map((f) => ({ id: f.id, name: f.name }))}
