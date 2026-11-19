@@ -38,6 +38,7 @@ export function WorkflowEditor({
   locked,
   customFields,
   customValues,
+  forms = [],
 }: {
   workflow: Editable;
   stages: Stage[];
@@ -49,6 +50,7 @@ export function WorkflowEditor({
   locked: boolean;
   customFields: CustomField[];
   customValues: CustomValue[];
+  forms?: Option[];
 }) {
   const fieldsList = mergeFields(customFields, customValues);
   const others = workflows.filter((w) => w.id !== workflow.id);
@@ -518,7 +520,7 @@ export function WorkflowEditor({
                   <button type="button" onClick={() => setChoosingTrigger(true)} className="btn-ghost inline-flex min-h-9 items-center rounded-xl px-3 text-[12.5px] font-semibold">Change</button>
                 )}
               </div>
-              <TriggerFilters trigger={trigger} onChange={(t) => change(() => setTrigger(t))} stages={stages} pipelines={pipelines} />
+              <TriggerFilters trigger={trigger} onChange={(t) => change(() => setTrigger(t))} stages={stages} pipelines={pipelines} forms={forms} />
               {trigger.type === "webhook" && (
                 <div className="rounded-xl bg-surface p-3 text-[13px]">
                   {hookUrl ? (
@@ -697,7 +699,7 @@ export function WorkflowEditor({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-brand">Trigger</div>
-                  <div className="truncate text-[13.5px] font-semibold">{trigger.type === "none" ? "Add a trigger" : triggerLabel(trigger, stages, pipelines)}</div>
+                  <div className="truncate text-[13.5px] font-semibold">{trigger.type === "none" ? "Add a trigger" : triggerLabel(trigger, stages, pipelines, forms)}</div>
                 </div>
               </div>
             </button>

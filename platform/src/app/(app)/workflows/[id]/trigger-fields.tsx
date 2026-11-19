@@ -30,7 +30,7 @@ export const TRIGGERS: TriggerDef[] = [
   { type: "email_bounced", label: "Email bounced or unsubscribed", hint: "Delivery failed or they opted out", group: "Conversations", icon: "warning", soon: true },
   { type: "call_status", label: "Call completed or missed", hint: "An inbound or outbound call ends", group: "Conversations", icon: "phone", soon: true },
 
-  { type: "form_submitted", label: "Form submitted", hint: "One of your forms is filled in", group: "Forms and bookings", icon: "file", soon: true },
+  { type: "form_submitted", label: "Form submitted", hint: "One of your forms is filled in", group: "Forms and bookings", icon: "file" },
   { type: "appointment_booked", label: "Appointment booked", hint: "A booking is made on a calendar", group: "Forms and bookings", icon: "calendar", soon: true },
   { type: "appointment_status", label: "Appointment cancelled or no-show", hint: "A booking changes status", group: "Forms and bookings", icon: "calendar", soon: true },
   { type: "trigger_link", label: "Trigger link clicked", hint: "A tracked link is clicked", group: "Forms and bookings", icon: "link", soon: true },
@@ -116,11 +116,13 @@ export function TriggerFilters({
   onChange,
   stages,
   pipelines,
+  forms = [],
 }: {
   trigger: WorkflowTrigger;
   onChange: (t: WorkflowTrigger) => void;
   stages: Stage[];
   pipelines: Option[];
+  forms?: Option[];
 }) {
   const pipelineSelect = (value: string | undefined, set: (v: string | undefined) => void) => (
     <label className="flex flex-col gap-1.5 text-[12px] font-medium text-muted">
@@ -152,6 +154,23 @@ export function TriggerFilters({
     case "deal_won":
     case "deal_lost":
       return pipelineSelect(trigger.pipeline_id, (v) => onChange({ type: trigger.type, ...(v ? { pipeline_id: v } : {}) }));
+    case "form_submitted":
+      return (
+        <label className="flex flex-col gap-1.5 text-[12px] font-medium text-muted">
+          Which form
+          <select
+            value={trigger.form_id ?? "any"}
+            onChange={(e) => onChange(e.target.value === "any" ? { type: "form_submitted" } : { type: "form_submitted", form_id: e.target.value })}
+            className="field h-10 text-[13.5px] font-normal text-ink"
+          >
+            <option value="any">Any form</option>
+            {forms.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+          {!forms.length && <span className="font-normal">You haven&apos;t made a form yet. Create one in Forms.</span>}
+        </label>
+      );
     case "tag_added":
     case "tag_removed":
       return (

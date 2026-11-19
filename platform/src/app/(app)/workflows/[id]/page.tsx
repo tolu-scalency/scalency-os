@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -29,7 +30,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
   const { id } = await props.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await getWorkspace();
-  const [wf, pipeline, names, flows, tags, h, customFields, customValues, pipes] = await Promise.all([
+  const [wf, pipeline, names, flows, tags, h, customFields, customValues, pipes, { data: formRows }] = await Promise.all([
     getWorkflow(id, ws.account.id),
     listAllStages(ws.account.id),
     memberNames(ws.account.id),
@@ -39,6 +40,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
     listCustomFields(ws.account.id),
     listCustomValues(ws.account.id),
     listPipelines(ws.account.id),
+    (await createClient()).from("forms").select("id, name").eq("account_id", ws.account.id).neq("status", "archived").order("name"),
   ]);
   if (!wf) notFound();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "os.scalency.us";
@@ -85,6 +87,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
         workflow={{ id: wf.id, name: wf.name, description: wf.description, trigger: wf.trigger, steps: wf.steps, graph: wf.graph, stopOnReply: wf.stopOnReply }}
         stages={pipeline.map((s, i) => ({ id: s.id, name: s.name, position: i + 1, pipelineId: s.pipelineId }))}
         pipelines={pipes.map((p) => ({ id: p.id, name: p.name }))}
+        forms={(formRows ?? []).map((f) => ({ id: f.id as string, name: f.name as string }))}
         members={Object.entries(names).map(([mid, name]) => ({ id: mid, name }))}
         workflows={flows.map((f) => ({ id: f.id, name: f.name }))}
         tags={tags}

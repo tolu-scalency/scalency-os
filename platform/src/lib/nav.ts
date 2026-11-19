@@ -122,7 +122,7 @@ export const NAV: NavGroup[] = [
     icon: "globe",
     href: "/funnels",
     soon: true,
-    links: [{ label: "Funnels and pages", href: "/funnels", soon: true }, { label: "Forms", href: "/forms", soon: true }, ...soonLinks("sites")],
+    links: [{ label: "Funnels and pages", href: "/funnels", soon: true }, { label: "Forms", href: "/forms" }, ...soonLinks("sites")],
   },
   { key: "memberships", label: "Memberships", icon: "book", href: S("courses"), soon: true, links: soonLinks("memberships") },
   { key: "reputation", label: "Reputation", icon: "star", href: S("reviews"), soon: true, links: soonLinks("reputation") },

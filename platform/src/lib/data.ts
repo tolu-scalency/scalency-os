@@ -706,6 +706,7 @@ export type WorkflowTrigger =
   | { type: "contact_created" }
   | { type: "stage_entered"; stage_id: string; pipeline_id?: string }
   | { type: "deal_created"; pipeline_id?: string }
+  | { type: "form_submitted"; form_id?: string }
   | { type: "tag_added"; tag: string }
   | { type: "tag_removed"; tag: string }
   | { type: "deal_won"; pipeline_id?: string }

@@ -313,6 +313,15 @@ export async function saveWorkflow(
     case "deal_lost":
       trigger = { type: t.type, ...pipeFilter() };
       break;
+    case "form_submitted": {
+      const fid = String(t.form_id ?? "");
+      if (fid) {
+        const { data: f } = await supabase.from("forms").select("id").eq("id", fid).eq("account_id", ws.account.id).maybeSingle();
+        if (!f) return { error: "Choose a form that still exists." };
+        trigger = { type: "form_submitted", form_id: fid };
+      } else trigger = { type: "form_submitted" };
+      break;
+    }
     case "stage_entered": {
       if (t.stage_id === "any") {
         if (!pipelineIds.has(String(t.pipeline_id ?? ""))) return { error: "Choose the pipeline that starts this workflow." };
