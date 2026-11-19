@@ -235,6 +235,15 @@ Migration `20261122090000_dashboard_and_triggers`.
 - `accounts.dashboard` (jsonb) holds the workspace's home page layout: a list of widgets (`id`, `type`, `size`, `settings`). Empty means the default layout. `save_dashboard(account, layout)` saves it and needs `settings.manage`.
 - Workflow triggers can now be `deal_created` (optionally in one pipeline), `stage_entered` with `stage_id = 'any'` plus a `pipeline_id` (any stage move in that pipeline), and `deal_won` / `deal_lost` limited to one pipeline. New workflows start with trigger `none` and can't be turned on until one is chosen.
 
+## Forms
+
+Migration `20261123090000_forms`.
+
+- Reuses `forms` and `form_submissions`. `forms.definition` holds the fields, heading, button, thank-you message, consent box and style. New columns: `tags` (added to everyone who submits), `stage_id` (optional deal in that stage), `redirect_url` (https thank-you page).
+- `form_submissions.status` can now be `submitted` (one-step forms). `answers` keeps `{ fields: [{label, value}], consent }`; `tracking` keeps the page, UTM tags and a hashed visitor id used to limit repeat sends.
+- Building forms needs `sites.manage`. Public submissions go through `/api/forms/<id>` with the service key, so nothing public is opened in the database.
+- New workflow trigger `form_submitted` (optionally `form_id`), fired by `workflows_on_form_submitted`.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

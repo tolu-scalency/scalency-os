@@ -17,7 +17,7 @@ export const PERMISSIONS = [
   { key: "calendars.manage", group: "Calendar", label: "Manage calendars and bookings", hint: "Calendars, booking pages and appointments.", soon: true },
   { key: "payments.manage", group: "Payments", label: "Manage payments", hint: "Invoices, products, subscriptions and refunds.", soon: true },
   { key: "marketing.manage", group: "Marketing", label: "Manage marketing", hint: "Campaigns, social planner and templates.", soon: true },
-  { key: "sites.manage", group: "Sites", label: "Manage sites and forms", hint: "Funnels, websites, forms and surveys.", soon: true },
+  { key: "sites.manage", group: "Sites", label: "Manage sites and forms", hint: "Funnels, websites, forms and surveys." },
   { key: "ai.manage", group: "AI", label: "Manage AI", hint: "AI agents, voice receptionist and creative studio.", soon: true },
   { key: "reporting.view", group: "Reporting", label: "See reports", hint: "Dashboards and reports.", soon: true },
   { key: "settings.manage", group: "Settings", label: "Change workspace settings", hint: "Custom fields, saved details, tags, sending and AI setup." },

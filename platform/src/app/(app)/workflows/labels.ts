@@ -1,13 +1,17 @@
 import type { WorkflowTrigger } from "@/lib/data";
 
 /** Plain-English description of what starts a workflow. */
-export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: string }[], pipelines: { id: string; name: string }[] = []) {
+export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: string }[], pipelines: { id: string; name: string }[] = [], forms: { id: string; name: string }[] = []) {
   const pipe = (id?: string) => (id && id !== "any" ? pipelines.find((p) => p.id === id)?.name : undefined);
   switch (t.type) {
     case "none":
       return "No trigger yet";
     case "contact_created":
       return "When a contact is added";
+    case "form_submitted": {
+      const f = t.form_id ? forms.find((x) => x.id === t.form_id)?.name : undefined;
+      return f ? `When “${f}” is submitted` : "When a form is submitted";
+    }
     case "deal_created":
       return pipe(t.pipeline_id) ? `When a deal is created in ${pipe(t.pipeline_id)}` : "When a deal is created";
     case "stage_entered":

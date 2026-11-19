@@ -6,7 +6,7 @@ import { FRESH_SIGN_IN, KEEP_COOKIE, POLICY, SEEN_COOKIE } from "@/lib/session-p
 // This is a quick first check only: every data read is also protected by row-level security in the database.
 
 // Pages anyone can open. "/" is the public homepage.
-const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/invite", "/api/cron", "/api/hooks", "/api/inbound"];
+const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/invite", "/f", "/api/cron", "/api/hooks", "/api/inbound", "/api/forms"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -47,7 +47,7 @@ export async function proxy(request: NextRequest) {
 
   // Sign people out after too long, or after too long without using the app.
   // /auth and /api are left alone: they're part of signing in, or called by other services.
-  if (signedIn && !path.startsWith("/auth") && !path.startsWith("/api")) {
+  if (signedIn && !path.startsWith("/auth") && !path.startsWith("/api") && !path.startsWith("/f/")) {
     const claims = data!.claims as { amr?: { timestamp?: number }[]; iat?: number };
     const now = Math.floor(Date.now() / 1000);
     const signedInAt = Math.max(0, ...(claims.amr ?? []).map((a) => Number(a.timestamp) || 0)) || Number(claims.iat) || now;
