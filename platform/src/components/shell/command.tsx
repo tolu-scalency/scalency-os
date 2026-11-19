@@ -5,11 +5,13 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icon";
 import { askAI, quickSearch } from "@/app/(app)/ai-actions";
+import { permForPath } from "@/lib/nav";
 
 type Action = { label: string; hint?: string; icon: IconName; href: string };
 
 const ACTIONS: Action[] = [
   { label: "New contact", icon: "plus", href: "/contacts?new=1" },
+  { label: "New form", icon: "file", href: "/forms" },
   { label: "New task", icon: "tasks", href: "/tasks" },
   { label: "New workflow", icon: "zap", href: "/workflows" },
   { label: "Set up with AI", hint: "Pipeline, fields and workflows", icon: "spark", href: "/ai-builder" },
@@ -24,7 +26,7 @@ const ACTIONS: Action[] = [
 ];
 
 /** Ctrl+K (or Cmd+K): jump anywhere, find a contact, or ask Scalency AI. */
-export function CommandBar({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandBar({ open, onClose, permissions = [] }: { open: boolean; onClose: () => void; permissions?: string[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [people, setPeople] = useState<{ id: string; name: string; sub: string; stage: string | null }[]>([]);
@@ -44,7 +46,11 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose: () => vo
     return () => clearTimeout(t);
   }, [q]);
 
-  const actions = ACTIONS.filter((a) => !q || a.label.toLowerCase().includes(q.toLowerCase()));
+  const allowed = (href: string) => {
+    const need = permForPath(href.split("?")[0]);
+    return !need || permissions.includes(need);
+  };
+  const actions = ACTIONS.filter((a) => allowed(a.href) && (!q || a.label.toLowerCase().includes(q.toLowerCase())));
   const items: { key: string; run: () => void; node: React.ReactNode }[] = [
     ...(q.trim()
       ? [

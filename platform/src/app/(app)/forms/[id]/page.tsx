@@ -24,7 +24,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
     listPipelines(ws.account.id),
     supabase
       .from("form_submissions")
-      .select("id, contact_id, answers, tracking, started_at, contacts(first_name, last_name, email, phone)")
+      .select("id, contact_id, status, answers, tracking, started_at, contacts(first_name, last_name, email, phone)")
       .eq("form_id", id)
       .order("started_at", { ascending: false })
       .limit(200),
@@ -35,7 +35,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
 
   const submissions: Submission[] = (subs ?? []).map((s) => {
     const c = (Array.isArray(s.contacts) ? s.contacts[0] : s.contacts) as { first_name?: string; last_name?: string; email?: string; phone?: string } | null;
-    const a = (s.answers ?? {}) as { fields?: { label: string; value: string }[] };
+    const a = (s.answers ?? {}) as { fields?: { label: string; value: string }[]; score?: number };
     const t = (s.tracking ?? {}) as Record<string, string>;
     return {
       id: s.id as string,
@@ -46,6 +46,8 @@ export default async function FormPage({ params, searchParams }: { params: Promi
       answers: Array.isArray(a.fields) ? a.fields : [],
       source: [t.utm_source, t.utm_campaign].filter(Boolean).join(" / ") || (t.page ? new URL(t.page, base).hostname : ""),
       at: s.started_at as string,
+      status: (["started", "submitted", "qualified", "unqualified"].includes(s.status as string) ? s.status : "submitted") as Submission["status"],
+      score: typeof a.score === "number" ? a.score : null,
     };
   });
 
@@ -68,7 +70,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
         stages={stages.map((s, i) => ({ id: s.id, name: s.name, position: i + 1, pipelineId: s.pipelineId }))}
         pipelines={pipelines.map((p) => ({ id: p.id, name: p.name }))}
         submissions={submissions}
-        initialTab={tab === "share" || tab === "settings" || tab === "submissions" ? tab : "build"}
+        initialTab={tab === "share" || tab === "settings" || tab === "submissions" ? tab : "design"}
       />
     </Page>
   );

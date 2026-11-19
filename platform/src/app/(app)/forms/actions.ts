@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { can, getWorkspace } from "@/lib/data";
-import { cleanDefinition, DEFAULT_DEFINITION, publishProblem } from "@/lib/form-builder";
+import { blankDefinition, cleanDefinition, field, publishProblem, row, step } from "@/lib/form-builder";
+import { templateByKey } from "@/lib/form-templates";
 
 const NO_ACCESS = "You don't have access to build forms. Ask the workspace owner.";
 
@@ -12,12 +13,28 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "form";
 }
 
-/** Creates a form with the usual contact fields and opens the builder. */
+/**
+ * Creates a form and opens Form Studio. From a template ("template"), from a
+ * definition the AI built ("definition", JSON), or from scratch.
+ */
 export async function createForm(fd: FormData) {
   const ws = await getWorkspace();
   if (!can(ws, "sites.manage")) redirect("/forms?error=access");
   const supabase = await createClient();
-  const base = String(fd.get("name") ?? "").trim().slice(0, 80) || "Contact form";
+  const tpl = templateByKey(String(fd.get("template") ?? ""));
+  let definition = tpl ? tpl.build() : blankDefinition();
+  if (!tpl && fd.get("start") === "empty") {
+    definition = { ...definition, steps: [step("Step 1", row(field("email")))], progress: "none" };
+  }
+  const rawDef = String(fd.get("definition") ?? "");
+  if (!tpl && rawDef) {
+    try {
+      definition = cleanDefinition({ ...JSON.parse(rawDef.slice(0, 200_000)), meta: { source: "ai" } });
+    } catch {
+      redirect("/forms?error=1");
+    }
+  }
+  const base = String(fd.get("name") ?? "").trim().slice(0, 80) || tpl?.name || "Untitled form";
   let name = base;
   for (let i = 2; i < 50; i++) {
     const { count } = await supabase.from("forms").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("name", name);
@@ -25,11 +42,8 @@ export async function createForm(fd: FormData) {
     name = `${base} ${i}`;
   }
   const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`;
-  const { data, error } = await supabase
-    .from("forms")
-    .insert({ account_id: ws.account.id, name, slug, status: "draft", definition: { ...DEFAULT_DEFINITION, title: base === "Contact form" ? DEFAULT_DEFINITION.title : base } })
-    .select("id")
-    .single();
+  const tags = tpl?.key === "ai-audit" ? ["AI audit"] : [];
+  const { data, error } = await supabase.from("forms").insert({ account_id: ws.account.id, name, slug, status: "draft", definition: cleanDefinition(definition), tags }).select("id").single();
   if (error || !data) redirect("/forms?error=1");
   redirect(`/forms/${data.id}`);
 }

@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Icon } from "@/components/icon";
 import { Page, PageHeader, Pill, Tile } from "@/components/ui";
 import { can, getWorkspace, timeAgo } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import { createForm } from "./actions";
+import { NewFormButton } from "./new-form";
 
 export const metadata: Metadata = { title: "Forms" };
 
@@ -34,7 +33,11 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
 
   return (
     <Page>
-      <PageHeader title="Forms" subtitle="Lead forms for your website. Every submission becomes a contact, gets tagged and can start a workflow." />
+      <PageHeader
+        title="Forms"
+        subtitle="Lead forms for your website. Every submission becomes a contact, gets tagged and can start a workflow."
+        actions={canEdit && forms?.length ? <NewFormButton accountId={ws.account.id} /> : undefined}
+      />
 
       {error && (
         <p className="rounded-xl border border-bad/30 bg-bad-bg px-4 py-3 text-[13.5px] text-bad">
@@ -42,20 +45,15 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
         </p>
       )}
 
-      {canEdit && (
-        <form action={createForm} className="card flex flex-wrap items-center gap-3 p-4">
-          <Tile icon="file" tone="blue" size={38} />
-          <input name="name" maxLength={80} placeholder="Name your form, e.g. Free AI audit" className="field h-11 min-w-0 flex-[1_1_240px]" aria-label="Form name" />
-          <button type="submit" className="btn-primary inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-[14px] font-semibold">
-            <Icon name="plus" size={15} /> New form
-          </button>
-        </form>
-      )}
-
       {!forms?.length ? (
-        <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">
-          No forms yet. Create one above, then add it to your website with one line of code.
-        </p>
+        canEdit ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-[14px] text-muted">No forms yet. Pick how you&apos;d like to start, then add it to your website with one line of code.</p>
+            <NewFormButton accountId={ws.account.id} big />
+          </div>
+        ) : (
+          <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">No forms yet.</p>
+        )
       ) : (
         <div className="card divide-y divide-line">
           {forms.map((f) => {

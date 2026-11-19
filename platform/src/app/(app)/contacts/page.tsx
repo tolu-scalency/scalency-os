@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { Avatar, Page, PageHeader, Pill } from "@/components/ui";
 import { EmptyState } from "@/components/states";
-import { contactSources, formatPence, getPipeline, getWorkspace, listContacts, listTags, memberNames, timeAgo } from "@/lib/data";
+import { can, contactSources, formatPence, getPipeline, getWorkspace, listContacts, listTags, memberNames, timeAgo } from "@/lib/data";
 import { AddContact } from "./add-contact";
 
 export const metadata: Metadata = { title: "Contacts" };
@@ -45,7 +45,7 @@ async function Contacts({ searchParams }: { searchParams: Promise<Record<string,
       <PageHeader
         title="Contacts"
         subtitle={q || active.length ? `${contacts.length} match${contacts.length === 1 ? "" : "es"}` : `${contacts.length} ${contacts.length === 1 ? "person" : "people"}`}
-        actions={<AddContact stages={pipeline?.stages ?? []} defaultOpen={openNew} />}
+        actions={can(ws, "contacts.edit") ? <AddContact stages={pipeline?.stages ?? []} defaultOpen={openNew} /> : undefined}
       />
 
       <form className="flex flex-wrap items-center gap-2" role="search">

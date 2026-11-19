@@ -1,4 +1,5 @@
 import type { IconName } from "@/components/icon";
+import type { Permission } from "@/lib/permissions";
 
 // The whole product as a map. Each sidebar item opens a panel of its pages on
 // hover. Live pages link straight to their screen; pages still being built
@@ -179,4 +180,68 @@ export function activeLink(pathname: string, links: NavLink[]) {
     .map((l) => l.href)
     .filter((h) => pathname === h || pathname.startsWith(h + "/"))
     .sort((a, b) => b.length - a.length)[0];
+}
+
+// ---------------------------------------------------------------------------
+// Access: people only see the parts of the product they're allowed to use.
+// ---------------------------------------------------------------------------
+
+/** Access a whole menu group needs. Groups not listed are open to everyone in the workspace. */
+const GROUP_PERM: Record<string, Permission> = {
+  calendar: "calendars.manage",
+  payments: "payments.manage",
+  marketing: "marketing.manage",
+  sites: "sites.manage",
+  memberships: "sites.manage",
+  reputation: "marketing.manage",
+  ai: "ai.manage",
+  reporting: "reporting.view",
+};
+
+/** Access a single page needs. */
+export const PAGE_PERM: Record<string, Permission> = {
+  "/workflows": "workflows.manage",
+  "/ai-builder": "settings.manage",
+  "/forms": "sites.manage",
+  "/funnels": "sites.manage",
+  "/campaigns": "marketing.manage",
+  "/agents": "ai.manage",
+  "/reports": "reporting.view",
+  "/settings": "settings.manage",
+  "/settings/pipeline": "pipeline.manage",
+  "/settings/team": "team.manage",
+  "/settings/roles": "team.manage",
+  "/settings/fields": "settings.manage",
+  "/settings/integrations": "settings.manage",
+  "/settings/billing": "settings.manage",
+  "/settings/notifications": "settings.manage",
+  "/soon/calls": "calls.make",
+  "/soon/import": "contacts.import",
+};
+
+/** The access needed for a path, if any (the longest matching page wins). */
+export function permForPath(pathname: string): Permission | undefined {
+  const match = Object.keys(PAGE_PERM)
+    .filter((h) => pathname === h || pathname.startsWith(h + "/"))
+    .sort((a, b) => b.length - a.length)[0];
+  if (match) return PAGE_PERM[match];
+  const soon = pathname.startsWith("/soon/") ? SOON_PAGES.find((p) => `/soon/${p.slug}` === pathname)?.group : undefined;
+  return soon ? GROUP_PERM[soon] : undefined;
+}
+
+/** The menu as this person should see it. */
+export function navFor(perms: readonly string[]) {
+  const has = (p?: Permission) => !p || perms.includes(p);
+  const filter = (g: NavGroup): NavGroup | null => {
+    if (!has(GROUP_PERM[g.key])) return null;
+    if (!g.links) return has(PAGE_PERM[g.href]) ? g : null;
+    const links = g.links.filter((l) => has(PAGE_PERM[l.href]) && has(permForPath(l.href)));
+    if (!links.length) return null;
+    const href = links.some((l) => l.href === g.href) ? g.href : links[0].href;
+    return { ...g, href, links };
+  };
+  return {
+    nav: NAV.map(filter).filter((g): g is NavGroup => Boolean(g)),
+    settings: filter(SETTINGS_NAV),
+  };
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon } from "@/components/icon";
 import { Avatar, Pill } from "@/components/ui";
-import { getContactDetail, getWorkspace, listThreadMessages, listThreads, timeAgo, type Thread } from "@/lib/data";
+import { can, getContactDetail, getWorkspace, listThreadMessages, listThreads, timeAgo, type Thread } from "@/lib/data";
 import { sendMessage } from "./actions";
 import { ChannelPicker } from "./channel-picker";
 
@@ -93,6 +93,9 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
               ))}
             </ul>
             <div className="flex-none border-t border-line bg-white p-3 sm:p-4">
+              {!can(ws, "inbox.send") ? (
+                <p className="text-center text-[13px] text-muted">You can read conversations here. Ask the workspace owner if you need to reply.</p>
+              ) : (
               <ActionForm action={sendMessage} resetOnOk className="flex flex-col gap-2">
                 <input type="hidden" name="contact_id" value={selected.contactId} />
                 <ChannelPicker />
@@ -100,6 +103,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
                   <SubmitButton icon="send" pendingText="Sending…">Send</SubmitButton>
                 </div>
               </ActionForm>
+              )}
             </div>
           </>
         )}

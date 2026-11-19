@@ -244,6 +244,15 @@ Migration `20261123090000_forms`.
 - Building forms needs `sites.manage`. Public submissions go through `/api/forms/<id>` with the service key, so nothing public is opened in the database.
 - New workflow trigger `form_submitted` (optionally `form_id`), fired by `workflows_on_form_submitted`.
 
+## Form Studio (forms version 2)
+
+Migration `20261124090000_forms_v2`.
+
+- `forms.definition` is now version 2: steps, each with rows of one to four columns, each column holding blocks (questions, headings, text, images, dividers, spacers). It also keeps show-when rules, points per answer, the qualify settings (minimum score and what good-fit and not-a-fit people see), the style, consent and "save people who stop part way". Older version 1 forms are upgraded when they're opened.
+- `form_submissions`: people who stop part way are saved as `started` with a resume token in `tracking.resume` (indexed by `form_submissions_resume_idx`). Finished ones become `submitted`, or `qualified` / `unqualified` when the form scores leads, with the score in `answers.score` and the reason in `disqualified_by`.
+- `workflows_on_form_submitted` now starts "Form submitted" workflows for `submitted`, `qualified` and `unqualified`, never for `started`.
+- New table `ai_form_runs`: one row per "Build with AI" draft (`account_id`, `created_by`, `prompt`, `created_at`), used for the daily limit in the `ai-form` edge function. Only people with `sites.manage` in that workspace can read or add rows.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
