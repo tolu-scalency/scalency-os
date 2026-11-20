@@ -12,6 +12,8 @@ export const metadata: Metadata = {
   title: { default: "Scalency OS", template: "%s · Scalency OS" },
   description: "Leads, pipeline, tasks and your team in one place. Every enquiry answered, followed up and booked.",
   applicationName: "Scalency OS",
+  // Declared here (not as app/ icon files) so public form pages can replace them with the workspace's own.
+  icons: { icon: [{ url: "/favicon.ico", sizes: "any" }, { url: "/icon.png", type: "image/png" }], apple: "/apple-icon.png" },
 };
 
 export const viewport: Viewport = {

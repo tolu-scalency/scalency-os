@@ -5,19 +5,26 @@ import { Page } from "@/components/ui";
 import { can, getWorkspace, listAllStages, listCustomFields, listPipelines, listTags } from "@/lib/data";
 import { cleanDefinition } from "@/lib/form-builder";
 import { createClient } from "@/lib/supabase/server";
+import { formsHealth } from "@/lib/forms-health";
 import { FormEditor, type Submission } from "./form-editor";
 
 export const metadata: Metadata = { title: "Form" };
+
+/** Server-side date maths, kept out of the component body. */
+function daysAgo(n: number) {
+  return new Date(Date.now() - n * 86400000).toISOString();
+}
 
 export default async function FormPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const ws = await getWorkspace();
   const supabase = await createClient();
-  const { data: form } = await supabase.from("forms").select("id, name, status, definition, tags, stage_id, redirect_url").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  const { data: form } = await supabase.from("forms").select("id, name, slug, status, definition, tags, stage_id, redirect_url").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
   if (!form) notFound();
 
-  const [customFields, tags, stages, pipelines, { data: subs }, h] = await Promise.all([
+  const since = daysAgo(30).slice(0, 10);
+  const [customFields, tags, stages, pipelines, { data: subs }, h, { data: acc }, { data: stats }] = await Promise.all([
     listCustomFields(ws.account.id),
     listTags(ws.account.id),
     listAllStages(ws.account.id),
@@ -29,13 +36,19 @@ export default async function FormPage({ params, searchParams }: { params: Promi
       .order("started_at", { ascending: false })
       .limit(200),
     headers(),
+    supabase.from("accounts").select("slug").eq("id", ws.account.id).single(),
+    supabase.from("form_stats").select("views").eq("form_id", id).gte("day", since),
   ]);
+  const health = await formsHealth();
+  const views = (stats ?? []).reduce((n, r) => n + ((r.views as number) ?? 0), 0);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "os.scalency.us";
   const base = `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
+  // A separate forms address (NEXT_PUBLIC_FORMS_URL), if one is set up, otherwise this one.
+  const formsBase = (process.env.NEXT_PUBLIC_FORMS_URL || base).replace(/\/+$/, "");
 
   const submissions: Submission[] = (subs ?? []).map((s) => {
     const c = (Array.isArray(s.contacts) ? s.contacts[0] : s.contacts) as { first_name?: string; last_name?: string; email?: string; phone?: string } | null;
-    const a = (s.answers ?? {}) as { fields?: { label: string; value: string }[]; score?: number };
+    const a = (s.answers ?? {}) as { fields?: { label: string; value: string; file?: string }[]; score?: number };
     const t = (s.tracking ?? {}) as Record<string, string>;
     return {
       id: s.id as string,
@@ -57,13 +70,17 @@ export default async function FormPage({ params, searchParams }: { params: Promi
         form={{
           id: form.id as string,
           name: form.name as string,
+          slug: form.slug as string,
           status: form.status as "live" | "draft" | "archived",
           definition: cleanDefinition(form.definition),
           tags: (form.tags as string[] | null) ?? [],
           stageId: (form.stage_id as string | null) ?? null,
           redirectUrl: (form.redirect_url as string | null) ?? "",
         }}
-        base={base}
+        base={formsBase}
+        workspaceSlug={(acc?.slug as string) ?? ""}
+        views={views}
+        healthProblem={health.ok ? undefined : `${health.problem} ${health.fix ?? ""}`.trim()}
         canEdit={can(ws, "sites.manage")}
         customFields={customFields}
         allTags={tags}

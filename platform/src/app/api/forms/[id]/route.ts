@@ -4,6 +4,7 @@ import { allFields, answerText, cleanDefinition, isVisible, scoreOf, type Answer
 import { parseFieldValue } from "@/lib/field-types";
 import { normalisePhone } from "@/lib/forms";
 import { runWorkflowsSoon } from "@/lib/run-soon";
+import { formAlerts } from "@/lib/form-alerts";
 
 // Someone fills in a published form. No login: the form id is public, so this
 // checks everything itself.
@@ -45,6 +46,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const account = form.account_id as string;
   const def = cleanDefinition(form.definition);
   const fields = allFields(def);
+  const FILE_KINDS = new Set(["file", "signature"]);
 
   // Answers, cleaned to what each question allows.
   const answers: Answers = {};
@@ -83,9 +85,16 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const { data: cfs } = await admin.from("custom_fields").select("key, label, type, options").eq("account_id", account).eq("object", "contact");
   const cfByKey = new Map((cfs ?? []).map((f) => [f.key as string, f]));
   const errors: Record<string, string> = {};
-  const saved: { id: string; label: string; value: string }[] = [];
+  const saved: { id: string; label: string; value: string; file?: string }[] = [];
   let first = "", last = "", email: string | null = null, phone: string | null = null;
   const custom: Record<string, unknown> = {};
+  // Files and signatures: the answer is the id of an upload made to this form.
+  const fileIds = fields.filter((f) => FILE_KINDS.has(f.kind)).map((f) => answerText(answers[f.id])).filter((v) => /^[0-9a-f-]{36}$/i.test(v));
+  const uploads = new Map<string, string>();
+  if (fileIds.length) {
+    const { data: ups } = await admin.from("form_uploads").select("id, name").eq("form_id", id).in("id", fileIds);
+    for (const u of ups ?? []) uploads.set(u.id as string, u.name as string);
+  }
 
   const visible = (f: FieldBlock) => isVisible(f, answers, def);
   for (const f of fields) {
@@ -116,11 +125,39 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         break;
       }
       case "number":
-        if (!Number.isFinite(Number(text.replace(/[£,\s]/g, "")))) errors[f.id] = "Please enter a number.";
+      case "money": {
+        const n = Number(text.replace(/[£$€,\s]/g, ""));
+        if (!Number.isFinite(n)) errors[f.id] = "Please enter a number.";
+        else if (f.min !== undefined && n < f.min) errors[f.id] = `Please enter ${f.kind === "money" ? "£" : ""}${f.min} or more.`;
+        else if (f.max !== undefined && n > f.max) errors[f.id] = `Please enter ${f.kind === "money" ? "£" : ""}${f.max} or less.`;
+        break;
+      }
+      case "textarea":
+        if (f.max !== undefined && text.length > f.max) errors[f.id] = `Please keep this under ${f.max} characters.`;
+        else if (f.min !== undefined && text.length < f.min) errors[f.id] = `Please write at least ${f.min} characters.`;
         break;
       case "date":
+      case "date_of_birth":
         if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) errors[f.id] = "Please choose a date.";
+        else if (f.kind === "date_of_birth") custom.date_of_birth = text;
         break;
+      case "company":
+      case "website":
+      case "address":
+      case "city":
+      case "state":
+      case "postcode":
+      case "country":
+        custom[f.kind] = text.slice(0, 200);
+        break;
+      case "file":
+      case "signature":
+        if (!uploads.has(text)) {
+          errors[f.id] = "Please upload that again.";
+          continue;
+        }
+        saved.push({ id: f.id, label: f.label, value: uploads.get(text)!, file: text });
+        continue;
       case "select":
       case "radio":
       case "yes_no":
@@ -239,6 +276,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     summary: `Filled in "${form.name}"${qualified === null ? "" : qualified ? ` (qualified, score ${score})` : ` (not a fit, score ${score})`}`,
   });
 
+  formAlerts(admin, {
+    accountId: account,
+    contactId: contactId!,
+    formName: form.name as string,
+    def,
+    answers: saved,
+    person: { first, last, email, phone },
+    outcome: qualified === null ? null : qualified ? "Good fit" : "Not a fit",
+  });
   runWorkflowsSoon(admin, account);
   const redirect = outcome?.redirect || (form.redirect_url as string | null) || null;
   return json(200, { ok: true, redirect, message: outcome?.message || def.success });

@@ -10,9 +10,11 @@
 export type FieldKind =
   | "first_name" | "last_name" | "full_name" | "email" | "phone"
   | "company" | "website"
+  | "address" | "city" | "state" | "postcode" | "country" | "date_of_birth"
   | "custom"
   | "text" | "textarea" | "number" | "date"
   | "select" | "radio" | "checkboxes" | "yes_no" | "rating" | "checkbox"
+  | "money" | "file" | "signature"
   | "hidden";
 export type ContentKind = "heading" | "paragraph" | "image" | "divider" | "spacer";
 export type LogicOp = "is" | "is_not" | "contains" | "answered" | "empty";
@@ -31,6 +33,11 @@ export type FieldBlock = {
   options?: string[];
   /** Points for each option (same order as options), for qualifying. */
   scores?: number[];
+  /** Fill this in from the web address, e.g. ?budget=5000 when param is "budget". */
+  param?: string;
+  /** Number and money: limits. Long answer: most characters. */
+  min?: number;
+  max?: number;
   logic?: Logic;
 };
 export type ContentBlock = {
@@ -77,6 +84,16 @@ export type FormDefinition = {
   consent: { enabled: boolean; text: string; required: boolean };
   qualify: { enabled: boolean; min: number; qualified: Outcome; unqualified: Outcome };
   theme: Theme;
+  /** The public page: browser tab title and icon, and extra styling. */
+  page: { title: string; icon: string; css: string };
+  /** Ad and analytics tags, fired on page view and on submit. */
+  tracking: { fbPixel: string; googleTag: string };
+  /** Tell the team: a post in team chat and/or an email to these addresses. */
+  notify: { chat: boolean; emails: string[] };
+  /** A confirmation email to the person who filled it in. */
+  confirm: { enabled: boolean; subject: string; body: string };
+  /** Remember the visitor's name, email and phone on this device and fill them in on your other forms. */
+  remember: boolean;
   meta?: { source?: "scratch" | "template" | "ai"; template?: string };
 };
 
@@ -93,6 +110,12 @@ export const FIELD_KINDS: KindInfo[] = [
   { kind: "phone", label: "Phone", group: "Contact", icon: "phone", once: true },
   { kind: "company", label: "Company", group: "Contact", icon: "building", once: true },
   { kind: "website", label: "Website", group: "Contact", icon: "globe", once: true },
+  { kind: "address", label: "Street address", group: "Contact", icon: "home", once: true },
+  { kind: "city", label: "Town or city", group: "Contact", icon: "building", once: true },
+  { kind: "state", label: "County or state", group: "Contact", icon: "map", once: true },
+  { kind: "postcode", label: "Postcode", group: "Contact", icon: "hash", once: true },
+  { kind: "country", label: "Country", group: "Contact", icon: "globe", once: true },
+  { kind: "date_of_birth", label: "Date of birth", group: "Contact", icon: "calendar", once: true },
   { kind: "text", label: "Short answer", group: "Questions", icon: "edit" },
   { kind: "textarea", label: "Long answer", group: "Questions", icon: "file" },
   { kind: "number", label: "Number", group: "Questions", icon: "hash" },
@@ -103,6 +126,9 @@ export const FIELD_KINDS: KindInfo[] = [
   { kind: "yes_no", label: "Yes or no", group: "Questions", icon: "thumbsUp", choices: true },
   { kind: "rating", label: "Rating", group: "Questions", icon: "star" },
   { kind: "checkbox", label: "Single tick box", group: "Questions", icon: "check" },
+  { kind: "money", label: "Amount (£)", group: "Questions", icon: "pound" },
+  { kind: "file", label: "File upload", group: "Questions", icon: "upload" },
+  { kind: "signature", label: "Signature", group: "Questions", icon: "edit" },
   { kind: "hidden", label: "Hidden value", group: "Advanced", icon: "eyeOff" },
 ];
 export const CONTENT_KINDS: { kind: ContentKind; label: string; icon: string }[] = [
@@ -186,6 +212,11 @@ export function blankDefinition(): FormDefinition {
       unqualified: { message: "Thanks for your answers. We'll be in touch if we can help.", redirect: "", tag: "Not a fit" },
     },
     theme: { ...DEFAULT_THEME },
+    page: { title: "", icon: "", css: "" },
+    tracking: { fbPixel: "", googleTag: "" },
+    notify: { chat: true, emails: [] },
+    confirm: { enabled: false, subject: "Thanks, we've got your details", body: "Hi {{first_name}},\n\nThanks for getting in touch. We've got your details and will be in touch shortly." },
+    remember: true,
     meta: { source: "scratch" },
   };
 }
@@ -344,6 +375,13 @@ function cleanBlock(raw: unknown, seen: Set<string>, once: Set<string>): Block |
   if (ph) out.placeholder = ph;
   const help = str(b.help, 300).trim();
   if (help) out.help = help;
+  const param = str(b.param, 40).replace(/[^a-zA-Z0-9_.-]/g, "");
+  if (param && kind !== "hidden" && kind !== "file" && kind !== "signature") out.param = param;
+  if (kind === "number" || kind === "money" || kind === "textarea") {
+    const mn = Number(b.min), mx = Number(b.max);
+    if (b.min !== undefined && b.min !== "" && Number.isFinite(mn)) out.min = Math.round(mn);
+    if (b.max !== undefined && b.max !== "" && Number.isFinite(mx)) out.max = Math.round(mx);
+  }
   if (kind === "custom" || kind === "hidden") {
     const key = str(b.key, 60).replace(kind === "hidden" ? /[^a-zA-Z0-9_.-]/g : /[^a-z0-9_]/g, "");
     if (key) out.key = key;
@@ -403,6 +441,10 @@ export function cleanDefinition(raw: unknown): FormDefinition {
   const t = (d.theme ?? {}) as Record<string, unknown>;
   const pick = <T extends string>(v: unknown, allowed: readonly T[], fb: T): T => (allowed.includes(v as T) ? (v as T) : fb);
   const meta = (d.meta ?? {}) as Record<string, unknown>;
+  const pg = (d.page ?? {}) as Record<string, unknown>;
+  const tr = (d.tracking ?? {}) as Record<string, unknown>;
+  const nt = (d.notify ?? {}) as Record<string, unknown>;
+  const cf = (d.confirm ?? {}) as Record<string, unknown>;
   return {
     version: 2,
     steps,
@@ -431,6 +473,25 @@ export function cleanDefinition(raw: unknown): FormDefinition {
       buttonAlign: pick(t.buttonAlign, ["full", "left", "center"] as const, "full"),
       width: Math.max(360, Math.min(960, Math.round(Number(t.width) || 560))),
     },
+    page: {
+      title: str(pg.title, 80).trim(),
+      icon: /^https:\/\/\S+$/.test(str(pg.icon, 500).trim()) ? str(pg.icon, 500).trim() : "",
+      css: str(pg.css, 10000).replace(/<\/?\s*style/gi, "").replace(/@import/gi, ""),
+    },
+    tracking: {
+      fbPixel: str(tr.fbPixel, 20).replace(/\D/g, ""),
+      googleTag: str(tr.googleTag, 20).toUpperCase().replace(/[^A-Z0-9-]/g, "").match(/^(G|AW|GT)-[A-Z0-9]{4,}$/)?.[0] ?? "",
+    },
+    notify: {
+      chat: nt.chat !== false,
+      emails: [...new Set((Array.isArray(nt.emails) ? nt.emails : []).map((e) => str(e, 200).trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].slice(0, 5),
+    },
+    confirm: {
+      enabled: Boolean(cf.enabled),
+      subject: str(cf.subject, 150).trim() || base.confirm.subject,
+      body: str(cf.body, 5000).trim() || base.confirm.body,
+    },
+    remember: d.remember !== false,
     meta: { source: pick(meta.source, ["scratch", "template", "ai"] as const, "scratch"), ...(typeof meta.template === "string" ? { template: meta.template.slice(0, 40) } : {}) },
   };
 }

@@ -14,7 +14,7 @@ import { LeadForm } from "@/components/lead-form";
 import type { CustomField, Stage } from "@/lib/data";
 import { allFields, publishProblem, type Block, type FormDefinition, type Outcome, type Theme } from "@/lib/form-builder";
 import { StagePicker } from "../../workflows/[id]/step-fields";
-import { deleteForm, saveForm, setFormStatus } from "../actions";
+import { deleteForm, duplicateForm, saveForm, setFormStatus } from "../actions";
 import { Canvas } from "./studio/canvas";
 import { Inspector } from "./studio/inspector";
 import { Palette } from "./studio/palette";
@@ -44,18 +44,21 @@ export type Submission = {
   name: string;
   email: string;
   phone: string;
-  answers: { label: string; value: string }[];
+  answers: { label: string; value: string; file?: string }[];
   source: string;
   at: string;
   status: "started" | "submitted" | "qualified" | "unqualified";
   score: number | null;
 };
-type FormState = { id: string; name: string; status: "live" | "draft" | "archived"; definition: FormDefinition; tags: string[]; stageId: string | null; redirectUrl: string };
+type FormState = { id: string; name: string; slug: string; status: "live" | "draft" | "archived"; definition: FormDefinition; tags: string[]; stageId: string | null; redirectUrl: string };
 type Tab = "design" | "settings" | "share" | "submissions";
 
 export function FormEditor({
   form,
   base,
+  workspaceSlug,
+  views,
+  healthProblem,
   canEdit,
   customFields,
   allTags,
@@ -66,6 +69,9 @@ export function FormEditor({
 }: {
   form: FormState;
   base: string;
+  workspaceSlug: string;
+  views: number;
+  healthProblem?: string;
   canEdit: boolean;
   customFields: CustomField[];
   allTags: string[];
@@ -228,7 +234,19 @@ export function FormEditor({
   };
 
   const problem = publishProblem(def);
-  const link = `${base}/f/${form.id}`;
+  const [slug, setSlug] = useState(form.slug);
+  const link = workspaceSlug && slug ? `${base}/f/${workspaceSlug}/${slug}` : `${base}/f/${form.id}`;
+  const saveSlug = (next: string) =>
+    new Promise<{ error?: string; ok?: string }>((resolve) =>
+      start(async () => {
+        const r = await saveForm(form.id, { name, definition: def, tags, stageId, redirectUrl, slug: next });
+        if (!r.error) {
+          setSlug(next);
+          setDirty(false);
+        }
+        resolve(r.error ? r : { ok: "Link updated" });
+      }),
+    );
   const fieldsCount = allFields(def).length;
 
   // ---------------------------------------------------------------- render
@@ -521,14 +539,30 @@ export function FormEditor({
             setRedirectUrl(v);
             setDirty(true);
           }}
+          onDuplicate={() => start(() => duplicateForm(form.id))}
           onDelete={() => {
             if (confirm(`Delete "${name}" and its ${submissions.length} submission${submissions.length === 1 ? "" : "s"}? This can't be undone.`)) start(() => deleteForm(form.id));
           }}
           canDelete={canEdit}
         />
       )}
-      {tab === "share" && <Share link={link} formId={form.id} title={name} live={status === "live"} />}
-      {tab === "submissions" && <Submissions submissions={submissions} name={name} qualify={def.qualify.enabled} />}
+      {tab === "share" && (
+        <Share
+          link={link}
+          base={base}
+          linkPrefix={workspaceSlug ? `${base}/f/${workspaceSlug}/` : ""}
+          slug={slug}
+          onSaveSlug={saveSlug}
+          formId={form.id}
+          live={status === "live"}
+          healthProblem={healthProblem}
+          accent={def.theme.accent}
+          def={def}
+          commit={commit}
+          readOnly={readOnly}
+        />
+      )}
+      {tab === "submissions" && <Submissions submissions={submissions} name={name} qualify={def.qualify.enabled} views={views} />}
 
       {preview &&
         createPortal(
@@ -583,6 +617,7 @@ function AfterSubmit({
   redirectUrl,
   setRedirectUrl,
   onDelete,
+  onDuplicate,
   canDelete,
 }: {
   def: FormDefinition;
@@ -598,6 +633,7 @@ function AfterSubmit({
   redirectUrl: string;
   setRedirectUrl: (v: string) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
   canDelete: boolean;
 }) {
   const [mode, setMode] = useState<"message" | "redirect">(redirectUrl ? "redirect" : "message");
@@ -682,6 +718,39 @@ function AfterSubmit({
         <p className="text-[12.5px] text-muted">If they already have an open deal in that pipeline, we keep it rather than adding another.</p>
       </section>
 
+      <section className="card flex flex-col gap-3 p-5">
+        <div>
+          <h2 className="text-[15px] font-semibold">Tell your team</h2>
+          <p className="text-[12.5px] text-muted">Every submission, with the answers, straight away.</p>
+        </div>
+        <label className="flex cursor-pointer items-center gap-2.5 text-[13.5px]">
+          <input type="checkbox" checked={def.notify.chat} onChange={(e) => commit({ ...def, notify: { ...def.notify, chat: e.target.checked } })} className="h-4 w-4 accent-[#0a5fe3]" />
+          Post it in the #leads team chat
+        </label>
+        <EmailList value={def.notify.emails} onChange={(emails) => commit({ ...def, notify: { ...def.notify, emails } }, "notify-emails")} />
+      </section>
+
+      <section className="card flex flex-col gap-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-[15px] font-semibold">Email them a confirmation</h2>
+            <p className="text-[12.5px] text-muted">Sent to the person who filled it in. In test mode it goes to your test inbox instead.</p>
+          </div>
+          <button type="button" onClick={() => commit({ ...def, confirm: { ...def.confirm, enabled: !def.confirm.enabled } })} className={`inline-flex h-6 w-11 flex-none items-center rounded-full p-0.5 transition-colors ${def.confirm.enabled ? "bg-brand" : "bg-line-strong"}`} aria-label="Email them a confirmation">
+            <span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${def.confirm.enabled ? "translate-x-5" : ""}`} />
+          </button>
+        </div>
+        {def.confirm.enabled && (
+          <>
+            <input value={def.confirm.subject} maxLength={150} onChange={(e) => commit({ ...def, confirm: { ...def.confirm, subject: e.target.value } }, "confirm-subject")} className="field h-10 text-[13.5px]" aria-label="Subject" placeholder="Subject" />
+            <textarea value={def.confirm.body} maxLength={5000} rows={6} onChange={(e) => commit({ ...def, confirm: { ...def.confirm, body: e.target.value } }, "confirm-body")} className="field py-2.5 text-[13.5px]" aria-label="Email" />
+            <p className="text-[12px] text-muted">
+              You can use {"{{first_name}}"}, {"{{last_name}}"}, {"{{name}}"}, {"{{email}}"}, {"{{phone}}"} and {"{{form_name}}"}. Only sent if the form asks for an email.
+            </p>
+          </>
+        )}
+      </section>
+
       <section className="card flex flex-col gap-2 p-5">
         <h2 className="text-[15px] font-semibold">Start a workflow</h2>
         <p className="text-[13.5px] text-muted">
@@ -692,6 +761,17 @@ function AfterSubmit({
         </Link>
       </section>
 
+      {canDelete && (
+        <section className="card flex flex-wrap items-center gap-3 p-5">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[15px] font-semibold">Duplicate this form</h2>
+            <p className="text-[13px] text-muted">A draft copy with the same questions, style and settings, to change for another offer or client.</p>
+          </div>
+          <button type="button" onClick={onDuplicate} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13.5px] font-semibold">
+            <Icon name="copy" size={14} /> Duplicate
+          </button>
+        </section>
+      )}
       {canDelete && (
         <section className="card flex flex-wrap items-center gap-3 p-5">
           <div className="min-w-0 flex-1">
@@ -711,13 +791,113 @@ function AfterSubmit({
 // Share and embed
 // ---------------------------------------------------------------------------
 
-function Share({ link, formId, title, live }: { link: string; formId: string; title: string; live: boolean }) {
+function EmailList({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const [bad, setBad] = useState(false);
+  const add = () => {
+    const e = draft.trim().toLowerCase();
+    if (!e) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return setBad(true);
+    if (!value.includes(e) && value.length < 5) onChange([...value, e]);
+    setDraft("");
+    setBad(false);
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[13.5px]">Email these people (up to 5)</span>
+      <div className="flex flex-wrap gap-1.5">
+        {value.map((e) => (
+          <span key={e} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-chip pl-3 pr-1.5 text-[12.5px] font-semibold text-brand">
+            {e}
+            <button type="button" onClick={() => onChange(value.filter((x) => x !== e))} aria-label={`Remove ${e}`} className="inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-white">
+              <Icon name="x" size={11} />
+            </button>
+          </span>
+        ))}
+      </div>
+      {value.length < 5 && (
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setBad(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                add();
+              }
+            }}
+            placeholder="name@company.co.uk"
+            className={`field h-10 min-w-0 flex-[1_1_220px] text-[13.5px] ${bad ? "ring-2 ring-bad/40" : ""}`}
+            aria-label="Email address to notify"
+          />
+          <button type="button" onClick={add} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold">
+            <Icon name="plus" size={14} /> Add
+          </button>
+        </div>
+      )}
+      {bad && <span className="text-[12.5px] text-bad">That doesn&apos;t look like an email address.</span>}
+    </div>
+  );
+}
+
+type EmbedMode = "inline" | "popup" | "slide" | "iframe";
+type EmbedTrigger = "button" | "load" | "delay" | "scroll" | "exit";
+
+function Share({
+  link,
+  base,
+  linkPrefix,
+  slug,
+  onSaveSlug,
+  formId,
+  live,
+  healthProblem,
+  accent,
+  def,
+  commit,
+  readOnly,
+}: {
+  link: string;
+  base: string;
+  linkPrefix: string;
+  slug: string;
+  onSaveSlug: (s: string) => Promise<{ error?: string; ok?: string }>;
+  formId: string;
+  live: boolean;
+  healthProblem?: string;
+  accent: string;
+  def: FormDefinition;
+  commit: (d: FormDefinition, key?: string) => void;
+  readOnly: boolean;
+}) {
   const [copied, setCopied] = useState("");
   const [utm, setUtm] = useState("");
+  const [slugDraft, setSlugDraft] = useState(slug);
+  const [slugMsg, setSlugMsg] = useState<{ error?: string; ok?: string }>({});
+  const [mode, setMode] = useState<EmbedMode>("inline");
+  const [trigger, setTrigger] = useState<EmbedTrigger>("button");
+  const [delay, setDelay] = useState(5);
+  const [scroll, setScroll] = useState(50);
+  const [button, setButton] = useState("Get in touch");
+  const [once, setOnce] = useState(true);
   const tracked = utm.trim() ? `${link}?utm_source=${encodeURIComponent(utm.trim().toLowerCase())}` : link;
-  // The embed passes the page's own web address and UTM tags through to the form.
-  const embed = `<div id="scalency-form-${formId}"></div>
-<script>(function(){var d=document.getElementById("scalency-form-${formId}"),f=document.createElement("iframe"),q=location.search?location.search.slice(1)+"&":"";f.src="${link}?embed=1&"+q+"page="+encodeURIComponent(location.href);f.title=${JSON.stringify(title)};f.style.cssText="width:100%;border:0;min-height:560px";f.loading="lazy";d.appendChild(f);window.addEventListener("message",function(e){if(e.data&&e.data.scalencyForm==="${formId}")f.style.height=e.data.height+"px"})})();</script>`;
+
+  const attrs = [`src="${base}/api/forms/embed"`, `data-form="${formId}"`];
+  if (mode === "popup" || mode === "slide") {
+    attrs.push(`data-mode="${mode}"`, `data-trigger="${trigger}"`);
+    if (trigger === "button") attrs.push(`data-button="${button.replace(/"/g, "&quot;")}"`, `data-color="${accent}"`);
+    if (trigger === "delay") attrs.push(`data-delay="${delay}"`);
+    if (trigger === "scroll") attrs.push(`data-scroll="${scroll}"`);
+    if (trigger !== "button" && once) attrs.push(`data-once="true"`);
+  }
+  const embed =
+    mode === "iframe"
+      ? `<iframe src="${base}/f/${formId}?embed=1" title="Form" style="width:100%;min-height:640px;border:0" loading="lazy"></iframe>`
+      : `<script ${attrs.join(" ")} async></script>`;
+
   const copy = async (t: string, what: string) => {
     try {
       await navigator.clipboard.writeText(t);
@@ -725,11 +905,15 @@ function Share({ link, formId, title, live }: { link: string; formId: string; ti
       setTimeout(() => setCopied(""), 1800);
     } catch {}
   };
+  const tr = def.tracking;
+  const choice = (on: boolean) => `rounded-xl px-3 py-2 text-[13px] font-semibold ring-1 ${on ? "bg-navy text-white ring-navy" : "bg-white text-muted ring-line hover:text-navy"}`;
+
   return (
     <div className="mx-auto grid w-full max-w-[860px] gap-4 px-4 py-6 sm:px-6">
+      {healthProblem && <p className="rounded-xl border border-bad/30 bg-bad-bg px-4 py-3 text-[13.5px] text-bad">{healthProblem}</p>}
       {!live && (
         <p className="rounded-xl bg-warn-bg px-4 py-3 text-[13.5px] text-warn">
-          This form is a draft, so the link and embed show “not found” until you press <strong>Publish</strong>.
+          This form is a draft, so the link and embed show &ldquo;not available&rdquo; until you press <strong>Publish</strong>.
         </p>
       )}
       <section className="card flex flex-col gap-3 p-5">
@@ -745,15 +929,128 @@ function Share({ link, formId, title, live }: { link: string; formId: string; ti
             <Icon name="globe" size={14} /> Open
           </a>
         </div>
+        {linkPrefix && !readOnly && (
+          <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+            <span className="text-[13px] font-semibold">Link name</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-[13px] text-muted">{linkPrefix}</span>
+              <input
+                value={slugDraft}
+                onChange={(e) => {
+                  setSlugDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-").slice(0, 60));
+                  setSlugMsg({});
+                }}
+                className="field h-10 w-[220px] text-[13px]"
+                aria-label="Link name"
+              />
+              <button
+                type="button"
+                disabled={!slugDraft || slugDraft === slug}
+                onClick={async () => setSlugMsg(await onSaveSlug(slugDraft.replace(/^-+|-+$/g, "")))}
+                className="btn-ghost inline-flex min-h-10 items-center rounded-xl px-3.5 text-[13px] font-semibold disabled:opacity-50"
+              >
+                Save link
+              </button>
+            </div>
+            {slugMsg.error && <span className="text-[12.5px] text-bad">{slugMsg.error}</span>}
+            {slugMsg.ok && <span className="text-[12.5px] text-ok">{slugMsg.ok}. The old link stops working.</span>}
+          </div>
+        )}
       </section>
-      <section className="card flex flex-col gap-3 p-5">
-        <h2 className="text-[15px] font-semibold">Embed on a website</h2>
-        <p className="text-[13px] text-muted">Paste where the form should appear: WordPress (Custom HTML block), Webflow (Embed), Wix (Embed code), Framer, Shopify or any site. It resizes itself and carries the page&apos;s UTM tags through.</p>
-        <textarea readOnly value={embed} rows={6} className="field py-2.5 font-mono text-[11.5px]" onFocus={(e) => e.currentTarget.select()} />
-        <button type="button" onClick={() => copy(embed, "embed")} className="btn-primary inline-flex min-h-10 w-fit items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
-          <Icon name={copied === "embed" ? "check" : "copy"} size={14} /> {copied === "embed" ? "Copied" : "Copy embed code"}
-        </button>
+
+      <section className="card flex flex-col gap-4 p-5">
+        <div>
+          <h2 className="text-[15px] font-semibold">Put it on a website</h2>
+          <p className="text-[13px] text-muted">Choose how it shows, copy the code and paste it into WordPress (Custom HTML block), Webflow (Embed), Wix (Embed code), Framer, Shopify, Squarespace (Code block) or any site.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["inline", "On the page"],
+              ["popup", "Popup"],
+              ["slide", "Slide-in (corner)"],
+              ["iframe", "Plain iframe"],
+            ] as const
+          ).map(([m, t]) => (
+            <button key={m} type="button" onClick={() => setMode(m)} className={choice(mode === m)}>
+              {t}
+            </button>
+          ))}
+        </div>
+        {(mode === "popup" || mode === "slide") && (
+          <div className="grid gap-3 rounded-xl bg-surface/70 p-3.5">
+            <span className="text-[13px] font-semibold">Opens when</span>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["button", "They click a button"],
+                  ["load", "The page loads"],
+                  ["delay", "After a few seconds"],
+                  ["scroll", "They scroll down"],
+                  ["exit", "They're about to leave"],
+                ] as const
+              ).map(([k, t]) => (
+                <button key={k} type="button" onClick={() => setTrigger(k)} className={choice(trigger === k)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            {trigger === "button" && (
+              <label className="flex flex-wrap items-center gap-2 text-[13px]">
+                Button text
+                <input value={button} maxLength={40} onChange={(e) => setButton(e.target.value)} className="field h-10 w-[220px] text-[13px]" />
+              </label>
+            )}
+            {trigger === "delay" && (
+              <label className="flex flex-wrap items-center gap-2 text-[13px]">
+                After
+                <input type="number" min={0} max={120} value={delay} onChange={(e) => setDelay(Math.max(0, Math.min(120, Math.round(Number(e.target.value) || 0))))} className="field h-10 w-20 text-center text-[13px]" />
+                seconds
+              </label>
+            )}
+            {trigger === "scroll" && (
+              <label className="flex flex-wrap items-center gap-2 text-[13px]">
+                When they&apos;ve scrolled
+                <input type="number" min={1} max={100} value={scroll} onChange={(e) => setScroll(Math.max(1, Math.min(100, Math.round(Number(e.target.value) || 50))))} className="field h-10 w-20 text-center text-[13px]" />
+                % of the page
+              </label>
+            )}
+            {trigger !== "button" && (
+              <label className="flex cursor-pointer items-center gap-2.5 text-[13px]">
+                <input type="checkbox" checked={once} onChange={(e) => setOnce(e.target.checked)} className="h-4 w-4 accent-[#0a5fe3]" />
+                Show it at most once to each visitor
+              </label>
+            )}
+            <p className="text-[12px] text-muted">
+              Want your own button or link to open it? Add <code className="rounded bg-white px-1">data-scalency-open=&quot;{formId}&quot;</code> to it.
+            </p>
+          </div>
+        )}
+        <textarea readOnly value={embed} rows={mode === "iframe" ? 3 : 4} className="field py-2.5 font-mono text-[11.5px]" onFocus={(e) => e.currentTarget.select()} />
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => copy(embed, "embed")} className="btn-primary inline-flex min-h-10 w-fit items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
+            <Icon name={copied === "embed" ? "check" : "copy"} size={14} /> {copied === "embed" ? "Copied" : "Copy code"}
+          </button>
+          <span className="text-[12px] text-muted">{mode === "iframe" ? "For site builders that don't allow scripts. It won't resize itself." : "Resizes itself and passes the page's UTM tags through."}</span>
+        </div>
       </section>
+
+      <fieldset disabled={readOnly} className="card flex flex-col gap-3 p-5">
+        <div>
+          <h2 className="text-[15px] font-semibold">Tracking</h2>
+          <p className="text-[13px] text-muted">Fires a page view when the form opens and a Lead event when it&apos;s sent, on the link and in embeds.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5 text-[13px] font-semibold">
+            Meta (Facebook) Pixel ID
+            <input value={tr.fbPixel} onChange={(e) => commit({ ...def, tracking: { ...tr, fbPixel: e.target.value.replace(/\D/g, "").slice(0, 20) } }, "fb")} placeholder="e.g. 1234567890123456" className="field h-10 font-normal" />
+          </label>
+          <label className="flex flex-col gap-1.5 text-[13px] font-semibold">
+            Google tag ID
+            <input value={tr.googleTag} onChange={(e) => commit({ ...def, tracking: { ...tr, googleTag: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20) } }, "gtag")} placeholder="e.g. G-XXXXXXX or AW-XXXXXXX" className="field h-10 font-normal" />
+          </label>
+        </div>
+      </fieldset>
     </div>
   );
 }
@@ -769,7 +1066,11 @@ const STATUS_LOOK: Record<Submission["status"], { label: string; cls: string }> 
   unqualified: { label: "Not a fit", cls: "bg-surface text-muted" },
 };
 
-function Submissions({ submissions, name, qualify }: { submissions: Submission[]; name: string; qualify: boolean }) {
+function monthAgoIso() {
+  return new Date(Date.now() - 30 * 86400000).toISOString();
+}
+
+function Submissions({ submissions, name, qualify, views }: { submissions: Submission[]; name: string; qualify: boolean; views: number }) {
   const [filter, setFilter] = useState<"all" | Submission["status"]>("all");
   const shown = submissions.filter((s) => filter === "all" || s.status === filter);
   const counts = submissions.reduce<Record<string, number>>((m, s) => ((m[s.status] = (m[s.status] ?? 0) + 1), m), {});
@@ -789,8 +1090,25 @@ function Submissions({ submissions, name, qualify }: { submissions: Submission[]
     URL.revokeObjectURL(a.href);
   }
 
+  const [monthAgo] = useState(monthAgoIso);
+  const recent = submissions.filter((s) => s.at >= monthAgo);
+  const finished = recent.filter((s) => s.status !== "started").length;
+  const stat = (label: string, value: string, hint?: string) => (
+    <div className="card flex flex-col gap-0.5 px-4 py-3">
+      <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">{label}</span>
+      <span className="text-[22px] font-semibold tracking-[-0.02em]">{value}</span>
+      {hint && <span className="text-[12px] text-muted">{hint}</span>}
+    </div>
+  );
+
   return (
     <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6">
+      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+        {stat("Views", String(views), "Last 30 days")}
+        {stat("Sent", String(finished), "Last 30 days")}
+        {stat("Conversion", views ? `${Math.min(100, Math.round((finished / views) * 1000) / 10)}%` : "–", "Sent ÷ views")}
+        {stat("Stopped part way", String(recent.filter((s) => s.status === "started").length), "Saved as contacts")}
+      </div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         {(["all", "submitted", ...(qualify ? (["qualified", "unqualified"] as const) : []), "started"] as const).map((k) => (
           <button key={k} type="button" onClick={() => setFilter(k)} className={`rounded-xl px-3 py-1.5 text-[13px] font-semibold ring-1 ${filter === k ? "bg-navy text-white ring-navy" : "bg-white text-muted ring-line"}`}>
@@ -835,7 +1153,15 @@ function Submissions({ submissions, name, qualify }: { submissions: Submission[]
                           .map((a, i) => (
                             <div key={i} className="truncate">
                               <dt className="inline text-muted">{a.label}: </dt>
-                              <dd className="inline">{a.value}</dd>
+                              <dd className="inline">
+                                {a.file ? (
+                                  <a href={`/api/forms/file/${a.file}`} target="_blank" rel="noreferrer" className="font-semibold text-brand hover:underline">
+                                    {a.value}
+                                  </a>
+                                ) : (
+                                  a.value
+                                )}
+                              </dd>
                             </div>
                           ))}
                       </dl>

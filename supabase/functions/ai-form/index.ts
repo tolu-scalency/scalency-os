@@ -22,7 +22,8 @@ const DAILY_LIMIT = 30;
 const MAX_TEXT = 6_000;
 const KINDS = [
   "first_name", "last_name", "full_name", "email", "phone", "company", "website",
-  "custom", "text", "textarea", "number", "date", "select", "radio", "checkboxes", "yes_no", "rating", "checkbox", "hidden",
+  "address", "city", "state", "postcode", "country", "date_of_birth",
+  "custom", "text", "textarea", "number", "money", "date", "select", "radio", "checkboxes", "yes_no", "rating", "checkbox", "file", "signature", "hidden",
 ];
 
 function json(body: unknown, status = 200) {
@@ -91,7 +92,7 @@ const TOOL = {
 
 const SYSTEM = `You design lead capture forms for small businesses using Scalency OS, a CRM.
 Rules:
-- Use only the field kinds in the tool. Contact kinds (first_name, last_name, full_name, email, phone, company, website) may appear once each.
+- Use only the field kinds in the tool. Contact kinds (first_name, last_name, full_name, email, phone, company, website, address, city, state, postcode, country, date_of_birth) may appear once each. Use money for amounts in pounds, file for documents or photos, signature for agreements.
 - Every form must collect an email or a phone number so the business can reply.
 - Keep forms as short as the goal allows. Ask what the business needs to qualify and follow up, nothing more.
 - Prefer multiple choice (radio) over open questions when answers fall into clear groups; it converts better and can be scored.
@@ -212,7 +213,7 @@ function sanitise(raw: Record<string, unknown>, customKeys: Set<string>) {
     fields: (Array.isArray(s?.fields) ? s.fields : []).slice(0, 10).flatMap((f: any) => {
       const kind = String(f?.kind ?? "");
       if (!KINDS.includes(kind)) return [];
-      if (["first_name", "last_name", "full_name", "email", "phone", "company", "website"].includes(kind)) {
+      if (["first_name", "last_name", "full_name", "email", "phone", "company", "website", "address", "city", "state", "postcode", "country", "date_of_birth"].includes(kind)) {
         if (once.has(kind)) return [];
         once.add(kind);
       }
