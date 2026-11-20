@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { Icon, type IconName } from "./icon";
+import { notify } from "./toast";
 
 export type ActionResult = { error?: string; ok?: string };
 type Action = (prev: ActionResult, fd: FormData) => Promise<ActionResult>;
@@ -22,6 +23,7 @@ export function ActionForm({
   const [state, formAction] = useActionState<ActionResult, FormData>(action, {});
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
+    if (state.ok) notify(state.ok);
     if (resetOnOk && state.ok) ref.current?.reset();
   }, [state, resetOnOk]);
 
@@ -31,11 +33,6 @@ export function ActionForm({
       {state.error && (
         <p role="alert" className="rise basis-full rounded-xl border border-bad/20 bg-bad-bg px-3 py-2 text-[13px] text-bad">
           {state.error}
-        </p>
-      )}
-      {state.ok && (
-        <p role="status" className="rise basis-full text-[13px] font-medium text-ok">
-          {state.ok}
         </p>
       )}
     </form>

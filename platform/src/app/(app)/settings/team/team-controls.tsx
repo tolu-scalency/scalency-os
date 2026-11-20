@@ -1,5 +1,6 @@
 "use client";
 
+import { notify } from "@/components/toast";
 import { useState, useTransition } from "react";
 import { Icon } from "@/components/icon";
 import { inviteLink, setMemberAccess, setMemberPermissions } from "../actions";
@@ -42,6 +43,7 @@ export function AccessSelect({ userId, value, options, name, own }: { userId: st
               else {
                 setMine(same ? null : p);
                 setMsg("Saved");
+                notify("Access saved");
                 setShow(false);
               }
             })
@@ -68,6 +70,7 @@ export function AccessSelect({ userId, value, options, name, own }: { userId: st
             } else {
               setMine(null);
               setMsg("Saved");
+                notify("Access saved");
               setShow(true);
             }
           });

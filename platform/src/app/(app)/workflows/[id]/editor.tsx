@@ -5,6 +5,7 @@
 // back up underneath. Click any card to edit it in the floating panel, drag cards
 // onto a + to move them.
 
+import { notify } from "@/components/toast";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Icon } from "@/components/icon";
 import type { CustomField, CustomValue, Stage, StepType, WorkflowStep, WorkflowTrigger } from "@/lib/data";
@@ -89,9 +90,11 @@ export function WorkflowEditor({
       const result = await saveWorkflow(workflow.id, { name, description, trigger, graph: nodes, stopOnReply }).catch(() => ({ error: "We couldn't save. Check your connection and try again.", token: undefined }));
       if (auto && result.error) {
         setMessage({ error: `Not saved yet: ${result.error}` });
+        notify(`Not saved yet: ${result.error}`, "bad");
         return;
       }
       setMessage(auto ? { ok: "All changes saved" } : result);
+      notify("Saved");
       if (!result.error) {
         setDirty(false);
         savedRef.current = { ...snapshot, trigger: result.token ? { type: "webhook", token: result.token } : trigger };
@@ -682,7 +685,7 @@ export function WorkflowEditor({
         onPointerMove={onPanMove}
         onPointerUp={onPanEnd}
         onPointerCancel={onPanEnd}
-        className="relative h-[calc(100vh-230px)] min-h-[520px] cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing"
+        className="relative h-[calc(100vh-166px-var(--chrome-h,64px))] min-h-[520px] cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing"
         style={{ backgroundColor: "#f6f8fc", backgroundImage: "radial-gradient(#d5dbe6 1.2px, transparent 1.2px)", backgroundSize: `${22 * zoom}px ${22 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}
       >
         <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }} className="absolute left-0 top-0">

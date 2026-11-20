@@ -262,6 +262,10 @@ Migration `20261125090000_forms_pro`.
 - `form_post_to_chat(account, contact, message)`: posts a new-submission alert in the workspace's #leads team chat. Server only.
 - Public form addresses: `/f/<form id>` (embeds) and `/f/<workspace short name>/<form link name>` (shared links, using `accounts.slug` and `forms.slug`).
 
+## Server access
+
+Migration `20261126090000_server_access`. Newer Supabase projects don't give the server role (`service_role`, the secret key) access to new tables automatically. This grants it on everything in `public`, now and for future tables, so public forms, embeds, webhooks and the workflow clock work. The secret key is only ever used on the server.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

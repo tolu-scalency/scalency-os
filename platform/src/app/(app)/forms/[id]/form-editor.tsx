@@ -5,6 +5,7 @@
 // phone and desktop views, a real preview, multi-step forms, rules and scoring.
 // Everything saves automatically.
 
+import { notify } from "@/components/toast";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
@@ -156,6 +157,7 @@ export function FormEditor({
     start(async () => {
       const r = await saveForm(form.id, { name, definition: def, tags, stageId, redirectUrl });
       setMsg(r.error ? r : { ok: "All changes saved" });
+      notify(r.error ? `Not saved: ${r.error}` : "Saved", r.error ? "bad" : "ok");
       if (!r.error) setDirty(false);
     });
   }
@@ -179,6 +181,7 @@ export function FormEditor({
       }
       const r = await setFormStatus(form.id, next);
       setMsg(r);
+      notify(r.error ?? (next === "live" ? "Published. The link and embed code are ready." : "Unpublished"), r.error ? "bad" : "ok");
       if (!r.error) {
         setStatus(next);
         if (next === "live") setTab("share");
@@ -244,6 +247,7 @@ export function FormEditor({
           setSlug(next);
           setDirty(false);
         }
+        notify(r.error ?? "Link updated", r.error ? "bad" : "ok");
         resolve(r.error ? r : { ok: "Link updated" });
       }),
     );
@@ -320,7 +324,7 @@ export function FormEditor({
       )}
 
       {tab === "design" && (
-        <div className="relative flex h-[calc(100vh-150px)] min-h-[560px] overflow-hidden">
+        <div className="relative flex h-[calc(100vh-86px-var(--chrome-h,64px))] min-h-[560px] overflow-hidden">
           {/* Left: elements */}
           <aside className={`${panel === "add" ? "absolute inset-y-0 left-0 z-20 flex shadow-2xl" : "hidden"} w-[264px] flex-none flex-col border-r border-line bg-[#f8fafd] lg:static lg:flex lg:shadow-none`}>
             <div className="flex items-center justify-between px-4 pt-3 text-[11px] font-bold uppercase tracking-[0.12em] text-faint">

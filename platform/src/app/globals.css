@@ -216,6 +216,15 @@ body {
   animation: rise 0.28s ease-out both;
 }
 
+/* "Saved" notices drop in from the top. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@utility toast-in {
+  animation: toast-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
 /* Kept for the homepage's workflow illustration. */
 @keyframes flow-down {
   from { background-position: 0 0; }

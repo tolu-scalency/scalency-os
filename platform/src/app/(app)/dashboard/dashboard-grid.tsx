@@ -4,6 +4,7 @@
 // around, resize them, add new ones and remove others. The layout is shared by
 // everyone in the workspace.
 
+import { notify } from "@/components/toast";
 import { useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/icon";
@@ -52,6 +53,7 @@ export function DashboardGrid({
     start(async () => {
       const r = await saveDashboard(layoutToSave);
       setMsg(r);
+      notify(r.error ?? r.ok ?? "Saved", r.error ? "bad" : "ok");
       if (!r.error) {
         setEditing(false);
         setChanged(new Set());
