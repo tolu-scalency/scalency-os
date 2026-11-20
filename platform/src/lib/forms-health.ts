@@ -30,9 +30,17 @@ export async function formsHealth(): Promise<FormsHealth> {
   if (!admin) return { ok: false, problem: "Form links can't work yet: the Supabase address isn't set.", fix: fixKey };
   const { error } = await admin.from("forms").select("id").limit(1);
   if (error) {
-    const wrongKey = /jwt|api key|invalid|permission|unauthori/i.test(error.message);
+    // "permission denied for table" means the key works but the server role has no
+    // access to the tables. Newer Supabase projects don't grant it automatically.
+    if (/permission denied/i.test(error.message))
+      return {
+        ok: false,
+        problem: "Form links and embeds can't work yet: the server doesn't have access to the forms tables in Supabase.",
+        fix: "Run supabase/migrations/20261126090000_server_access.sql in the Supabase SQL Editor, then refresh this page.",
+      };
+    const wrongKey = /jwt|api key|invalid|unauthori/i.test(error.message);
     return wrongKey
-      ? { ok: false, problem: "Form links and embeds can't work yet: Supabase doesn't accept the SUPABASE_SECRET_KEY in Netlify. It may be from a different Supabase project.", fix: fixKey }
+      ? { ok: false, problem: `Form links and embeds can't work yet: Supabase doesn't accept the SUPABASE_SECRET_KEY in Netlify (${error.message.slice(0, 80)}). It may be from a different Supabase project.`, fix: fixKey }
       : { ok: false, problem: `Form links can't load forms (${error.message.slice(0, 120)}).`, fix: "Check the forms database changes have been run in the Supabase SQL Editor." };
   }
   const { error: colErr } = await admin.from("forms").select("tags, stage_id, redirect_url").limit(1);

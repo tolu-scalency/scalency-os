@@ -1,5 +1,6 @@
 "use client";
 
+import { Toaster } from "@/components/toast";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -32,6 +33,9 @@ function activeHref(pathname: string) {
 }
 
 const STORAGE_KEY = "scalency.sidebar";
+
+/** Builders (a form, a workflow, later pages and funnels) open full screen, like GHL. */
+const BUILDER = /^\/(forms|workflows|sites|funnels|websites)\/[^/]+/;
 
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const pathname = usePathname();
@@ -73,8 +77,26 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
     setMobileOpen(false);
   }, [pathname]);
 
+  const focus = BUILDER.test(pathname);
+  const page = (() => {
+    const need = permForPath(pathname);
+    return need && !user.permissions.includes(need) ? <NoAccess /> : children;
+  })();
+
+  if (focus)
+    return (
+      <div className="min-h-screen bg-canvas" style={{ ["--chrome-h" as string]: "0px" }}>
+        <Toaster />
+        <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} permissions={user.permissions} />
+        <div key={pathname} className="page-in">
+          {page}
+        </div>
+      </div>
+    );
+
   return (
-    <div className="flex min-h-screen bg-canvas">
+    <div className="flex min-h-screen bg-canvas" style={{ ["--chrome-h" as string]: "64px" }}>
+      <Toaster />
       <aside className={`sticky top-0 z-40 hidden h-screen flex-none transition-[width] duration-200 ease-out lg:block ${collapsed ? "w-[76px]" : "w-[256px]"}`}>
         <Sidebar pathname={pathname} user={user} collapsed={collapsed} onToggle={toggle} />
       </aside>
@@ -93,10 +115,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
         <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} permissions={user.permissions} />
         <div className="flex-1 pb-[var(--nav-h)]">
           <div key={pathname} className="page-in">
-            {(() => {
-              const need = permForPath(pathname);
-              return need && !user.permissions.includes(need) ? <NoAccess /> : children;
-            })()}
+            {page}
           </div>
         </div>
       </div>
