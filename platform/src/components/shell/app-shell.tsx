@@ -9,7 +9,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { acceptInvite, createWorkspace, switchWorkspace } from "@/app/(app)/workspace-actions";
 import { CommandBar } from "./command";
 import { NavList } from "./nav-list";
-import { NAV, SETTINGS_NAV } from "@/lib/nav";
+import { NAV, SETTINGS_NAV, navFor, permForPath } from "@/lib/nav";
 
 export type ShellUser = {
   name: string;
@@ -22,6 +22,8 @@ export type ShellUser = {
   workspaces: { id: string; name: string; role: string }[];
   invites: { id: string; workspace: string; role: string }[];
   canCreateWorkspace: boolean;
+  /** What this person may use here; the menu only shows those parts. */
+  permissions: string[];
 };
 
 const allHrefs = [...NAV, SETTINGS_NAV].flatMap((g) => [g.href, ...(g.links ?? []).map((l) => l.href)]);
@@ -88,10 +90,13 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
 
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
-        <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} />
+        <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} permissions={user.permissions} />
         <div className="flex-1 pb-[var(--nav-h)]">
           <div key={pathname} className="page-in">
-            {children}
+            {(() => {
+              const need = permForPath(pathname);
+              return need && !user.permissions.includes(need) ? <NoAccess /> : children;
+            })()}
           </div>
         </div>
       </div>
@@ -200,10 +205,13 @@ function Sidebar({ pathname, user, collapsed, onToggle, mobile = false }: { path
         </Link>
       </div>
 
-      <NavList pathname={pathname} collapsed={collapsed} mobile={mobile} />
+      <NavList pathname={pathname} collapsed={collapsed} mobile={mobile} groups={navFor(user.permissions).nav} />
 
       <div className="flex-none border-t border-white/10 px-3 py-3">
-        <NavList pathname={pathname} collapsed={collapsed} mobile={mobile} groups={[SETTINGS_NAV]} flat />
+        {(() => {
+          const settings = navFor(user.permissions).settings;
+          return settings ? <NavList pathname={pathname} collapsed={collapsed} mobile={mobile} groups={[settings]} flat /> : null;
+        })()}
         <form action="/auth/signout" method="post">
           <button
             type="submit"
@@ -487,5 +495,21 @@ function SidebarGlow() {
           "radial-gradient(340px circle at var(--gx, 30%) var(--gy, 15%), rgba(85, 227, 236, 0.38), transparent 65%), radial-gradient(420px circle at calc(100% - var(--gx, 30%)) calc(100% - var(--gy, 15%)), rgba(124, 92, 255, 0.22), transparent 70%)",
       }}
     />
+  );
+}
+
+/** Shown instead of a page this person isn't allowed to use. */
+function NoAccess() {
+  return (
+    <main className="mx-auto flex min-h-[60vh] w-full max-w-[520px] flex-col items-center justify-center gap-4 px-6 text-center">
+      <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-chip text-brand">
+        <Icon name="lock" size={24} />
+      </span>
+      <h1 className="text-[22px] font-semibold tracking-[-0.02em]">You don&apos;t have access to this</h1>
+      <p className="text-[14.5px] text-muted">Ask the workspace owner to give you access in Settings, Members.</p>
+      <Link href="/dashboard" className="btn-primary inline-flex min-h-11 items-center gap-2 rounded-xl px-5 text-[14px] font-semibold">
+        <Icon name="home" size={15} /> Go to Home
+      </Link>
+    </main>
   );
 }

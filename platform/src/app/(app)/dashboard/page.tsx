@@ -247,7 +247,7 @@ async function Home() {
           </div>
           <div className="ml-auto flex gap-2">
             <Button href="/tasks" icon="tasks">New task</Button>
-            <Button href="/contacts?new=1" variant="primary" icon="plus">New contact</Button>
+            {can(ws, "contacts.edit") && <Button href="/contacts?new=1" variant="primary" icon="plus">New contact</Button>}
           </div>
         </>
       }

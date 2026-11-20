@@ -24,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         workspaces: ws.workspaces,
         invites,
         canCreateWorkspace: ws.workspaces.some((w) => w.role === "owner" || w.role === "admin"),
+        permissions: ws.account.permissions,
       }}
     >
       {children}

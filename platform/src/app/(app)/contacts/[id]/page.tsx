@@ -7,7 +7,7 @@ import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Page, Tile, type Tone } from "@/components/ui";
 import { TaskList } from "@/components/task-list";
 import { addTask } from "@/app/(app)/tasks/actions";
-import { formatPence, getContactDetail, getWorkspace, listCustomFields, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
+import { can, formatPence, getContactDetail, getWorkspace, listCustomFields, listTags, listWorkflows, memberNames, timeAgo } from "@/lib/data";
 import { enrollContact } from "@/app/(app)/workflows/actions";
 import { addNote, saveCustomFields, setDealStatus, setOwner, setStage, setValue } from "./actions";
 import { ContactEditor } from "./contact-editor";
@@ -99,7 +99,7 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
       <section className="card p-5 sm:p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[16px] font-semibold">Pipeline</h2>
-          {c.opportunity && (
+          {c.opportunity && can(ws, "deals.edit") && (
             <ActionForm action={setValue} className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="opportunity_id" value={c.opportunity.id} />
               <label className="flex items-center gap-2 text-[13px] text-muted">
@@ -245,7 +245,9 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
 
           <section className="card p-5">
             <h2 className="mb-1 text-[16px] font-semibold">Workflows</h2>
-            {liveWorkflows.length === 0 ? (
+            {!can(ws, "workflows.manage") ? (
+              <p className="text-[13.5px] text-muted">Ask the workspace owner if you need to add this contact to a workflow.</p>
+            ) : liveWorkflows.length === 0 ? (
               <p className="text-[13.5px] text-muted">
                 No workflows are on yet. <Link href="/workflows" className="font-medium text-brand hover:underline">Create one</Link>
               </p>
@@ -265,6 +267,7 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
           {customFields.length > 0 && (
             <section className="card p-5">
               <h2 className="mb-3 text-[16px] font-semibold">Custom fields</h2>
+              <fieldset disabled={!can(ws, "contacts.edit")} className="contents">
               <ActionForm action={saveCustomFields} className="flex flex-col gap-2.5">
                 <input type="hidden" name="contact_id" value={c.id} />
                 {customFields.map((f) => (
@@ -273,10 +276,13 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
                     <FieldInput field={f} value={c.custom[f.key]} />
                   </div>
                 ))}
-                <div className="flex justify-end">
-                  <SubmitButton variant="ghost" pendingText="Saving…">Save fields</SubmitButton>
-                </div>
+                {can(ws, "contacts.edit") && (
+                  <div className="flex justify-end">
+                    <SubmitButton variant="ghost" pendingText="Saving…">Save fields</SubmitButton>
+                  </div>
+                )}
               </ActionForm>
+              </fieldset>
             </section>
           )}
 

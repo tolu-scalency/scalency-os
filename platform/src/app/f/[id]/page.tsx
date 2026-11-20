@@ -20,7 +20,7 @@ async function load(id: string) {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const form = await load((await params).id);
-  return { title: form?.def.title || form?.name || "Form", robots: { index: false } };
+  return { title: form?.name || "Form", robots: { index: false } };
 }
 
 export default async function PublicForm({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ embed?: string }> }) {
@@ -28,7 +28,7 @@ export default async function PublicForm({ params, searchParams }: { params: Pro
   const form = await load(id);
   if (!form) notFound();
   const embedded = embed === "1";
-  const dark = form.def.theme.dark;
+  const t = form.def.theme;
 
   if (embedded)
     return (
@@ -39,8 +39,14 @@ export default async function PublicForm({ params, searchParams }: { params: Pro
     );
 
   return (
-    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "32px 16px", background: dark ? "#0b1220" : "#f3f6fb" }}>
-      <div style={{ width: "100%", maxWidth: 560, background: dark ? "#111c33" : "#ffffff", borderRadius: 20, padding: "28px 24px", boxShadow: "0 20px 50px -20px rgba(11,27,58,0.25)" }}>
+    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "32px 16px", background: t.background }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: t.width,
+          ...(t.card ? { background: t.dark ? "#111c33" : "#ffffff", borderRadius: Math.max(t.radius + 6, 14), padding: "32px 28px", boxShadow: "0 24px 60px -24px rgba(11,27,58,0.28)" } : {}),
+        }}
+      >
         <LeadForm formId={form.id} def={form.def} />
       </div>
     </main>
