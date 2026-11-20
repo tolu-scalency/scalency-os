@@ -4,7 +4,7 @@
 // ContentView to draw its canvas, so the builder looks exactly like the result.
 // Preview mode never sends anything.
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from "react";
 import {
   FONTS,
   answerText,
@@ -65,6 +65,12 @@ export function buttonStyle(t: Theme, ghost = false): CSSProperties {
 // One field
 // ---------------------------------------------------------------------------
 
+/** Uploads a file (or a signature image) and returns its id and name, or an error. */
+export type Uploader = (file: Blob, name: string) => Promise<{ id?: string; name?: string; error?: string }>;
+
+/** Answers for files are "<upload id>|<file name>" in the browser; only the id is sent. */
+const fileName = (v: string) => (v.includes("|") ? v.slice(v.indexOf("|") + 1) : v ? "File attached" : "");
+
 export function FieldView({
   f,
   value,
@@ -72,6 +78,7 @@ export function FieldView({
   error,
   theme,
   design = false,
+  upload,
 }: {
   f: FieldBlock;
   value: Answers[string] | undefined;
@@ -80,6 +87,7 @@ export function FieldView({
   theme: Theme;
   /** In Form Studio: drawn but not typed into. */
   design?: boolean;
+  upload?: Uploader;
 }) {
   const p = palette(theme);
   const t = theme;
@@ -173,6 +181,9 @@ export function FieldView({
     );
   }
 
+  if (f.kind === "file") return <FileField f={f} value={s} onChange={onChange} theme={t} design={design} upload={upload} label={label} help={help} err={err} />;
+  if (f.kind === "signature") return <SignatureField value={s} onChange={onChange} theme={t} design={design} upload={upload} label={label} help={help} err={err} />;
+
   if (f.kind === "rating")
     return (
       <div style={wrap}>
@@ -198,8 +209,22 @@ export function FieldView({
       </div>
     );
 
-  const type = { email: "email", phone: "tel", number: "number", date: "date", website: "url" }[f.kind as string] ?? "text";
-  const auto = { first_name: "given-name", last_name: "family-name", full_name: "name", email: "email", phone: "tel", company: "organization", website: "url" }[f.kind as string];
+  const type = { email: "email", phone: "tel", number: "number", date: "date", date_of_birth: "date", website: "url" }[f.kind as string] ?? "text";
+  const auto = {
+    first_name: "given-name",
+    last_name: "family-name",
+    full_name: "name",
+    email: "email",
+    phone: "tel",
+    company: "organization",
+    website: "url",
+    address: "street-address",
+    city: "address-level2",
+    state: "address-level1",
+    postcode: "postal-code",
+    country: "country-name",
+    date_of_birth: "bday",
+  }[f.kind as string];
   return (
     <label style={wrap}>
       {label}
@@ -212,6 +237,20 @@ export function FieldView({
             <option key={o} value={o}>{o}</option>
           ))}
         </select>
+      ) : f.kind === "money" ? (
+        <span style={{ position: "relative", display: "block" }}>
+          <span style={{ position: "absolute", left: t.fieldStyle === "underline" ? 2 : 14, top: "50%", transform: "translateY(-50%)", color: p.muted, fontSize: 15, pointerEvents: "none" }}>£</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={s}
+            placeholder={f.placeholder}
+            readOnly={design}
+            tabIndex={design ? -1 : undefined}
+            onChange={(e) => onChange(e.target.value.replace(/[^0-9.,]/g, "").slice(0, 15))}
+            style={{ ...inputStyle(t, Boolean(error)), paddingLeft: t.fieldStyle === "underline" ? 18 : 30 }}
+          />
+        </span>
       ) : (
         <input type={type} value={s} autoComplete={auto} placeholder={f.placeholder} readOnly={design} tabIndex={design ? -1 : undefined} onChange={(e) => onChange(e.target.value)} style={inputStyle(t, Boolean(error))} />
       )}
@@ -219,6 +258,145 @@ export function FieldView({
       {err}
       {!err && !help && f.kind === "phone" && !design && <span style={{ fontSize: 12, color: p.muted }}>Mobile like 07700 900123, or with your country code.</span>}
     </label>
+  );
+}
+
+type Bits = { label: React.ReactNode; help: React.ReactNode; err: React.ReactNode };
+
+function FileField({ f, value, onChange, theme, design, upload, label, help, err }: Bits & { f: FieldBlock; value: string; onChange: (v: string) => void; theme: Theme; design: boolean; upload?: Uploader }) {
+  const p = palette(theme);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  async function pick(file: File | undefined) {
+    if (!file || !upload) return;
+    if (file.size > 4 * 1024 * 1024) return setProblem("That file is too big. The limit is 4 MB.");
+    setBusy(true);
+    setProblem("");
+    const r = await upload(file, file.name);
+    setBusy(false);
+    if (r.id) onChange(`${r.id}|${r.name ?? file.name}`);
+    else setProblem(r.error ?? "That didn't upload. Please try again.");
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 7, minWidth: 0, pointerEvents: design ? "none" : undefined }}>
+      {label}
+      {value ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: theme.radius, border: `1.5px solid ${theme.accent}`, background: `${theme.accent}10`, color: p.fg, fontSize: 14 }}>
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>📎 {fileName(value)}</span>
+          <button type="button" onClick={() => onChange("")} style={{ border: 0, background: "transparent", color: p.muted, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+            Remove
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            pick(e.dataTransfer.files?.[0]);
+          }}
+          style={{ padding: "18px 14px", borderRadius: theme.radius, border: `1.5px dashed ${err ? p.error : p.line}`, background: "transparent", color: p.muted, fontSize: 14, cursor: "pointer", fontFamily: "inherit", textAlign: "center" }}
+        >
+          {busy ? "Uploading…" : f.placeholder || "Click to choose a file, or drop it here"}
+        </button>
+      )}
+      <input ref={input} type="file" hidden accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={(e) => pick(e.target.files?.[0] ?? undefined)} />
+      {help}
+      {problem ? <span style={{ fontSize: 12.5, color: p.error }}>{problem}</span> : err}
+    </div>
+  );
+}
+
+function SignatureField({ value, onChange, theme, design, upload, label, help, err }: Bits & { value: string; onChange: (v: string) => void; theme: Theme; design: boolean; upload?: Uploader }) {
+  const p = palette(theme);
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const drawn = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  const [inked, setInked] = useState(false);
+
+  useEffect(() => {
+    const c = canvas.current;
+    if (!c) return;
+    const ratio = window.devicePixelRatio || 1;
+    const w = c.clientWidth;
+    c.width = w * ratio;
+    c.height = 150 * ratio;
+    const ctx = c.getContext("2d")!;
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = theme.dark ? "#f1f5f9" : "#0b1b3a";
+  }, [theme.dark, value]);
+
+  const at = (e: RPointerEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top] as const;
+  };
+  async function save() {
+    const c = canvas.current;
+    if (!c || !drawn.current || !upload) return;
+    setBusy(true);
+    setProblem("");
+    const blob = await new Promise<Blob | null>((res) => c.toBlob(res, "image/png"));
+    if (!blob) return setBusy(false);
+    const r = await upload(blob, "signature.png");
+    setBusy(false);
+    if (r.id) onChange(`${r.id}|Signature`);
+    else setProblem(r.error ?? "That didn't save. Please try again.");
+  }
+  function clear() {
+    const c = canvas.current;
+    c?.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+    drawn.current = false;
+    setInked(false);
+    onChange("");
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 7, minWidth: 0, pointerEvents: design ? "none" : undefined }}>
+      {label}
+      <div style={{ position: "relative", borderRadius: theme.radius, border: `1.5px ${value ? "solid" : "dashed"} ${value ? theme.accent : err ? p.error : p.line}`, background: p.field, overflow: "hidden" }}>
+        <canvas
+          ref={canvas}
+          aria-label="Sign here"
+          style={{ display: "block", width: "100%", height: 150, touchAction: "none", cursor: "crosshair" }}
+          onPointerDown={(e) => {
+            if (value) return;
+            drawing.current = true;
+            e.currentTarget.setPointerCapture(e.pointerId);
+            const ctx = e.currentTarget.getContext("2d")!;
+            const [x, y] = at(e);
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            setInked(true);
+          }}
+          onPointerMove={(e) => {
+            if (!drawing.current) return;
+            const ctx = e.currentTarget.getContext("2d")!;
+            const [x, y] = at(e);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            drawn.current = true;
+          }}
+          onPointerUp={() => {
+            if (!drawing.current) return;
+            drawing.current = false;
+            save();
+          }}
+        />
+        {!inked && !value && <span style={{ position: "absolute", left: 14, bottom: 10, fontSize: 13, color: p.muted, pointerEvents: "none" }}>{busy ? "Saving…" : "Sign here"}</span>}
+        <button type="button" onClick={clear} style={{ position: "absolute", right: 8, top: 8, border: 0, borderRadius: 8, padding: "4px 8px", background: p.tint, color: p.muted, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>
+          Clear
+        </button>
+      </div>
+      {help}
+      {problem ? <span style={{ fontSize: 12.5, color: p.error }}>{problem}</span> : err}
+    </div>
   );
 }
 
@@ -256,6 +434,24 @@ export function ContentView({ b, theme, design = false }: { b: ContentBlock; the
 
 type Result = { message: string; redirect?: string | null };
 
+/** Web address names that fill each contact question by default, e.g. ?email=… */
+const PARAM_FOR: Record<string, string> = {
+  first_name: "first_name",
+  last_name: "last_name",
+  full_name: "name",
+  email: "email",
+  phone: "phone",
+  company: "company",
+  website: "website",
+  address: "address",
+  city: "city",
+  state: "state",
+  postcode: "postcode",
+  country: "country",
+};
+/** Shared by every form on the same address, so a visitor is remembered across a workspace's forms. */
+const REMEMBER_KEY = "scalency-visitor";
+
 export function LeadForm({ formId, def, preview = false, embed = false }: { formId: string; def: FormDefinition; preview?: boolean; embed?: boolean }) {
   const t = def.theme;
   const p = palette(t);
@@ -271,14 +467,62 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
   const step = steps[Math.min(stepIx, steps.length - 1)];
   const last = stepIx >= steps.length - 1;
 
-  // Hidden values come from the web address, e.g. ?campaign=spring.
+  // Fill in from the web address (?email=…, ?campaign=…) and, if switched on,
+  // from what this visitor gave on one of the workspace's forms before.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const found: Answers = {};
-    for (const s of def.steps) for (const f of stepFields(s)) if (f.kind === "hidden" && f.key && params.get(f.key)) found[f.id] = params.get(f.key)!.slice(0, 300);
+    let saved: Record<string, string> = {};
+    if (def.remember && !preview) {
+      try {
+        saved = JSON.parse(localStorage.getItem(REMEMBER_KEY) ?? "{}") as Record<string, string>;
+      } catch {}
+    }
+    for (const s of def.steps)
+      for (const f of stepFields(s)) {
+        if (f.kind === "hidden") {
+          if (f.key && params.get(f.key)) found[f.id] = params.get(f.key)!.slice(0, 300);
+          continue;
+        }
+        if (f.kind === "file" || f.kind === "signature" || f.kind === "checkbox") continue;
+        const key = f.param || PARAM_FOR[f.kind];
+        let v = key ? params.get(key) : null;
+        if (!v && typeof saved[f.kind] === "string") v = saved[f.kind];
+        if (!v) continue;
+        v = v.slice(0, 300);
+        if (f.kind === "checkboxes") {
+          const picked = v.split(",").map((x) => x.trim()).filter((x) => (f.options ?? []).includes(x));
+          if (picked.length) found[f.id] = picked;
+        } else if (f.options?.length) {
+          if (f.options.includes(v)) found[f.id] = v;
+        } else found[f.id] = v;
+      }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (Object.keys(found).length) setAnswers((a) => ({ ...found, ...a }));
-  }, [def.steps]);
+  }, [def.steps, def.remember, preview]);
+
+  // Count one view per visit (not in Form Studio previews).
+  useEffect(() => {
+    if (preview) return;
+    try {
+      const k = `scalency-viewed-${formId}`;
+      if (sessionStorage.getItem(k)) return;
+      sessionStorage.setItem(k, "1");
+    } catch {}
+    fetch(`/api/forms/${formId}/view`, { method: "POST", keepalive: true }).catch(() => {});
+  }, [formId, preview]);
+
+  const upload: Uploader = async (file, name) => {
+    if (preview) return { id: "00000000-0000-0000-0000-000000000000", name };
+    const fd = new FormData();
+    fd.append("file", file, name);
+    try {
+      const r = await fetch(`/api/forms/${formId}/upload`, { method: "POST", body: fd });
+      return (await r.json()) as { id?: string; name?: string; error?: string };
+    } catch {
+      return { error: "That didn't upload. Check your connection and try again." };
+    }
+  };
 
   // Inside an iframe, tell the page around it how tall we are.
   useEffect(() => {
@@ -320,10 +564,13 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
 
   async function send(partial: boolean) {
     const website = (document.getElementById(`hp-${formId}`) as HTMLInputElement | null)?.value ?? "";
+    // Files: only the upload id goes to the server.
+    const out: Answers = {};
+    for (const [k, v] of Object.entries(answers)) out[k] = typeof v === "string" && /^[0-9a-f-]{36}\|/.test(v) ? v.slice(0, 36) : v;
     const r = await fetch(`/api/forms/${formId}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ answers, partial, resume: resume.current, website, ...tracking() }),
+      body: JSON.stringify({ answers: out, partial, resume: resume.current, website, ...tracking() }),
     });
     return (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; errors?: Record<string, string>; redirect?: string | null; message?: string; resume?: string; step?: number };
   }
@@ -348,6 +595,15 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
     box.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
+  function remember() {
+    if (!def.remember) return;
+    const keep: Record<string, string> = {};
+    for (const f of def.steps.flatMap(stepFields)) if (f.kind in PARAM_FOR && typeof answers[f.id] === "string" && answers[f.id]) keep[f.kind] = String(answers[f.id]).slice(0, 200);
+    try {
+      localStorage.setItem(REMEMBER_KEY, JSON.stringify({ ...JSON.parse(localStorage.getItem(REMEMBER_KEY) ?? "{}"), ...keep }));
+    } catch {}
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!last) return next();
@@ -369,6 +625,12 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
     try {
       const d = await send(false);
       if (d.ok) {
+        remember();
+        const w = window as unknown as { fbq?: (...a: unknown[]) => void; gtag?: (...a: unknown[]) => void };
+        try {
+          w.fbq?.("track", "Lead");
+          w.gtag?.("event", "generate_lead", { form_name: formId });
+        } catch {}
         if (d.redirect) {
           (embed ? (window.top ?? window) : window).location.href = d.redirect;
           return;
@@ -438,7 +700,7 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
               {cols.map((c) => (
                 <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
                   {c.blocks.map((b: Block) =>
-                    b.type === "content" ? <ContentView key={b.id} b={b} theme={t} /> : <FieldView key={b.id} f={b} value={answers[b.id]} onChange={(v) => set(b.id, v)} error={errors[b.id]} theme={t} />,
+                    b.type === "content" ? <ContentView key={b.id} b={b} theme={t} /> : <FieldView key={b.id} f={b} value={answers[b.id]} onChange={(v) => set(b.id, v)} error={errors[b.id]} theme={t} upload={upload} />,
                   )}
                 </div>
               ))}

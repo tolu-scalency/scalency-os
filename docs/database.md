@@ -253,6 +253,15 @@ Migration `20261124090000_forms_v2`.
 - `workflows_on_form_submitted` now starts "Form submitted" workflows for `submitted`, `qualified` and `unqualified`, never for `started`.
 - New table `ai_form_runs`: one row per "Build with AI" draft (`account_id`, `created_by`, `prompt`, `created_at`), used for the daily limit in the `ai-form` edge function. Only people with `sites.manage` in that workspace can read or add rows.
 
+## Forms: views, uploads and alerts
+
+Migration `20261125090000_forms_pro`.
+
+- `form_stats`: page views per form per day (`form_id`, `account_id`, `day`, `views`), counted by the app's server through `count_form_view(form)` (live forms only). The Forms page shows views and conversion from it.
+- `form_uploads`: files and signatures people attach to a form (`path` in the private storage bucket `form-uploads`, `name`, `size`, `content_type`). Team members of that workspace get short-lived links; the public can't read anything.
+- `form_post_to_chat(account, contact, message)`: posts a new-submission alert in the workspace's #leads team chat. Server only.
+- Public form addresses: `/f/<form id>` (embeds) and `/f/<workspace short name>/<form link name>` (shared links, using `accounts.slug` and `forms.slug`).
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

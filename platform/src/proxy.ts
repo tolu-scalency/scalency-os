@@ -8,7 +8,27 @@ import { FRESH_SIGN_IN, KEEP_COOKIE, POLICY, SEEN_COOKIE } from "@/lib/session-p
 // Pages anyone can open. "/" is the public homepage.
 const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/invite", "/f", "/api/cron", "/api/hooks", "/api/inbound", "/api/forms"];
 
+// Optional separate address for public forms, e.g. https://forms.scalency.us (NEXT_PUBLIC_FORMS_URL in Netlify).
+// On that address only forms work; anything else goes to the app's own address.
+const FORMS_HOST = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_FORMS_URL ? new URL(process.env.NEXT_PUBLIC_FORMS_URL).host : "";
+  } catch {
+    return "";
+  }
+})();
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://os.scalency.us";
+
 export async function proxy(request: NextRequest) {
+  const p0 = request.nextUrl.pathname;
+  if (FORMS_HOST && request.nextUrl.host === FORMS_HOST) {
+    if (p0.startsWith("/f/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
+    return NextResponse.redirect(new URL(p0 + request.nextUrl.search, APP_URL));
+  }
+  // Public forms, their embed script and submissions never need a login session.
+  // Skipping the session check keeps them fast and means a sign-in problem can't break them.
+  if (p0.startsWith("/f/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
+
   let response = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

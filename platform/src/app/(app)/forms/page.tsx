@@ -4,6 +4,8 @@ import { Page, PageHeader, Pill, Tile } from "@/components/ui";
 import { can, getWorkspace, timeAgo } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { NewFormButton } from "./new-form";
+import { FormRowMenu } from "./row-menu";
+import { formsHealth } from "@/lib/forms-health";
 
 export const metadata: Metadata = { title: "Forms" };
 
@@ -14,19 +16,29 @@ function daysAgoIso(n: number) {
 
 const statusLook = { live: { tone: "green", label: "Live" }, draft: { tone: "neutral", label: "Draft" }, archived: { tone: "neutral", label: "Archived" } } as const;
 
-export default async function FormsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const [ws, { error }] = await Promise.all([getWorkspace(), searchParams]);
+export default async function FormsPage({ searchParams }: { searchParams: Promise<{ error?: string; show?: string }> }) {
+  const [ws, { error, show }] = await Promise.all([getWorkspace(), searchParams]);
+  const archived = show === "archived";
   const supabase = await createClient();
-  const { data: forms } = await supabase.from("forms").select("id, name, status, updated_at").eq("account_id", ws.account.id).neq("status", "archived").order("updated_at", { ascending: false });
+  const formsQuery = supabase.from("forms").select("id, name, status, updated_at").eq("account_id", ws.account.id).order("updated_at", { ascending: false });
+  const [{ data: forms }, { count: archivedCount }, health, { data: stats }] = await Promise.all([
+    archived ? formsQuery.eq("status", "archived") : formsQuery.neq("status", "archived"),
+    supabase.from("forms").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("status", "archived"),
+    formsHealth(),
+    supabase.from("form_stats").select("form_id, views").eq("account_id", ws.account.id).gte("day", daysAgoIso(30).slice(0, 10)),
+  ]);
+  const views = new Map<string, number>();
+  for (const r of stats ?? []) views.set(r.form_id as string, (views.get(r.form_id as string) ?? 0) + ((r.views as number) ?? 0));
   const ids = (forms ?? []).map((f) => f.id as string);
   const counts = new Map<string, number>();
-  const weekAgo = daysAgoIso(7);
+  const monthAgo = daysAgoIso(30);
   const recent = new Map<string, number>();
   if (ids.length) {
-    const { data: subs } = await supabase.from("form_submissions").select("form_id, started_at").in("form_id", ids).limit(10000);
+    const { data: subs } = await supabase.from("form_submissions").select("form_id, started_at, status").in("form_id", ids).limit(10000);
     for (const s of subs ?? []) {
+      if (s.status === "started") continue;
       counts.set(s.form_id as string, (counts.get(s.form_id as string) ?? 0) + 1);
-      if ((s.started_at as string) >= weekAgo) recent.set(s.form_id as string, (recent.get(s.form_id as string) ?? 0) + 1);
+      if ((s.started_at as string) >= monthAgo) recent.set(s.form_id as string, (recent.get(s.form_id as string) ?? 0) + 1);
     }
   }
   const canEdit = can(ws, "sites.manage");
@@ -45,7 +57,27 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
         </p>
       )}
 
-      {!forms?.length ? (
+      {canEdit && !health.ok && (
+        <div className="rounded-xl border border-warn/30 bg-warn-bg px-4 py-3 text-[13.5px] text-warn">
+          <strong>{health.problem}</strong>
+          {health.fix && <div className="mt-1 text-[13px]">{health.fix}</div>}
+        </div>
+      )}
+
+      {(archived || Boolean(archivedCount)) && (
+        <div className="flex gap-2 text-[13px] font-semibold">
+          <Link href="/forms" className={`rounded-xl px-3 py-1.5 ring-1 ${!archived ? "bg-navy text-white ring-navy" : "bg-white text-muted ring-line"}`}>
+            Forms
+          </Link>
+          <Link href="/forms?show=archived" className={`rounded-xl px-3 py-1.5 ring-1 ${archived ? "bg-navy text-white ring-navy" : "bg-white text-muted ring-line"}`}>
+            Archived {archivedCount ?? 0}
+          </Link>
+        </div>
+      )}
+
+      {archived && !forms?.length ? (
+        <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">Nothing archived.</p>
+      ) : !forms?.length ? (
         canEdit ? (
           <div className="flex flex-col gap-3">
             <p className="text-[14px] text-muted">No forms yet. Pick how you&apos;d like to start, then add it to your website with one line of code.</p>
@@ -58,18 +90,32 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
         <div className="card divide-y divide-line">
           {forms.map((f) => {
             const look = statusLook[f.status as keyof typeof statusLook] ?? statusLook.draft;
+            const v = views.get(f.id as string) ?? 0;
+            const sent = recent.get(f.id as string) ?? 0;
             return (
-              <Link key={f.id} href={`/forms/${f.id}`} className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-surface">
-                <Tile icon="file" tone={f.status === "live" ? "blue" : "grey"} size={38} />
-                <div className="min-w-0 flex-[1_1_220px]">
-                  <div className="truncate text-[14.5px] font-semibold">{f.name}</div>
-                  <div className="text-[12.5px] text-muted">Edited {timeAgo(f.updated_at as string)}</div>
+              <div key={f.id} className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-surface">
+                <Link href={`/forms/${f.id}`} className="flex min-w-0 flex-[1_1_260px] items-center gap-4">
+                  <Tile icon="file" tone={f.status === "live" ? "blue" : "grey"} size={38} />
+                  <div className="min-w-0">
+                    <div className="truncate text-[14.5px] font-semibold">{f.name}</div>
+                    <div className="text-[12.5px] text-muted">Edited {timeAgo(f.updated_at as string)}</div>
+                  </div>
+                </Link>
+                <div className="grid grid-cols-3 gap-5 text-[12px] text-muted" title="Last 30 days">
+                  <div>
+                    <div className="text-[15px] font-semibold text-navy">{v}</div>views
+                  </div>
+                  <div>
+                    <div className="text-[15px] font-semibold text-navy">{sent}</div>sent
+                  </div>
+                  <div>
+                    <div className="text-[15px] font-semibold text-navy">{v ? `${Math.min(100, Math.round((sent / v) * 100))}%` : "–"}</div>conversion
+                  </div>
                 </div>
-                <div className="text-[12.5px] text-muted">
-                  <strong className="text-navy">{recent.get(f.id as string) ?? 0}</strong> this week · {counts.get(f.id as string) ?? 0} total
-                </div>
+                <span className="hidden text-[12px] text-muted sm:inline">{counts.get(f.id as string) ?? 0} all time</span>
                 <Pill tone={look.tone}>{look.label}</Pill>
-              </Link>
+                {canEdit && <FormRowMenu id={f.id as string} archived={f.status === "archived"} />}
+              </div>
             );
           })}
         </div>

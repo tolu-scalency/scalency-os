@@ -13,6 +13,55 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "form";
 }
 
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+/** A link name not yet used in this workspace: "free-ai-audit", then "free-ai-audit-2" and so on. */
+async function freeSlug(supabase: Db, accountId: string, base: string, exceptId?: string) {
+  for (let i = 1; i < 60; i++) {
+    const slug = i === 1 ? base : `${base}-${i}`.slice(0, 60);
+    let q = supabase.from("forms").select("id", { count: "exact", head: true }).eq("account_id", accountId).eq("slug", slug);
+    if (exceptId) q = q.neq("id", exceptId);
+    const { count } = await q;
+    if (!count) return slug;
+  }
+  return `${base}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** Makes a draft copy of a form (questions, style, settings and tags) and opens it. */
+export async function duplicateForm(id: string) {
+  const ws = await getWorkspace();
+  if (!can(ws, "sites.manage")) redirect("/forms?error=access");
+  const supabase = await createClient();
+  const { data: f } = await supabase.from("forms").select("name, definition, tags, stage_id, pipeline_id, redirect_url").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  if (!f) redirect("/forms?error=1");
+  const base = `${f.name} (copy)`.slice(0, 80);
+  let name = base;
+  for (let i = 2; i < 50; i++) {
+    const { count } = await supabase.from("forms").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("name", name);
+    if (!count) break;
+    name = `${f.name} (copy ${i})`.slice(0, 80);
+  }
+  const slug = await freeSlug(supabase, ws.account.id, slugify(name));
+  const { data, error } = await supabase
+    .from("forms")
+    .insert({ account_id: ws.account.id, name, slug, status: "draft", definition: cleanDefinition(f.definition), tags: f.tags ?? [], stage_id: f.stage_id, pipeline_id: f.pipeline_id, redirect_url: f.redirect_url })
+    .select("id")
+    .single();
+  if (error || !data) redirect("/forms?error=1");
+  redirect(`/forms/${data.id}`);
+}
+
+/** Archive (hide) or restore a form from the list. */
+export async function archiveForm(id: string, archived: boolean) {
+  const ws = await getWorkspace();
+  if (!can(ws, "sites.manage")) return { error: NO_ACCESS };
+  const supabase = await createClient();
+  const { error } = await supabase.from("forms").update({ status: archived ? "archived" : "draft", updated_at: new Date().toISOString() }).eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't change that. Try again." };
+  refresh();
+  return { ok: archived ? "Archived. Its link stops working." : "Restored as a draft." };
+}
+
 /**
  * Creates a form and opens Form Studio. From a template ("template"), from a
  * definition the AI built ("definition", JSON), or from scratch.
@@ -41,14 +90,14 @@ export async function createForm(fd: FormData) {
     if (!count) break;
     name = `${base} ${i}`;
   }
-  const slug = `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`;
+  const slug = await freeSlug(supabase, ws.account.id, slugify(name));
   const tags = tpl?.key === "ai-audit" ? ["AI audit"] : [];
   const { data, error } = await supabase.from("forms").insert({ account_id: ws.account.id, name, slug, status: "draft", definition: cleanDefinition(definition), tags }).select("id").single();
   if (error || !data) redirect("/forms?error=1");
   redirect(`/forms/${data.id}`);
 }
 
-type SaveInput = { name: string; definition: unknown; tags: string[]; stageId: string | null; redirectUrl: string };
+type SaveInput = { name: string; definition: unknown; tags: string[]; stageId: string | null; redirectUrl: string; slug?: string };
 
 /** Saves the builder. Published forms must still have a way to reach the person. */
 export async function saveForm(id: string, input: SaveInput): Promise<{ error?: string; ok?: string }> {
@@ -71,6 +120,14 @@ export async function saveForm(id: string, input: SaveInput): Promise<{ error?: 
     pipelineId = st.pipeline_id as string;
   }
 
+  let slug: string | undefined;
+  if (input.slug !== undefined) {
+    slug = String(input.slug).trim().toLowerCase();
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length > 60) return { error: "The link name can only use small letters, numbers and dashes, like free-ai-audit." };
+    const { count } = await supabase.from("forms").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("slug", slug).neq("id", id);
+    if (count) return { error: "Another form already uses that link name. Try a different one." };
+  }
+
   const { data: current } = await supabase.from("forms").select("status").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
   if (!current) return { error: "This form no longer exists." };
   if (current.status === "live") {
@@ -80,7 +137,7 @@ export async function saveForm(id: string, input: SaveInput): Promise<{ error?: 
 
   const { error } = await supabase
     .from("forms")
-    .update({ name, definition, tags, stage_id: stageId, pipeline_id: pipelineId, redirect_url: redirectUrl || null, updated_at: new Date().toISOString() })
+    .update({ name, definition, tags, stage_id: stageId, pipeline_id: pipelineId, redirect_url: redirectUrl || null, ...(slug ? { slug } : {}), updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("account_id", ws.account.id);
   if (error) return { error: "We couldn't save the form. Try again." };

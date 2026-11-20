@@ -193,7 +193,10 @@ function BlockPanel(p: Props & { b: Block }) {
 function FieldSettings({ f, set, def, customFields }: Props & { f: FieldBlock; set: (p: Partial<FieldBlock>) => void }) {
   const info = kindInfo(f.kind);
   const [bulk, setBulk] = useState(false);
-  const textLike = !["checkbox", "radio", "checkboxes", "yes_no", "rating", "hidden"].includes(f.kind);
+  const textLike = !["checkbox", "radio", "checkboxes", "yes_no", "rating", "hidden", "file", "signature", "date", "date_of_birth"].includes(f.kind);
+  const DEFAULT_PARAM: Record<string, string> = { first_name: "first_name", last_name: "last_name", full_name: "name", email: "email", phone: "phone", company: "company", website: "website", address: "address", city: "city", state: "state", postcode: "postcode", country: "country" };
+  const canPrefill = !["hidden", "file", "signature", "checkbox"].includes(f.kind);
+  const limits = f.kind === "number" || f.kind === "money" || f.kind === "textarea";
   const opts = f.options ?? [];
   const showPoints = def.qualify.enabled || Boolean(f.scores?.some(Boolean));
   const setOpt = (i: number, v: string) => set({ options: opts.map((o, j) => (j === i ? v.slice(0, 120) : o)) });
@@ -245,6 +248,29 @@ function FieldSettings({ f, set, def, customFields }: Props & { f: FieldBlock; s
         </Label>
       )}
       {f.kind !== "hidden" && <Toggle on={f.required} onChange={(v) => set({ required: v })} label="Required" hint="They can't continue until it's answered." />}
+
+      {limits && (
+        <div className="grid grid-cols-2 gap-2">
+          <Label text={f.kind === "textarea" ? "Fewest characters" : "Lowest"}>
+            <input type="number" value={f.min ?? ""} onChange={(e) => set({ min: e.target.value === "" ? undefined : Math.round(Number(e.target.value)) })} className="field h-10 text-[13px]" placeholder="No limit" />
+          </Label>
+          <Label text={f.kind === "textarea" ? "Most characters" : "Highest"}>
+            <input type="number" value={f.max ?? ""} onChange={(e) => set({ max: e.target.value === "" ? undefined : Math.round(Number(e.target.value)) })} className="field h-10 text-[13px]" placeholder="No limit" />
+          </Label>
+        </div>
+      )}
+      {f.kind === "file" && <p className="rounded-xl bg-surface px-3 py-2.5 text-[12px] text-muted">Photos, PDF, Word, Excel or text files up to 4 MB. You&apos;ll find them in Submissions.</p>}
+      {f.kind === "signature" && <p className="rounded-xl bg-surface px-3 py-2.5 text-[12px] text-muted">They sign with a finger or mouse. The signature is saved as an image in Submissions.</p>}
+
+      {canPrefill && (
+        <Label text="Fill in from the web address" hint={`With ?${f.param || DEFAULT_PARAM[f.kind] || "answer"}=… on the link, this is filled in for them.`}>
+          <div className="flex items-center gap-1 text-[13px]">
+            <span className="text-muted">?</span>
+            <input value={f.param ?? ""} onChange={(e) => set({ param: e.target.value.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 40) || undefined })} placeholder={DEFAULT_PARAM[f.kind] ?? "e.g. budget"} className="field h-10 min-w-0 flex-1 text-[13px]" />
+            <span className="text-muted">=…</span>
+          </div>
+        </Label>
+      )}
 
       {info?.choices && (
         <div className="flex flex-col gap-2">
@@ -463,6 +489,18 @@ function FormPanel(p: Props) {
             <Label text={`Form width: ${t.width}px`}>
               <input type="range" min={360} max={960} step={20} value={t.width} onChange={(e) => p.onTheme({ width: Number(e.target.value) })} className="accent-[#0a5fe3]" />
             </Label>
+            <div className="flex flex-col gap-3 border-t border-line pt-4">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-muted">The form&apos;s own page</span>
+              <Label text="Browser tab title" hint="Shown on the browser tab. Leave empty to use the form name.">
+                <input value={def.page.title} maxLength={80} onChange={(e) => p.onDef({ page: { ...def.page, title: e.target.value } })} className="field h-10 text-[13px]" placeholder={"e.g. Book your free audit"} />
+              </Label>
+              <Label text="Tab icon (your logo)" hint="A square image address starting https://. Leave empty for no icon.">
+                <input value={def.page.icon} maxLength={500} onChange={(e) => p.onDef({ page: { ...def.page, icon: e.target.value.trim() } })} className="field h-10 text-[13px]" placeholder="https://yoursite.co.uk/logo.png" />
+              </Label>
+              <Label text="Custom CSS" hint="For fine-tuning. The form sits inside .sf-form.">
+                <textarea value={def.page.css} maxLength={10000} rows={5} onChange={(e) => p.onDef({ page: { ...def.page, css: e.target.value } })} className="field py-2 font-mono text-[12px]" placeholder=".sf-form button { letter-spacing: .02em; }" spellCheck={false} />
+              </Label>
+            </div>
           </>
         ) : (
           <>
@@ -516,6 +554,7 @@ function FormPanel(p: Props) {
             {def.steps.length > 1 && (
               <Toggle on={def.saveProgress} onChange={(v) => p.onDef({ saveProgress: v })} label="Save people who stop part way" hint="Once they've given an email or phone, they're saved as a contact even if they don't finish. You'll see them as “Started” in Submissions." />
             )}
+            <Toggle on={def.remember} onChange={(v) => p.onDef({ remember: v })} label="Remember visitors" hint="Fills in their name, email and phone next time, on any of your forms, on the same device." />
             <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
               <Toggle on={def.consent.enabled} onChange={(v) => p.onDef({ consent: { ...def.consent, enabled: v } })} label="Ask for permission to contact" hint="Recommended in the UK. Shown above the submit button." />
               {def.consent.enabled && (
