@@ -7,7 +7,7 @@ import { PASS_COOKIE, loginCodesOn, needsCode, passValid, sessionStart } from "@
 // This is a quick first check only: every data read is also protected by row-level security in the database.
 
 // Pages anyone can open. "/" is the public homepage.
-const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/invite", "/f", "/api/cron", "/api/hooks", "/api/inbound", "/api/forms"];
+const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/invite", "/f", "/p", "/api/cron", "/api/hooks", "/api/inbound", "/api/forms"];
 
 // Optional separate address for public forms, e.g. https://forms.scalency.us (NEXT_PUBLIC_FORMS_URL in Netlify).
 // On that address only forms work; anything else goes to the app's own address.
@@ -28,7 +28,7 @@ export async function proxy(request: NextRequest) {
   }
   // Public forms, their embed script and submissions never need a login session.
   // Skipping the session check keeps them fast and means a sign-in problem can't break them.
-  if (p0.startsWith("/f/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
+  if (p0.startsWith("/f/") || p0.startsWith("/p/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
 
