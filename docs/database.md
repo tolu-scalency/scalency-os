@@ -266,6 +266,28 @@ Migration `20261125090000_forms_pro`.
 
 Migration `20261126090000_server_access`. Newer Supabase projects don't give the server role (`service_role`, the secret key) access to new tables automatically. This grants it on everything in `public`, now and for future tables, so public forms, embeds, webhooks and the workflow clock work. The secret key is only ever used on the server.
 
+## Conditions, message fields and teammate names
+
+Migration `20261127090000_conditions_and_fields`.
+
+- `member_directory(account)`: everyone in a workspace with a usable name, falling back to their sign-up name or email. Members of that workspace only.
+- `render_template` now also fills `{{tags}}`, `{{added_date}}`, `{{today}}`, `{{weekday}}`, `{{year}}`, and the latest deal: `{{deal_name}}`, `{{deal_value}}`, `{{deal_stage}}`, `{{deal_status}}`, `{{pipeline}}`.
+- `wf_condition` (If / else) adds: `email_unsubscribed`, `sms_unsubscribed`, `contact_age` (days since added), `reply_contains`, `reply_channel`, `submitted_form`, `in_workflow`, `finished_workflow`, `has_open_deal`, `deal_owner_is`, `day_of_month`, `date_is`.
+
+## Email senders
+
+Migration `20261128090000_email_senders`.
+
+- `email_senders`: a workspace's own sending addresses. `kind` is `smtp` (their mailbox: host, port, security, login, and `smtp_secret`, the password encrypted by the app with AES-256-GCM) or `domain` (their domain verified with Resend: `provider_domain_id`, `dns_records`). `status` is pending, verified or failed. One `is_default` per workspace; a domain can only belong to one workspace.
+- People with `settings.manage` can read their workspace's senders, never `smtp_secret`. All changes go through the server.
+- `messages.sender_id`: which sender an email went out from (empty means Scalency's own address).
+
+## Sign-in codes
+
+Migration `20261129090000_login_codes`.
+
+- `login_codes`: a hash of each 6-digit code emailed after a password sign-in, which sign-in it's for (`session_at`), tries and expiry (10 minutes). Server only. `prune_login_codes()` clears codes older than 2 days.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

@@ -55,7 +55,7 @@ export function WorkflowEditor({
 }) {
   const fieldsList = mergeFields(customFields, customValues);
   const others = workflows.filter((w) => w.id !== workflow.id);
-  const ctx = { stages, members, workflows: others, customFields, pipelines };
+  const ctx = { stages, members, workflows: others, customFields, pipelines, forms };
 
   const [name, setName] = useState(workflow.name);
   const [description, setDescription] = useState(workflow.description);
@@ -597,6 +597,8 @@ export function WorkflowEditor({
               members={members}
               customFields={customFields}
               tags={tags}
+              forms={forms}
+              workflows={others}
             />
           ) : (
             <div className="flex flex-col gap-2.5">

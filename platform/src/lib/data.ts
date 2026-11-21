@@ -572,6 +572,9 @@ export async function getTeam(accountId: string, userId: string) {
   const ids = (members.data ?? []).map((m) => m.user_id);
   const { data: profiles } = ids.length ? await supabase.from("profiles").select("user_id, full_name, email").in("user_id", ids) : { data: [] };
   const byId = new Map((profiles ?? []).map((p) => [p.user_id, p]));
+  // Names for people who joined by invite and never filled in a profile.
+  const { data: dir } = ids.length ? await supabase.rpc("member_directory", { target: accountId }) : { data: [] };
+  const dirById = new Map(((dir ?? []) as { user_id: string; name: string; email: string | null }[]).map((d) => [d.user_id, d]));
 
   return {
     members: (members.data ?? []).map((m) => {
@@ -589,8 +592,8 @@ export async function getTeam(accountId: string, userId: string) {
               : m.permissions
                 ? "Custom access"
                 : ((m.account_roles as unknown as { name: string } | null)?.name ?? "Team member"),
-        name: p?.full_name ?? (m.user_id === userId ? "You" : "Teammate"),
-        email: p?.email ?? null,
+        name: p?.full_name || dirById.get(m.user_id)?.name || (m.user_id === userId ? "You" : "Team member"),
+        email: p?.email ?? dirById.get(m.user_id)?.email ?? null,
         joinedAt: m.created_at,
         isYou: m.user_id === userId,
       } satisfies Member;
@@ -668,7 +671,9 @@ export async function myPendingInvites(): Promise<PendingInvite[]> {
 export type WaitUnit = "minutes" | "hours" | "days";
 export type ConditionField =
   | "has_tag" | "has_email" | "has_phone" | "replied" | "in_stage" | "deal_status" | "source_is" | "has_owner"
-  | "contact_field" | "owner_is" | "deal_value" | "in_pipeline" | "day_of_week" | "time_of_day";
+  | "contact_field" | "owner_is" | "deal_value" | "in_pipeline" | "day_of_week" | "time_of_day"
+  | "email_unsubscribed" | "sms_unsubscribed" | "contact_age" | "reply_contains" | "reply_channel" | "submitted_form"
+  | "in_workflow" | "finished_workflow" | "has_open_deal" | "deal_owner_is" | "day_of_month" | "date_is";
 export type ConditionOp = "is" | "is_not" | "contains" | "not_contains" | "empty" | "not_empty" | "gt" | "lt";
 export type Condition = { field: ConditionField; value?: string; negate?: boolean; op?: ConditionOp; key?: string };
 export type CompiledRoute = { name: string; match: "all" | "any"; conditions: Condition[]; goto: string };
@@ -806,6 +811,12 @@ export async function listChannels(accountId: string): Promise<Channel[]> {
 /** Names for everyone in the workspace, by login id. */
 export async function memberNames(accountId: string) {
   const supabase = await createClient();
+  const { data: dir } = await supabase.rpc("member_directory", { target: accountId });
+  if (Array.isArray(dir) && dir.length) {
+    const named: Record<string, string> = {};
+    for (const m of dir as { user_id: string; name: string }[]) named[m.user_id] = m.name;
+    return named;
+  }
   const { data: members } = await supabase.from("account_members").select("user_id").eq("account_id", accountId);
   const ids = (members ?? []).map((m) => m.user_id);
   const { data: profiles } = ids.length ? await supabase.from("profiles").select("user_id, full_name, email").in("user_id", ids) : { data: [] };

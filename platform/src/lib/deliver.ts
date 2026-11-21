@@ -1,5 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { adminClient } from "./admin";
+import { defaultSender, sendViaDomain, sendViaSmtp, type Sender } from "./senders";
 
 // Delivers emails (Resend) and texts (Twilio) that workflows and the inbox have saved.
 // In test mode the message is already addressed to the workspace's test inbox or phone.
@@ -54,22 +56,27 @@ ${banner}
 </table></td></tr></table></body></html>`;
 }
 
-async function sendEmail(m: Pending, workspace: string) {
+/** Sends one email: from the workspace's own mailbox or domain if it has one, otherwise from Scalency's address. */
+async function sendEmail(m: Pending, workspace: string, sender: Sender | null) {
+  const test = m.status === "held_test_mode";
+  const mail = {
+    to: m.to_address,
+    subject: (test ? "[TEST] " : "") + (m.subject ?? "(no subject)"),
+    text: m.body,
+    html: m.html ? designedHtml(m.html, workspace, test) : emailHtml(m.body, workspace, test),
+  };
+  if (sender?.kind === "smtp") return { id: await sendViaSmtp(sender, mail), from: sender.from_email, sender: sender.id };
+  if (sender?.kind === "domain") return { id: await sendViaDomain(sender, mail), from: sender.from_email, sender: sender.id };
+
   const from = process.env.EMAIL_FROM!; // e.g. hello@send.scalency.us
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      from: `${workspace.replace(/[<>"]/g, "")} <${from}>`,
-      to: [m.to_address],
-      subject: (m.status === "held_test_mode" ? "[TEST] " : "") + (m.subject ?? "(no subject)"),
-      text: m.body,
-      html: m.html ? designedHtml(m.html, workspace, m.status === "held_test_mode") : emailHtml(m.body, workspace, m.status === "held_test_mode"),
-    }),
+    body: JSON.stringify({ from: `${workspace.replace(/[<>"]/g, "")} <${from}>`, to: [mail.to], subject: mail.subject, text: mail.text, html: mail.html }),
   });
   const data = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
   if (!res.ok) throw new Error(data.message ?? `Resend error ${res.status}`);
-  return data.id ?? null;
+  return { id: data.id ?? null, from, sender: null };
 }
 
 async function sendSms(m: Pending) {
@@ -91,8 +98,10 @@ async function sendSms(m: Pending) {
 /** Sends waiting messages. Pass an account id to limit it to one workspace. Returns how many were sent. */
 export async function deliverPending(supabase: SupabaseClient, accountId?: string, limit = 25) {
   const ready = providersReady();
-  if (!ready.email && !ready.sms) return 0;
-  const channels = [ready.email && "email", ready.sms && "sms"].filter(Boolean) as string[];
+  const admin = adminClient();
+  // Email can also go out through a workspace's own mailbox, so it doesn't strictly need Resend.
+  const channels = [(ready.email || admin) && "email", ready.sms && "sms"].filter(Boolean) as string[];
+  if (!channels.length) return 0;
 
   let query = supabase
     .from("messages")
@@ -109,10 +118,18 @@ export async function deliverPending(supabase: SupabaseClient, accountId?: strin
   if (!data?.length) return 0;
 
   const names = new Map<string, string>();
+  const senders = new Map<string, Sender | null>();
   let sent = 0;
   for (const m of data as Pending[]) {
+    if (m.channel === "email" && !senders.has(m.account_id)) {
+      senders.set(m.account_id, admin ? await defaultSender(admin, m.account_id).catch(() => null) : null);
+    }
+    const sender = m.channel === "email" ? (senders.get(m.account_id) ?? null) : null;
+    // No own sender and Scalency's address isn't set up: leave it waiting.
+    if (m.channel === "email" && !sender && !ready.email) continue;
+
     // Claim it so a second run can't send it too.
-    const provider = m.channel === "email" ? "resend" : "twilio";
+    const provider = m.channel === "email" ? (sender?.kind === "smtp" ? "smtp" : "resend") : "twilio";
     const { data: claimed } = await supabase.from("messages").update({ provider }).eq("id", m.id).is("provider", null).select("id");
     if (!claimed?.length) continue;
 
@@ -121,14 +138,25 @@ export async function deliverPending(supabase: SupabaseClient, accountId?: strin
       names.set(m.account_id, acc?.name ?? "Scalency");
     }
     try {
-      const providerId = m.channel === "email" ? await sendEmail(m, names.get(m.account_id)!) : await sendSms(m);
-      await supabase
-        .from("messages")
-        .update({ sent_at: new Date().toISOString(), provider_message_id: providerId, status: m.status === "queued" ? "sent" : "held_test_mode", from_address: m.channel === "email" ? process.env.EMAIL_FROM : process.env.TWILIO_FROM })
-        .eq("id", m.id);
+      if (m.channel === "email") {
+        const r = await sendEmail(m, names.get(m.account_id)!, sender);
+        await supabase
+          .from("messages")
+          .update({ sent_at: new Date().toISOString(), provider_message_id: r.id, status: m.status === "queued" ? "sent" : "held_test_mode", from_address: r.from, sender_id: r.sender })
+          .eq("id", m.id);
+        if (r.sender && admin) await admin.from("email_senders").update({ last_used_at: new Date().toISOString(), last_error: null }).eq("id", r.sender);
+      } else {
+        const providerId = await sendSms(m);
+        await supabase
+          .from("messages")
+          .update({ sent_at: new Date().toISOString(), provider_message_id: providerId, status: m.status === "queued" ? "sent" : "held_test_mode", from_address: process.env.TWILIO_FROM })
+          .eq("id", m.id);
+      }
       sent += 1;
     } catch (e) {
-      await supabase.from("messages").update({ status: "failed", error: String(e instanceof Error ? e.message : e).slice(0, 500) }).eq("id", m.id);
+      const reason = String(e instanceof Error ? e.message : e).slice(0, 500);
+      await supabase.from("messages").update({ status: "failed", error: reason }).eq("id", m.id);
+      if (sender && admin) await admin.from("email_senders").update({ last_error: reason.slice(0, 300) }).eq("id", sender.id);
     }
   }
   return sent;

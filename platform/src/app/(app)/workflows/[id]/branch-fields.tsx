@@ -3,23 +3,32 @@
 // If / else settings: named branches, each with its own conditions (all or any),
 // checked from the top. Anyone who matches none goes down the last branch.
 
-import { Icon } from "@/components/icon";
+import { useRef, useState } from "react";
+import { Icon, type IconName } from "@/components/icon";
+import { Popover, useListKeys } from "@/components/popover";
 import type { Condition, ConditionField, ConditionOp, CustomField, Stage } from "@/lib/data";
 import { MAX_BRANCHES, newId, type BranchNode, type Route } from "@/lib/flow";
 import { StagePicker, type Option } from "./step-fields";
 
-type Input = "none" | "tag" | "text" | "stage" | "pipeline" | "deal_status" | "member" | "number" | "days" | "time" | "field";
+type Input = "none" | "tag" | "text" | "stage" | "pipeline" | "deal_status" | "member" | "number" | "days" | "time" | "field" | "form" | "workflow" | "date" | "channel" | "daynum" | "count";
 type OpChoice = { key: string; label: string; op?: ConditionOp; negate?: boolean; noValue?: boolean };
-type Def = { field: ConditionField; label: string; group: string; input: Input; ops: OpChoice[] };
+type Def = { field: ConditionField; label: string; group: string; input: Input; ops: OpChoice[]; icon: IconName; hint: string };
 
 const yesNo = (yes: string, no: string): OpChoice[] => [
   { key: "yes", label: yes },
   { key: "no", label: no, negate: true },
 ];
 
+const compare = (more: string, less: string, exact?: string): OpChoice[] => [
+  { key: "gt", label: more, op: "gt" },
+  { key: "lt", label: less, op: "lt" },
+  ...(exact ? [{ key: "is", label: exact, op: "is" as const }] : []),
+];
+
 export const CONDITION_DEFS: Def[] = [
-  { field: "has_tag", label: "Tag", group: "Contact", input: "tag", ops: yesNo("has the tag", "does not have the tag") },
-  { field: "contact_field", label: "Contact field", group: "Contact", input: "field", ops: [
+  // Contact
+  { field: "has_tag", label: "Tag", group: "Contact", icon: "tag", hint: "Has or doesn't have a tag", input: "tag", ops: yesNo("has the tag", "does not have the tag") },
+  { field: "contact_field", label: "Contact field", group: "Contact", icon: "list", hint: "Any detail or custom field", input: "field", ops: [
     { key: "is", label: "is", op: "is" },
     { key: "is_not", label: "is not", op: "is_not" },
     { key: "contains", label: "contains", op: "contains" },
@@ -29,31 +38,52 @@ export const CONDITION_DEFS: Def[] = [
     { key: "gt", label: "is more than", op: "gt" },
     { key: "lt", label: "is less than", op: "lt" },
   ] },
-  { field: "source_is", label: "Source", group: "Contact", input: "text", ops: [
+  { field: "source_is", label: "Source", group: "Contact", icon: "share", hint: "Where they came from", input: "text", ops: [
     { key: "yes", label: "is" },
     { key: "no", label: "is not", negate: true },
     { key: "contains", label: "contains", op: "contains" },
   ] },
-  { field: "has_email", label: "Email address", group: "Contact", input: "none", ops: yesNo("has one", "has none") },
-  { field: "has_phone", label: "Phone number", group: "Contact", input: "none", ops: yesNo("has one", "has none") },
-  { field: "has_owner", label: "Assigned", group: "Contact", input: "none", ops: yesNo("to anyone", "to nobody") },
-  { field: "owner_is", label: "Assigned user", group: "Contact", input: "member", ops: yesNo("is", "is not") },
-  { field: "replied", label: "Reply", group: "Conversations", input: "none", ops: yesNo("has replied since starting", "has not replied") },
-  { field: "in_pipeline", label: "Pipeline", group: "Pipeline", input: "pipeline", ops: yesNo("has a deal in", "has no deal in") },
-  { field: "in_stage", label: "Pipeline stage", group: "Pipeline", input: "stage", ops: yesNo("is in", "is not in") },
-  { field: "deal_status", label: "Deal status", group: "Pipeline", input: "deal_status", ops: yesNo("is", "is not") },
-  { field: "deal_value", label: "Deal value (£)", group: "Pipeline", input: "number", ops: [
-    { key: "gt", label: "is more than", op: "gt" },
-    { key: "lt", label: "is less than", op: "lt" },
-    { key: "is", label: "is exactly", op: "is" },
-  ] },
-  { field: "day_of_week", label: "Day of the week", group: "Date and time", input: "days", ops: yesNo("today is", "today is not") },
-  { field: "time_of_day", label: "Time of day", group: "Date and time", input: "time", ops: [
+  { field: "has_email", label: "Email address", group: "Contact", icon: "mail", hint: "Has an email address or not", input: "none", ops: yesNo("has one", "has none") },
+  { field: "has_phone", label: "Phone number", group: "Contact", icon: "phone", hint: "Has a phone number or not", input: "none", ops: yesNo("has one", "has none") },
+  { field: "contact_age", label: "Date added", group: "Contact", icon: "clock", hint: "How long ago they became a contact", input: "count", ops: compare("was more than", "was less than") },
+  { field: "has_owner", label: "Assigned", group: "Contact", icon: "user", hint: "Assigned to anyone or nobody", input: "none", ops: yesNo("to anyone", "to nobody") },
+  { field: "owner_is", label: "Assigned user", group: "Contact", icon: "users", hint: "Assigned to a particular teammate", input: "member", ops: yesNo("is", "is not") },
+  // Consent
+  { field: "email_unsubscribed", label: "Email unsubscribed", group: "Consent", icon: "mail", hint: "Opted out of emails", input: "none", ops: yesNo("has unsubscribed", "has not unsubscribed") },
+  { field: "sms_unsubscribed", label: "Texts unsubscribed", group: "Consent", icon: "phone", hint: "Replied STOP or opted out", input: "none", ops: yesNo("has unsubscribed", "has not unsubscribed") },
+  // Conversations
+  { field: "replied", label: "Replied", group: "Conversations", icon: "inbox", hint: "Any reply since entering this workflow", input: "none", ops: yesNo("has replied since starting", "has not replied") },
+  { field: "reply_contains", label: "Reply contains", group: "Conversations", icon: "search", hint: "A word or phrase in their reply", input: "text", ops: yesNo("contains", "does not contain") },
+  { field: "reply_channel", label: "Last reply channel", group: "Conversations", icon: "send", hint: "Whether they last replied by email or text", input: "channel", ops: yesNo("was", "was not") },
+  // Forms and workflows
+  { field: "submitted_form", label: "Form submitted", group: "Forms and workflows", icon: "form", hint: "Has ever sent a particular form", input: "form", ops: yesNo("has submitted", "has not submitted") },
+  { field: "in_workflow", label: "In workflow", group: "Forms and workflows", icon: "zap", hint: "Currently running in another workflow", input: "workflow", ops: yesNo("is in", "is not in") },
+  { field: "finished_workflow", label: "Finished workflow", group: "Forms and workflows", icon: "checkCircle", hint: "Has completed another workflow", input: "workflow", ops: yesNo("has finished", "has not finished") },
+  // Pipeline
+  { field: "in_pipeline", label: "Pipeline", group: "Deals", icon: "pipeline", hint: "Has a deal in a pipeline", input: "pipeline", ops: yesNo("has a deal in", "has no deal in") },
+  { field: "in_stage", label: "Pipeline stage", group: "Deals", icon: "columns", hint: "A deal is in a particular stage", input: "stage", ops: yesNo("is in", "is not in") },
+  { field: "has_open_deal", label: "Open deal", group: "Deals", icon: "card", hint: "Has a deal that's still open", input: "none", ops: yesNo("has one", "has none") },
+  { field: "deal_status", label: "Deal status", group: "Deals", icon: "checkCircle", hint: "Open, won or lost", input: "deal_status", ops: yesNo("is", "is not") },
+  { field: "deal_value", label: "Deal value (£)", group: "Deals", icon: "pound", hint: "Their latest deal's value", input: "number", ops: compare("is more than", "is less than", "is exactly") },
+  { field: "deal_owner_is", label: "Deal owner", group: "Deals", icon: "users", hint: "Who the latest deal is assigned to", input: "member", ops: yesNo("is", "is not") },
+  // Date and time
+  { field: "day_of_week", label: "Day of the week", group: "Date and time", icon: "calendar", hint: "In your workspace's time zone", input: "days", ops: yesNo("today is", "today is not") },
+  { field: "time_of_day", label: "Time of day", group: "Date and time", icon: "clock", hint: "Before or after a time", input: "time", ops: [
     { key: "lt", label: "is before", op: "lt" },
     { key: "gt", label: "is after", op: "gt" },
   ] },
+  { field: "day_of_month", label: "Day of the month", group: "Date and time", icon: "calendar", hint: "e.g. the 1st, or after the 25th", input: "daynum", ops: [
+    { key: "is", label: "is", op: "is" },
+    { key: "gt", label: "is after", op: "gt" },
+    { key: "lt", label: "is before", op: "lt" },
+  ] },
+  { field: "date_is", label: "Date", group: "Date and time", icon: "calendar", hint: "Before, on or after a date", input: "date", ops: [
+    { key: "lt", label: "is before", op: "lt" },
+    { key: "is", label: "is", op: "is" },
+    { key: "gt", label: "is after", op: "gt" },
+  ] },
 ];
-const DEF_GROUPS = ["Contact", "Conversations", "Pipeline", "Date and time"];
+const DEF_GROUPS = ["Contact", "Consent", "Conversations", "Forms and workflows", "Deals", "Date and time"];
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function defFor(field: ConditionField) {
@@ -67,7 +97,15 @@ function opKey(c: Condition) {
 export function newCondition(field: ConditionField = "has_tag", stages: Stage[] = []): Condition {
   const d = defFor(field);
   const first = d.ops[0];
-  const value = d.input === "stage" ? stages[0]?.id : d.input === "deal_status" ? "won" : d.input === "days" ? "1,2,3,4,5" : d.input === "time" ? "09:00" : "";
+  const value =
+    d.input === "stage" ? stages[0]?.id
+    : d.input === "deal_status" ? "won"
+    : d.input === "days" ? "1,2,3,4,5"
+    : d.input === "time" ? "09:00"
+    : d.input === "channel" ? "email"
+    : d.input === "count" ? "7"
+    : d.input === "daynum" ? "1"
+    : "";
   return { field, op: first.op, negate: first.negate || undefined, key: d.input === "field" ? "email" : undefined, value };
 }
 
@@ -76,7 +114,9 @@ export function newRoute(n: number): Route {
 }
 
 /** Plain-English line for a condition, used on the canvas. */
-export function conditionText(c: Condition, ctx: { stages: Stage[]; members: Option[]; pipelines: Option[]; customFields: CustomField[] }) {
+type Ctx = { stages: Stage[]; members: Option[]; pipelines: Option[]; customFields: CustomField[]; forms?: Option[]; workflows?: Option[] };
+
+export function conditionText(c: Condition, ctx: Ctx) {
   const d = defFor(c.field);
   const op = d.ops.find((o) => o.key === opKey(c)) ?? d.ops[0];
   let v = c.value ?? "";
@@ -84,6 +124,11 @@ export function conditionText(c: Condition, ctx: { stages: Stage[]; members: Opt
   if (d.input === "pipeline") v = ctx.pipelines.find((s) => s.id === v)?.name ?? "a pipeline";
   if (d.input === "member") v = ctx.members.find((s) => s.id === v)?.name ?? "someone";
   if (d.input === "days") v = v.split(",").filter(Boolean).map((x) => DAYS[Number(x) - 1]).join(", ");
+  if (d.input === "form") v = ctx.forms?.find((s) => s.id === v)?.name ?? "a form";
+  if (d.input === "workflow") v = ctx.workflows?.find((s) => s.id === v)?.name ?? "a workflow";
+  if (d.input === "channel") v = v === "sms" ? "text" : "email";
+  if (d.input === "count") v = `${v} days ago`;
+  if (d.input === "date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) v = new Date(`${v}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   if (c.field === "deal_value") v = `£${v}`;
   const name = d.input === "field" ? fieldLabel(c.key ?? "", ctx.customFields) : d.label;
   return `${name} ${op.label}${op.noValue || d.input === "none" ? "" : ` ${v || "…"}`}`;
@@ -102,6 +147,8 @@ export function BranchFields({
   pipelines,
   members,
   customFields,
+  forms = [],
+  workflows = [],
 }: {
   node: BranchNode;
   onChange: (n: BranchNode) => void;
@@ -110,6 +157,8 @@ export function BranchFields({
   members: Option[];
   customFields: CustomField[];
   tags?: string[];
+  forms?: Option[];
+  workflows?: Option[];
 }) {
   const setRoute = (id: string, patch: Partial<Route>) => onChange({ ...node, branches: node.branches.map((r) => (r.id === id ? { ...r, ...patch } : r)) });
   const moveRoute = (i: number, d: -1 | 1) => {
@@ -173,6 +222,8 @@ export function BranchFields({
                   pipelines={pipelines}
                   members={members}
                   customFields={customFields}
+                  forms={forms}
+                  workflows={workflows}
                 />
               </div>
             ))}
@@ -207,6 +258,8 @@ function ConditionRow({
   pipelines,
   members,
   customFields,
+  forms,
+  workflows,
 }: {
   c: Condition;
   onChange: (c: Condition) => void;
@@ -215,6 +268,8 @@ function ConditionRow({
   pipelines: Option[];
   members: Option[];
   customFields: CustomField[];
+  forms: Option[];
+  workflows: Option[];
 }) {
   const d = defFor(c.field);
   const key = opKey(c);
@@ -225,20 +280,7 @@ function ConditionRow({
   return (
     <div className="rounded-lg bg-white p-2 ring-1 ring-line">
       <div className="flex items-center gap-1.5">
-        <select
-          value={c.field}
-          onChange={(e) => onChange(newCondition(e.target.value as ConditionField, stages))}
-          className="field h-9 min-w-0 flex-1 text-[13px]"
-          aria-label="What to check"
-        >
-          {DEF_GROUPS.map((g) => (
-            <optgroup key={g} label={g}>
-              {CONDITION_DEFS.filter((x) => x.group === g).map((x) => (
-                <option key={x.field} value={x.field}>{x.label}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        <ConditionTypePicker value={c.field} onPick={(f) => onChange(newCondition(f, stages))} />
         {onRemove && (
           <button type="button" onClick={onRemove} aria-label="Remove condition" title="Remove condition" className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg text-faint hover:bg-bad-bg hover:text-bad">
             <Icon name="x" size={14} />
@@ -273,7 +315,7 @@ function ConditionRow({
             <option key={o.key} value={o.key}>{o.label}</option>
           ))}
         </select>
-        {showValue && <ValueInput c={c} input={d.input} set={set} stages={stages} pipelines={pipelines} members={members} customFields={customFields} />}
+        {showValue && <ValueInput c={c} input={d.input} set={set} stages={stages} pipelines={pipelines} members={members} customFields={customFields} forms={forms} workflows={workflows} />}
       </div>
     </div>
   );
@@ -287,6 +329,8 @@ function ValueInput({
   pipelines,
   members,
   customFields,
+  forms,
+  workflows,
 }: {
   c: Condition;
   input: Input;
@@ -295,6 +339,8 @@ function ValueInput({
   pipelines: Option[];
   members: Option[];
   customFields: CustomField[];
+  forms: Option[];
+  workflows: Option[];
 }) {
   const cls = "field h-9 min-w-0 flex-[1_1_140px] text-[13px]";
   const v = c.value ?? "";
@@ -319,7 +365,7 @@ function ValueInput({
     case "member":
       return (
         <select value={v} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Team member">
-          <option value="">Choose someone</option>
+          <option value="">{members.length ? "Choose a teammate" : "No teammates yet"}</option>
           {members.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
@@ -328,11 +374,53 @@ function ValueInput({
     case "deal_status":
       return (
         <select value={v || "won"} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Deal status">
-          <option value="open">open</option>
-          <option value="won">won</option>
-          <option value="lost">lost</option>
+          <option value="open">Open</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
         </select>
       );
+    case "form":
+      return (
+        <select value={v} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Form">
+          <option value="">{forms.length ? "Choose a form" : "No forms yet"}</option>
+          {forms.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+      );
+    case "workflow":
+      return (
+        <select value={v} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Workflow">
+          <option value="">{workflows.length ? "Choose a workflow" : "No other workflows yet"}</option>
+          {workflows.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+      );
+    case "channel":
+      return (
+        <select value={v || "email"} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Channel">
+          <option value="email">Email</option>
+          <option value="sms">Text message</option>
+        </select>
+      );
+    case "count":
+      return (
+        <span className="inline-flex flex-[1_1_140px] items-center gap-2">
+          <input type="number" min={0} max={36500} value={v} onChange={(e) => set({ value: e.target.value.replace(/\D/g, "").slice(0, 5) })} className="field h-9 w-24 text-[13px]" aria-label="Days" />
+          <span className="text-[13px] text-muted">days ago</span>
+        </span>
+      );
+    case "daynum":
+      return (
+        <select value={v || "1"} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Day of the month">
+          {Array.from({ length: 31 }, (_, i) => String(i + 1)).map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      );
+    case "date":
+      return <input type="date" value={v} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Date" />;
     case "number":
       return <input type="number" min={0} value={v} onChange={(e) => set({ value: e.target.value })} placeholder="e.g. 1000" className={cls} aria-label="Amount" />;
     case "time":
@@ -379,4 +467,98 @@ function ValueInput({
     default:
       return <input value={v} maxLength={100} onChange={(e) => set({ value: e.target.value })} placeholder="e.g. Facebook" className={cls} aria-label="Value" />;
   }
+}
+
+/** "What to check": a searchable list of every condition, grouped, with a short hint each. */
+function ConditionTypePicker({ value, onPick }: { value: ConditionField; onPick: (f: ConditionField) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const btn = useRef<HTMLButtonElement>(null);
+  const current = defFor(value);
+  const needle = q.trim().toLowerCase();
+  const shown = CONDITION_DEFS.filter((d) => !needle || `${d.label} ${d.group} ${d.hint}`.toLowerCase().includes(needle));
+  // Same order as on screen, so arrow keys move down the list as you see it.
+  const order = DEF_GROUPS.flatMap((g) => shown.filter((d) => d.group === g));
+  const close = () => {
+    setOpen(false);
+    setQ("");
+  };
+  const choose = (d: Def) => {
+    if (d.field !== value) onPick(d.field);
+    close();
+  };
+  const keys = useListKeys(order.length, (i) => choose(order[i]));
+
+  return (
+    <>
+      <button
+        ref={btn}
+        type="button"
+        onClick={() => (open ? close() : setOpen(true))}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="What to check"
+        className={`flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border bg-white px-2.5 text-left transition hover:border-sky ${open ? "border-sky ring-2 ring-sky/20" : "border-line"}`}
+      >
+        <span className="inline-flex h-6 w-6 flex-none items-center justify-center rounded-lg bg-chip text-brand">
+          <Icon name={current.icon} size={13} />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-navy">{current.label}</span>
+        <span className="hidden flex-none text-[11.5px] text-faint sm:inline">{current.group}</span>
+        <Icon name="chevronDown" size={14} className="flex-none text-faint" />
+      </button>
+      <Popover anchor={btn} open={open} onClose={close} width={380} label="What to check">
+        <div className="flex-none border-b border-line p-2.5">
+          <label className="flex h-10 items-center gap-2 rounded-xl bg-surface px-3 ring-1 ring-transparent focus-within:bg-white focus-within:ring-sky">
+            <Icon name="search" size={14} className="text-faint" />
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                keys.setActive(0);
+              }}
+              onKeyDown={keys.onKeyDown}
+              placeholder="Search conditions, e.g. form, tag, reply"
+              className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none focus-visible:outline-none"
+              aria-label="Search conditions"
+            />
+          </label>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+          {DEF_GROUPS.filter((g) => shown.some((d) => d.group === g)).map((g) => (
+            <div key={g} className="mb-1">
+              <div className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-faint">{g}</div>
+              {shown
+                .filter((d) => d.group === g)
+                .map((d) => {
+                  const idx = order.indexOf(d);
+                  const on = idx === keys.active;
+                  const picked = d.field === value;
+                  return (
+                    <button
+                      key={d.field}
+                      type="button"
+                      onMouseEnter={() => keys.setActive(idx)}
+                      onClick={() => choose(d)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left ${on ? "bg-chip" : ""}`}
+                    >
+                      <span className={`inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg ${picked ? "bg-brand text-white" : "bg-surface text-muted"}`}>
+                        <Icon name={d.icon} size={15} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13.5px] font-semibold text-navy">{d.label}</span>
+                        <span className="block truncate text-[12px] text-muted">{d.hint}</span>
+                      </span>
+                      {picked && <Icon name="check" size={15} className="flex-none text-brand" />}
+                    </button>
+                  );
+                })}
+            </div>
+          ))}
+          {shown.length === 0 && <p className="px-3 py-6 text-center text-[13px] text-muted">Nothing matches &ldquo;{q}&rdquo;.</p>}
+        </div>
+      </Popover>
+    </>
+  );
 }

@@ -1,73 +1,135 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
+import { Popover, useListKeys } from "@/components/popover";
 import type { MergeField } from "@/lib/merge-fields";
 
-/** "Insert field" menu: contact details, custom fields, owner, business and custom values. */
+const GROUP_ICON: Record<string, IconName> = {
+  Contact: "user",
+  "Custom fields": "list",
+  Deal: "pipeline",
+  "Assigned user": "users",
+  Business: "building",
+  "Custom values": "database",
+  Date: "calendar",
+};
+
+/** "Insert field" menu: contact details, custom fields, deal, owner, business, custom values and dates. */
 export function FieldPicker({ fields, onPick, compact }: { fields: MergeField[]; onPick: (token: string) => void; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const box = useRef<HTMLDivElement>(null);
+  const [group, setGroup] = useState<string>("All");
+  const btn = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+
+  const groups = [...new Set(fields.map((f) => f.group))];
+  const needle = q.trim().toLowerCase();
+  const shown = fields.filter(
+    (f) => (group === "All" || f.group === group) && (!needle || `${f.label} ${f.group} ${f.token}`.toLowerCase().includes(needle)),
+  );
+  // Same order as on screen, so arrow keys move down the list as you see it.
+  const order = groups.flatMap((g) => shown.filter((f) => f.group === g));
+  const close = () => {
+    setOpen(false);
+    setQ("");
+    setGroup("All");
+  };
+  const pick = (f: MergeField) => {
+    onPick(f.token);
+    close();
+  };
+  const keys = useListKeys(order.length, (i) => pick(order[i]));
 
   useEffect(() => {
-    if (!open) return;
-    function away(e: MouseEvent) {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
-
-  const shown = fields.filter((f) => !q || f.label.toLowerCase().includes(q.toLowerCase()) || f.token.includes(q.toLowerCase()));
-  const groups = [...new Set(shown.map((f) => f.group))];
+    list.current?.querySelector<HTMLElement>(`[data-i="${keys.active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [keys.active]);
 
   return (
-    <div ref={box} className="relative inline-block">
+    <>
       <button
+        ref={btn}
         type="button"
         onMouseDown={(e) => e.preventDefault()}
-        onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-1.5 rounded-lg border border-line bg-white font-semibold text-brand hover:border-sky ${compact ? "h-8 px-2 text-[12px]" : "h-9 px-2.5 text-[12.5px]"}`}
+        onClick={() => (open ? close() : setOpen(true))}
+        className={`inline-flex items-center gap-1.5 rounded-lg border bg-white font-semibold text-brand transition hover:border-sky ${open ? "border-sky ring-2 ring-sky/20" : "border-line"} ${compact ? "h-8 px-2 text-[12px]" : "h-9 px-2.5 text-[12.5px]"}`}
         aria-expanded={open}
+        aria-haspopup="dialog"
       >
         <span className="font-mono text-[11px]">{"{ }"}</span> Insert field
       </button>
-      {open && (
-        <div className="rise absolute right-0 top-full z-40 mt-1 w-72 rounded-xl border border-line bg-white p-2 shadow-[var(--shadow-pop)]">
-          <label className="mb-1.5 flex items-center gap-2 rounded-lg bg-surface px-2.5">
+      <Popover anchor={btn} open={open} onClose={close} width={360} label="Insert field">
+        <div className="flex-none border-b border-line p-2.5">
+          <label className="flex h-10 items-center gap-2 rounded-xl bg-surface px-3 ring-1 ring-transparent focus-within:bg-white focus-within:ring-sky">
             <Icon name="search" size={14} className="text-faint" />
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search fields" className="h-8 flex-1 bg-transparent text-[13px] outline-none" aria-label="Search fields" />
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                keys.setActive(0);
+              }}
+              onKeyDown={keys.onKeyDown}
+              placeholder="Search fields"
+              className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none focus-visible:outline-none"
+              aria-label="Search fields"
+            />
           </label>
-          <div className="max-h-64 overflow-y-auto">
-            {groups.map((g) => (
-              <div key={g} className="mb-1">
-                <div className="px-2 pb-0.5 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-faint">{g}</div>
-                {shown
-                  .filter((f) => f.group === g)
-                  .map((f) => (
-                    <button
-                      key={f.token}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        onPick(f.token);
-                        setOpen(false);
-                        setQ("");
-                      }}
-                      className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] hover:bg-surface"
-                    >
-                      <span className="truncate">{f.label}</span>
-                      <code className="truncate text-[11px] text-faint">{f.token}</code>
-                    </button>
-                  ))}
-              </div>
+          <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+            {["All", ...groups].map((g) => (
+              <button
+                key={g}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setGroup(g);
+                  keys.setActive(0);
+                }}
+                className={`h-7 flex-none whitespace-nowrap rounded-full px-2.5 text-[12px] font-semibold ${group === g ? "bg-navy text-white" : "bg-surface text-muted hover:text-navy"}`}
+              >
+                {g}
+              </button>
             ))}
-            {shown.length === 0 && <p className="px-2 py-3 text-[13px] text-muted">No fields match.</p>}
           </div>
         </div>
-      )}
-    </div>
+        <div ref={list} className="min-h-0 flex-1 overflow-y-auto p-1.5">
+          {groups
+            .filter((g) => shown.some((f) => f.group === g))
+            .map((g) => (
+              <div key={g} className="mb-1">
+                <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-faint">
+                  <Icon name={GROUP_ICON[g] ?? "list"} size={12} /> {g}
+                </div>
+                {shown
+                  .filter((f) => f.group === g)
+                  .map((f) => {
+                    const idx = order.indexOf(f);
+                    const on = idx === keys.active;
+                    return (
+                      <button
+                        key={f.token}
+                        data-i={idx}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => keys.setActive(idx)}
+                        onClick={() => pick(f)}
+                        className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left ${on ? "bg-chip" : ""}`}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px] font-medium text-navy">{f.label}</span>
+                          {f.hint && <span className="block truncate text-[11.5px] text-muted">{f.hint}</span>}
+                        </span>
+                        <code className="max-w-[45%] flex-none truncate rounded-md bg-surface px-1.5 py-0.5 font-mono text-[11px] text-muted">{f.token}</code>
+                      </button>
+                    );
+                  })}
+              </div>
+            ))}
+          {shown.length === 0 && <p className="px-3 py-6 text-center text-[13px] text-muted">No fields match &ldquo;{q}&rdquo;.</p>}
+        </div>
+        <div className="flex-none border-t border-line px-3 py-2 text-[11.5px] text-faint">Up and down to move, Enter to insert, Esc to close</div>
+      </Popover>
+    </>
   );
 }
 

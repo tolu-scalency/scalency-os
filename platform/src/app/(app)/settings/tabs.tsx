@@ -9,6 +9,7 @@ const tabs = [
   { href: "/settings/team", label: "Members" },
   { href: "/settings/roles", label: "Roles and access" },
   { href: "/settings/fields", label: "Custom fields" },
+  { href: "/settings/email", label: "Email sending" },
   { href: "/settings/notifications", label: "Notifications", soon: true },
   { href: "/settings/integrations", label: "Integrations", soon: true },
   { href: "/settings/billing", label: "Billing", soon: true },

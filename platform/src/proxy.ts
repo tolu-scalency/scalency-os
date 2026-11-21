@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { FRESH_SIGN_IN, KEEP_COOKIE, POLICY, SEEN_COOKIE } from "@/lib/session-policy";
+import { PASS_COOKIE, loginCodesOn, needsCode, passValid, sessionStart } from "@/lib/login-code";
 
 // Runs before every page. It keeps the login session fresh and sends anyone who isn't signed in to /login.
 // This is a quick first check only: every data read is also protected by row-level security in the database.
@@ -88,6 +89,18 @@ export async function proxy(request: NextRequest) {
       out.cookies.delete(SEEN_COOKIE);
       out.cookies.delete(KEEP_COOKIE);
       return out;
+    }
+
+    // After a password sign-in, the emailed code must be entered before anything else.
+    if (path !== "/verify" && !isPublic && loginCodesOn() && needsCode(claims as never)) {
+      const sub = String((data!.claims as { sub?: string }).sub ?? "");
+      if (!(await passValid(request.cookies.get(PASS_COOKIE)?.value, sub, sessionStart(claims as never)))) {
+        const verify = new URL("/verify", request.url);
+        if (path !== "/dashboard") verify.searchParams.set("next", path + request.nextUrl.search);
+        const out = NextResponse.redirect(verify);
+        for (const c of response.cookies.getAll()) out.cookies.set(c);
+        return out;
+      }
     }
 
     // Note activity at most once a minute. Without "keep me signed in" this is a
