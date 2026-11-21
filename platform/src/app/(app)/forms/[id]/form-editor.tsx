@@ -268,7 +268,7 @@ export function FormEditor({
   );
 
   return (
-    <div className="-mx-4 -mt-6 flex flex-col sm:-mx-7 sm:-mt-8">
+    <div className="flex w-full min-w-0 flex-col overflow-x-clip">
       {/* Header */}
       <div className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2 px-4 pt-3 sm:px-6">

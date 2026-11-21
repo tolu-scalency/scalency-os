@@ -221,7 +221,7 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
   const blocks = def.sections.reduce((n, s) => n + s.rows.reduce((m, r) => m + r.columns.reduce((k, c) => k + c.blocks.length, 0), 0), 0);
 
   return (
-    <div className="-mx-4 -mt-6 flex flex-col sm:-mx-7 sm:-mt-8">
+    <div className="flex w-full min-w-0 flex-col overflow-x-clip">
       <div className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 sm:px-5">
           <Link href="/funnels" className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted hover:bg-surface" aria-label="Back to pages">
