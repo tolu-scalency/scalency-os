@@ -12,6 +12,7 @@ type Action = { label: string; hint?: string; icon: IconName; href: string };
 const ACTIONS: Action[] = [
   { label: "New contact", icon: "plus", href: "/contacts?new=1" },
   { label: "New form", icon: "file", href: "/forms" },
+  { label: "New landing page", icon: "globe", href: "/funnels" },
   { label: "New task", icon: "tasks", href: "/tasks" },
   { label: "New workflow", icon: "zap", href: "/workflows" },
   { label: "Set up with AI", hint: "Pipeline, fields and workflows", icon: "spark", href: "/ai-builder" },

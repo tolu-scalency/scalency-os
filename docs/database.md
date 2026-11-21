@@ -288,6 +288,16 @@ Migration `20261129090000_login_codes`.
 
 - `login_codes`: a hash of each 6-digit code emailed after a password sign-in, which sign-in it's for (`session_at`), tries and expiry (10 minutes). Server only. `prune_login_codes()` clears codes older than 2 days.
 
+## Sites and pages
+
+Migration `20261130090000_sites_and_pages`.
+
+- `sites`: a landing page, funnel or website in a workspace. `kind` is page, funnel or website; `slug` is unique per workspace and makes the public link `/p/<workspace>/<slug>`; `status` is draft, live or archived; `settings` holds site-wide options.
+- `site_pages`: the pages of a site, in `position` order. `slug` is empty for the first (home) page. `definition` is the page layout (sections, rows, columns, blocks, theme, SEO and tracking), checked by the app before saving.
+- `page_stats`: views per page per day. `count_page_view(target_page)` adds one; only the server can call it.
+- Members can read their workspace's sites; changes need `sites.manage`. Live pages are read by the server for the public link.
+- Storage bucket `page-media`: public pictures for pages (5MB, jpeg, png, webp, gif), saved under `<workspace>/` by the server after checking the file.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
