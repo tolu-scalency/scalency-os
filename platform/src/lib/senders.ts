@@ -28,6 +28,11 @@ export type Sender = {
   last_error: string | null;
   verified_at: string | null;
   last_used_at: string | null;
+  /** Reading replies from the mailbox's inbox (IMAP). */
+  imap_enabled?: boolean;
+  imap_host?: string | null;
+  imap_checked_at?: string | null;
+  imap_error?: string | null;
 };
 export type DnsRecord = { record: string; type: string; name: string; value: string; priority?: number; status?: string; ttl?: string };
 

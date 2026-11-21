@@ -5,7 +5,7 @@ import { ActionForm, SubmitButton, type ActionResult } from "@/components/action
 import { Icon } from "@/components/icon";
 import { notify } from "@/components/toast";
 import type { DnsRecord, Sender } from "@/lib/senders";
-import { addDomain, addMailbox, checkDomain, removeSender, sendTestEmail, setDefaultSender, updateSender } from "./actions";
+import { addDomain, addMailbox, checkDomain, removeSender, sendTestEmail, setDefaultSender, setReplyReading, updateSender } from "./actions";
 
 // Kept here as well as in lib/senders (server only), so the browser bundle stays small.
 const PRESETS = [
@@ -126,6 +126,25 @@ export function SenderCard({ s, manager }: { s: Sender; manager: boolean }) {
       </div>
 
       {s.last_error && <p className="mt-2 rounded-lg bg-bad-bg px-3 py-2 text-[12.5px] text-bad">{s.last_error}</p>}
+      {s.kind === "smtp" && verified && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-surface px-3 py-2 text-[12.5px]">
+          <Icon name="inbox" size={13} />
+          <span className="min-w-0 flex-1">
+            {s.imap_enabled === false
+              ? "Replies aren't read from this mailbox."
+              : s.imap_error
+                ? <span className="text-bad">{s.imap_error}</span>
+                : s.imap_checked_at
+                  ? `Replies show in Scalency. Inbox last checked ${new Date(s.imap_checked_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.`
+                  : "Replies will show in Scalency. The first check is within 5 minutes."}
+          </span>
+          {manager && (
+            <button type="button" disabled={pending} onClick={() => run(() => setReplyReading(s.id, s.imap_enabled === false))} className="font-semibold text-brand">
+              {s.imap_enabled === false ? "Turn on" : "Turn off"}
+            </button>
+          )}
+        </div>
+      )}
       {s.kind === "domain" && !verified && s.dns_records?.length > 0 && <DnsTable records={s.dns_records} domain={s.domain ?? ""} />}
 
       {manager && (

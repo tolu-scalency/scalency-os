@@ -38,8 +38,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const partial = body.partial === true;
   const answersIn = (body.answers && typeof body.answers === "object" ? body.answers : {}) as Record<string, unknown>;
 
-  // A hidden field people never see. Bots fill it in; pretend it worked.
+  // Spam protection. Bots get a normal "thank you" so they don't learn what gave them away.
+  // 1. A hidden field people never see. Bots fill it in.
   if (typeof body.website === "string" && body.website.trim()) return json(200, { ok: true });
+  // 2. Sent less than 2 seconds after the form appeared: no person types that fast.
+  const ms = Number(body.t);
+  if (!partial && Number.isFinite(ms) && ms > 0 && ms < 2000) return json(200, { ok: true });
+  // 3. Answers stuffed with links.
+  const linkCount = Object.values(answersIn).reduce<number>((n, v) => n + (typeof v === "string" ? (v.match(/https?:\/\/|www\./gi)?.length ?? 0) : 0), 0);
+  if (linkCount > 3) return json(200, { ok: true });
 
   const { data: form } = await admin.from("forms").select("id, account_id, name, status, definition, tags, stage_id, redirect_url").eq("id", id).maybeSingle();
   if (!form || form.status !== "live") return json(404, { ok: false, error: "This form isn't taking replies right now." });
@@ -65,6 +72,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   // At most 5 new submissions per person per form every 10 minutes.
   const ip = (request.headers.get("x-nf-client-connection-ip") ?? request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim();
   const who = createHash("sha256").update(`${ip}|${id}`).digest("hex").slice(0, 32);
+  const wa = createHash("sha256").update(`${ip}|${account}`).digest("hex").slice(0, 32);
   const resumeIn = typeof body.resume === "string" && /^[a-f0-9]{32}$/.test(body.resume) ? body.resume : "";
   let existing: { id: string; contact_id: string } | null = null;
   if (resumeIn) {
@@ -79,6 +87,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       .eq("tracking->>who", who)
       .gte("started_at", new Date(Date.now() - 10 * 60_000).toISOString());
     if ((count ?? 0) >= 5) return json(429, { ok: false, error: "You've sent this a few times already. Please wait a few minutes." });
+    // And at most 20 across all of this workspace's forms, so one sender can't flood every form.
+    const { count: all } = await admin
+      .from("form_submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", account)
+      .eq("tracking->>wa", wa)
+      .gte("started_at", new Date(Date.now() - 10 * 60_000).toISOString());
+    if ((all ?? 0) >= 20) return json(429, { ok: false, error: "We've had a lot of messages from you. Please wait a few minutes." });
   }
 
   // Check each question that's showing.
@@ -212,7 +228,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     await admin.from("activity").insert({ account_id: account, contact_id: contactId, type: "contact.created", summary: `Added by the form "${form.name}"` });
   }
 
-  const tracking: Record<string, string> = { who };
+  const tracking: Record<string, string> = { who, wa };
   for (const k of ["page", "referrer", "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "gclid", "fbclid"]) {
     const v = body[k];
     if (typeof v === "string" && v.trim()) tracking[k] = v.trim().slice(0, 300);
@@ -285,6 +301,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     person: { first, last, email, phone },
     outcome: qualified === null ? null : qualified ? "Good fit" : "Not a fit",
   });
+  // Sent from a page: count it for that page or funnel step.
+  if (typeof body.sp === "string" && /^[0-9a-f-]{36}$/i.test(body.sp)) {
+    await admin.rpc("count_page_submit", { target_page: body.sp, target_account: account });
+  }
   runWorkflowsSoon(admin, account);
   const redirect = outcome?.redirect || (form.redirect_url as string | null) || null;
   return json(200, { ok: true, redirect, message: outcome?.message || def.success });

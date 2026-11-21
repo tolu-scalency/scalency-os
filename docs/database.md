@@ -298,6 +298,17 @@ Migration `20261130090000_sites_and_pages`.
 - Members can read their workspace's sites; changes need `sites.manage`. Live pages are read by the server for the public link.
 - Storage bucket `page-media`: public pictures for pages (5MB, jpeg, png, webp, gif), saved under `<workspace>/` by the server after checking the file.
 
+## Funnels, websites, own domains, form folders and email replies
+
+Migration `20261201090000_funnels_websites`.
+
+- **Funnels** are sites of kind `funnel`: pages in steps, in `site_pages.position` order. Buttons can link to `@next` (the next step) or `@page:<id>`, and a form block set to "go to the next step" moves people on once it's sent. Visitors' ad tags (utm_ and click IDs) follow them from step to step.
+- `page_stats.submissions`: forms sent from each page per day. `count_page_submit(target_page, target_account)` adds one; the form and the page must be in the same workspace. Server only.
+- **Websites** are sites of kind `website`. The shared header and footer are kept in `sites.settings` (`header`, `footer`, checked like a page). `site_pages.in_menu` says which pages a menu set to "list the pages automatically" shows. The first page is always the home page (empty link name).
+- `site_domains`: a client's own domain for a site, like www.theirbusiness.co.uk. `token` is the value of the TXT record `_scalency.<domain>` that proves they own it; `status` becomes `verified` once that record and the CNAME (or A record for a bare domain) are found. `hosting` says whether the domain was added to the Netlify site (`added`) or must be added by hand (`manual`). One domain can belong to only one site. Members can read; changes go through the server. The clock re-checks new domains every 10 minutes for 3 days.
+- `forms.folder`: a simple folder name ('' means no folder).
+- `email_senders.imap_*`: reading replies from a connected mailbox. `imap_last_uid` and `imap_uid_validity` say where the inbox is up to (the first check only notes that, so old emails aren't imported). `imap_enabled` switches it off; `imap_error` explains a problem. Replies from contacts are saved in `messages` as inbound email (`provider` = `imap`).
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

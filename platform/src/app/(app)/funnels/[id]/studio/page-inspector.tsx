@@ -3,7 +3,7 @@
 // Page Studio's right panel: settings for whatever is selected (a block, columns or a
 // section), or for the whole page when nothing is (style, search and sharing, tracking).
 
-import { useRef, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import { notify } from "@/components/toast";
 import {
@@ -40,7 +40,14 @@ export type InspectorProps = {
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onSelect: (id: string | null) => void;
+  /** Funnels and websites: the other pages, for "next step" and page links. */
+  site?: StudioPages;
+  /** Where the domain settings are. */
+  overview?: string;
 };
+export type StudioPages = { kind: "page" | "funnel" | "website"; pageId: string; pages: { id: string; name: string }[] };
+
+const PagesCtx = createContext<StudioPages | null>(null);
 
 // ---------------------------------------------------------------- small parts
 const label = "text-[12px] font-semibold text-navy";
@@ -131,8 +138,10 @@ function ImageInput({ value, onChange, readOnly }: { value: string; onChange: (u
 
 /** Where a button or link goes: a section on this page, a web address, phone or email. */
 function LinkInput({ value, onChange, def, readOnly }: { value: string; onChange: (v: string) => void; def: PageDefinition; readOnly: boolean }) {
+  const site = useContext(PagesCtx);
   const anchors = def.sections.filter((s) => s.anchor);
-  const isAnchor = value.startsWith("#") && value !== "#";
+  const others = site && site.kind !== "page" ? site.pages.filter((p) => p.id !== site.pageId) : [];
+  const isAnchor = (value.startsWith("#") && value !== "#") || value.startsWith("@");
   return (
     <div className="flex flex-col gap-1.5">
       <select
@@ -149,6 +158,12 @@ function LinkInput({ value, onChange, def, readOnly }: { value: string; onChange
         aria-label="Link type"
       >
         <option value="url">A web address</option>
+        {site?.kind === "funnel" && <option value="@next">The next step</option>}
+        {others.map((p) => (
+          <option key={p.id} value={`@page:${p.id}`}>
+            {site?.kind === "funnel" ? "Step" : "Page"}: {p.name}
+          </option>
+        ))}
         {anchors.map((s) => (
           <option key={s.id} value={`#${s.anchor}`}>
             Scroll to: {s.name}
@@ -357,6 +372,7 @@ function BlockSettings({ b, props }: { b: PBlock; props: InspectorProps }) {
               ))}
             </select>
           </Field>
+          <FormAfter b={b} set={set} readOnly={readOnly} />
           <a href="/forms" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand">
             <Icon name="plus" size={12} /> Make a new form (opens in a new tab)
           </a>
@@ -559,8 +575,9 @@ function BlockSettings({ b, props }: { b: PBlock; props: InspectorProps }) {
           <Field name="Logo (shown instead of the name)">
             <ImageInput value={b.src ?? ""} onChange={(v) => set({ src: v })} readOnly={readOnly} />
           </Field>
-          <div className={label}>Menu links</div>
-          <Items<{ label: string; link: string }>
+          <MenuAuto b={b} set={set} readOnly={readOnly} />
+          {!b.auto && <div className={label}>Menu links</div>}
+          {!b.auto && <Items<{ label: string; link: string }>
             items={b.nav ?? []}
             readOnly={readOnly}
             max={8}
@@ -577,7 +594,7 @@ function BlockSettings({ b, props }: { b: PBlock; props: InspectorProps }) {
                 </Field>
               </>
             )}
-          />
+          />}
           <Field name="Button words (leave blank for none)">
             <input value={b.alt ?? ""} disabled={readOnly} onChange={(e) => set({ alt: e.target.value }, `al-${b.id}`)} className={field} />
           </Field>
@@ -905,6 +922,11 @@ function PageSettings({ props }: { props: InspectorProps }) {
             {busy ? "Saving…" : "Save link"}
           </button>
           <p className="text-[11.5px] text-muted">Changing it breaks the old link anywhere you&apos;ve already shared it.</p>
+          {props.overview && (
+            <a href={props.overview} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-brand">
+              <Icon name="globe" size={12} /> Use your own domain
+            </a>
+          )}
         </Group>
       )}
     </>
@@ -912,7 +934,44 @@ function PageSettings({ props }: { props: InspectorProps }) {
 }
 
 // ---------------------------------------------------------------- the panel
+/** In a funnel: after the form is sent, show its message or go to the next step. */
+function FormAfter({ b, set, readOnly }: { b: PBlock; set: (patch: Partial<PBlock>) => void; readOnly: boolean }) {
+  const site = useContext(PagesCtx);
+  if (!site || site.kind === "page") return null;
+  return (
+    <Field name="After it's sent" hint={site.kind === "funnel" ? "Moving on takes people to the next step, with their ad tags kept." : "Moving on takes people to the next page in your list."}>
+      <select value={b.after ?? "message"} disabled={readOnly} onChange={(e) => set({ after: e.target.value === "next" ? "next" : undefined })} className={field}>
+        <option value="message">Show the form&apos;s thank you message</option>
+        <option value="next">Go to the {site.kind === "funnel" ? "next step" : "next page"}</option>
+      </select>
+    </Field>
+  );
+}
+
+/** In a website: list the website's pages in the menu automatically. */
+function MenuAuto({ b, set, readOnly }: { b: PBlock; set: (patch: Partial<PBlock>) => void; readOnly: boolean }) {
+  const site = useContext(PagesCtx);
+  if (site?.kind !== "website") return null;
+  return (
+    <label className="flex items-start gap-2 text-[13px]">
+      <input type="checkbox" checked={Boolean(b.auto)} disabled={readOnly} onChange={(e) => set({ auto: e.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]" />
+      <span>
+        List the website&apos;s pages automatically
+        <span className="block text-[11.5px] text-muted">Choose which pages show in the menu on the website&apos;s overview.</span>
+      </span>
+    </label>
+  );
+}
+
 export function PageInspector(props: InspectorProps) {
+  return (
+    <PagesCtx.Provider value={props.site ?? null}>
+      <InspectorBody {...props} />
+    </PagesCtx.Provider>
+  );
+}
+
+function InspectorBody(props: InspectorProps) {
   const { def, selected } = props;
   const b = selected ? findBlock(def, selected) : null;
   const r = !b && selected ? findRow(def, selected) : null;

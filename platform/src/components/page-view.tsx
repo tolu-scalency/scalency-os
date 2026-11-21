@@ -4,7 +4,8 @@
 // so what you build is exactly what visitors see. Layouts respond to the width of
 // the page area (container queries), so the builder's mobile view is accurate.
 
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { resolveLink, type SiteLinks } from "@/lib/site-builder";
 import {
   FONTS,
   safeLink,
@@ -17,9 +18,14 @@ import {
   type Section,
 } from "@/lib/page-builder";
 
+/** Where "next step" and page links go on this page (funnels and websites). */
+const LinksCtx = createContext<SiteLinks | null>(null);
+const useHref = (link: string | undefined) => resolveLink(link, useContext(LinksCtx));
+
 // ---------------------------------------------------------------- text
 /** **bold**, *italic*, [link](https://...) and line breaks. Built as React elements, never raw HTML. */
 export function RichText({ text, accent }: { text: string; accent?: string }) {
+  const links = useContext(LinksCtx);
   const paras = text.split(/\n{2,}/);
   return (
     <>
@@ -28,7 +34,7 @@ export function RichText({ text, accent }: { text: string; accent?: string }) {
           {p.split("\n").map((line, j) => (
             <Fragment key={j}>
               {j > 0 && <br />}
-              {inline(line, accent)}
+              {inline(line, accent, links)}
             </Fragment>
           ))}
         </p>
@@ -37,7 +43,7 @@ export function RichText({ text, accent }: { text: string; accent?: string }) {
   );
 }
 
-function inline(s: string, accent?: string): ReactNode[] {
+function inline(s: string, accent?: string, links?: SiteLinks | null): ReactNode[] {
   const out: ReactNode[] = [];
   const re = /\*\*(.+?)\*\*|\*(.+?)\*|\[([^\]]{1,200})\]\(([^)\s]{1,500})\)/g;
   let last = 0;
@@ -48,7 +54,7 @@ function inline(s: string, accent?: string): ReactNode[] {
     if (m[1]) out.push(<strong key={k++}>{m[1]}</strong>);
     else if (m[2]) out.push(<em key={k++}>{m[2]}</em>);
     else {
-      const href = safeLink(m[4]);
+      const href = resolveLink(safeLink(m[4]), links);
       out.push(
         <a key={k++} href={href} style={{ color: accent ?? "inherit", textDecoration: "underline" }} {...(href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
           {m[3]}
@@ -85,7 +91,7 @@ function Btn({ b, theme, tone }: { b: PBlock; theme: PageTheme; tone: "light" | 
         : style === "outline"
           ? { background: "transparent", color: fg, border: `2px solid ${tone === "light" ? "rgba(255,255,255,.7)" : "rgba(15,23,42,.2)"}` }
           : { background: "transparent", color: tone === "light" ? "#fff" : theme.accent, border: "2px solid transparent", textDecoration: "underline", padding: "4px 0" };
-  const href = b.link || "#";
+  const href = useHref(b.link);
   return (
     <div style={{ textAlign: b.full ? undefined : (b.align ?? "left") }}>
       <a
@@ -138,25 +144,61 @@ function Icon({ name, size = 22 }: { name: string; size?: number }) {
   );
 }
 
-function FormFrame({ formId, pageId }: { formId: string; pageId?: string }) {
+// ---------------------------------------------------------------- tracking tags
+const CARRY = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "gclid", "fbclid"];
+const CARRY_KEY = "scalency-utm";
+
+/** The visitor's ad and campaign tags: from this address, or saved from an earlier step. */
+function carried(): URLSearchParams {
+  const out = new URLSearchParams();
+  let saved: Record<string, string> = {};
+  try {
+    saved = JSON.parse(sessionStorage.getItem(CARRY_KEY) ?? "{}");
+  } catch {}
+  const own = new URLSearchParams(window.location.search);
+  for (const k of CARRY) {
+    const v = own.get(k) || saved[k];
+    if (v) out.set(k, v.slice(0, 200));
+  }
+  try {
+    sessionStorage.setItem(CARRY_KEY, JSON.stringify(Object.fromEntries(out)));
+  } catch {}
+  return out;
+}
+
+/** Adds the visitor's tags to a link on the same site, so the next step still knows where they came from. */
+function withTags(href: string) {
+  if (!href.startsWith("/")) return href;
+  const tags = carried();
+  if (![...tags.keys()].length) return href;
+  const [path, hash = ""] = href.split("#");
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}${tags.toString()}${hash ? `#${hash}` : ""}`;
+}
+
+function FormFrame({ formId, pageId, next }: { formId: string; pageId?: string; next?: string | null }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [h, setH] = useState(420);
   useEffect(() => {
     const on = (e: MessageEvent) => {
-      if (e.source === ref.current?.contentWindow && e.data?.scalencyForm === formId && e.data.height) setH(Math.min(4000, Number(e.data.height) || 420));
+      if (e.source !== ref.current?.contentWindow || e.data?.scalencyForm !== formId) return;
+      if (e.data.height) setH(Math.min(4000, Number(e.data.height) || 420));
+      // Sent, and this form moves people on to the next step.
+      if (e.data.done && next && next !== "#") window.location.href = withTags(next);
     };
     window.addEventListener("message", on);
     return () => window.removeEventListener("message", on);
-  }, [formId]);
+  }, [formId, next]);
   const [query, setQuery] = useState("");
   // Pass the page's own ?utm_ and other tags through to the form, so leads show where they came from.
   useEffect(() => {
-    const own = new URLSearchParams(window.location.search);
-    own.delete("embed");
+    const own = carried();
     own.set("page", window.location.origin + window.location.pathname);
+    if (next) own.set("then", "parent");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery(`&${own.toString()}`);
-  }, []);
+  }, [next]);
+  // On a page's own domain the form still loads from that domain, which serves /f/ as well.
   return (
     <iframe
       ref={ref}
@@ -198,6 +240,8 @@ export function BlockView({ b, theme, tone, pageId, editing, sample }: { b: PBlo
   const card: CSSProperties = { background: tone === "light" ? "rgba(255,255,255,.08)" : "#ffffff", border: `1px solid ${tone === "light" ? "rgba(255,255,255,.14)" : "rgba(15,23,42,.08)"}`, borderRadius: theme.radius + 4, padding: 24 };
   const headingFont = theme.headingFont === "same" ? undefined : FONTS[theme.headingFont];
   const grid = (cols = 3): CSSProperties => ({ display: "grid", gap: 20, gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` });
+  const links = useContext(LinksCtx);
+  const go = (link: string | undefined) => resolveLink(link, links);
 
   switch (b.kind) {
     case "heading": {
@@ -220,7 +264,7 @@ export function BlockView({ b, theme, tone, pageId, editing, sample }: { b: PBlo
       if (!b.src) return editing ? <Placeholder label="Upload a picture in the panel" tone={tone} h={180} /> : null;
       // eslint-disable-next-line @next/next/no-img-element
       const img = <img src={b.src} alt={b.alt ?? ""} loading="lazy" style={{ display: "block", width: `${b.width ?? 100}%`, height: "auto", borderRadius: b.radius ?? 12, margin: b.align === "center" ? "0 auto" : b.align === "right" ? "0 0 0 auto" : undefined }} />;
-      return b.link && b.link !== "#" && !editing ? <a href={b.link}>{img}</a> : img;
+      return b.link && b.link !== "#" && !editing ? <a href={go(b.link)}>{img}</a> : img;
     }
     case "video": {
       const v = videoEmbed(b.url ?? "");
@@ -239,7 +283,7 @@ export function BlockView({ b, theme, tone, pageId, editing, sample }: { b: PBlo
       if (!b.formId) return editing ? <Placeholder label="Choose a form in the panel" tone={tone} h={260} /> : sample ? <SampleForm theme={theme} /> : null;
       return (
         <div style={{ ...card, padding: 8, background: "#ffffff", pointerEvents: editing ? "none" : undefined }}>
-          <FormFrame formId={b.formId} pageId={pageId} />
+          <FormFrame formId={b.formId} pageId={pageId} next={b.after === "next" ? (links?.next ?? null) : null} />
         </div>
       );
     case "list":
@@ -363,7 +407,7 @@ export function BlockView({ b, theme, tone, pageId, editing, sample }: { b: PBlo
     case "menu":
       return (
         <nav style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }} className="pv-menu">
-          <a href="#" style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800, fontSize: 20, textDecoration: "none", color: "inherit", marginRight: "auto", fontFamily: headingFont }}>
+          <a href={links?.home ?? "#"} style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800, fontSize: 20, textDecoration: "none", color: "inherit", marginRight: "auto", fontFamily: headingFont }}>
             {b.src ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={b.src} alt={b.text ?? "Logo"} style={{ height: 36, width: "auto" }} />
@@ -372,8 +416,8 @@ export function BlockView({ b, theme, tone, pageId, editing, sample }: { b: PBlo
             )}
           </a>
           <span className="pv-menu-links" style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
-            {(b.nav ?? []).map((n, i) => (
-              <a key={i} href={n.link} style={{ color: "inherit", textDecoration: "none", fontWeight: 600, opacity: 0.85 }}>
+            {(b.auto ? (links?.menu ?? []).map((m) => ({ label: m.label, link: m.href })) : (b.nav ?? [])).map((n, i) => (
+              <a key={i} href={go(n.link)} style={{ color: "inherit", textDecoration: "none", fontWeight: 600, opacity: 0.85 }}>
                 {n.label}
               </a>
             ))}
@@ -387,7 +431,7 @@ export function BlockView({ b, theme, tone, pageId, editing, sample }: { b: PBlo
           <span>{b.text}</span>
           <span style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
             {(b.nav ?? []).map((n, i) => (
-              <a key={i} href={n.link} style={{ color: "inherit" }}>
+              <a key={i} href={go(n.link)} style={{ color: "inherit" }}>
                 {n.label}
               </a>
             ))}
@@ -492,33 +536,56 @@ export function RowShell({ r, children }: { r: Row; children: ReactNode }) {
 }
 
 /** The whole page, for visitors. */
-export function PageView({ def, pageId, sample }: { def: PageDefinition; pageId?: string; sample?: boolean }) {
+export const SiteLinksProvider = LinksCtx.Provider;
+
+type PageViewProps = {
+  def: PageDefinition;
+  pageId?: string;
+  sample?: boolean;
+  /** Funnels and websites: where "next step", page and menu links go. */
+  links?: SiteLinks | null;
+  /** Websites: the shared header and footer, shown around the page. */
+  header?: Section[];
+  footer?: Section[];
+};
+
+export function PageView({ def, pageId, sample, links = null, header = [], footer = [] }: PageViewProps) {
   const theme = def.theme;
+  const sections = [...header, ...def.sections, ...footer];
+  // Visitors' ad tags follow them from step to step.
+  const onClick = (e: { target: EventTarget }) => {
+    if (sample) return;
+    const a = (e.target as HTMLElement).closest("a");
+    const href = a?.getAttribute("href") ?? "";
+    if (a && href.startsWith("/") && !href.startsWith("//")) a.setAttribute("href", withTags(href));
+  };
   return (
-    <div className="pv-root" style={{ fontFamily: FONTS[theme.font], color: theme.text, background: theme.background, minHeight: "100vh" }}>
-      <style>{PAGE_CSS}</style>
-      {def.sections.map((s) => {
-        const tone = textTone(s.style, theme);
-        return (
-          <SectionShell key={s.id} s={s} theme={theme}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
-              {s.rows.map((r) => (
-                <RowShell key={r.id} r={r}>
-                  {r.columns.map((c) => (
-                    <div key={c.id} className="pv-col">
-                      {c.blocks.map((b) => (
-                        <div key={b.id} className={b.hideOn ? `pv-hide-${b.hideOn}` : undefined}>
-                          <BlockView b={b} theme={theme} tone={tone} pageId={pageId} sample={sample} />
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </RowShell>
-              ))}
-            </div>
-          </SectionShell>
-        );
-      })}
-    </div>
+    <LinksCtx.Provider value={links}>
+      <div className="pv-root" onClickCapture={onClick} style={{ fontFamily: FONTS[theme.font], color: theme.text, background: theme.background, minHeight: "100vh" }}>
+        <style>{PAGE_CSS}</style>
+        {sections.map((s) => {
+          const tone = textTone(s.style, theme);
+          return (
+            <SectionShell key={s.id} s={s} theme={theme}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
+                {s.rows.map((r) => (
+                  <RowShell key={r.id} r={r}>
+                    {r.columns.map((c) => (
+                      <div key={c.id} className="pv-col">
+                        {c.blocks.map((b) => (
+                          <div key={b.id} className={b.hideOn ? `pv-hide-${b.hideOn}` : undefined}>
+                            <BlockView b={b} theme={theme} tone={tone} pageId={pageId} sample={sample} />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </RowShell>
+                ))}
+              </div>
+            </SectionShell>
+          );
+        })}
+      </div>
+    </LinksCtx.Provider>
   );
 }

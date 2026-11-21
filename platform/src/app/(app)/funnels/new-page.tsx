@@ -32,7 +32,7 @@ function Submit({ children, disabled }: { children: React.ReactNode; disabled?: 
 }
 
 /** A live, scaled-down, non-clickable picture of a page. */
-function Thumb({ def, height = 220 }: { def: PageDefinition; height?: number }) {
+export function Thumb({ def, height = 220 }: { def: PageDefinition; height?: number }) {
   const scale = 0.3;
   return (
     <div className="pointer-events-none relative overflow-hidden" style={{ height, background: def.theme.background }} aria-hidden inert>

@@ -6,7 +6,8 @@
 
 import { useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { Icon } from "@/components/icon";
-import { BlockView, PAGE_CSS, RowShell, SectionShell } from "@/components/page-view";
+import { BlockView, PAGE_CSS, RowShell, SectionShell, SiteLinksProvider } from "@/components/page-view";
+import type { SiteLinks } from "@/lib/site-builder";
 import { FONTS, blockInfo, textTone, type PBlock, type PageDefinition, type Row, type Section } from "@/lib/page-builder";
 import { accepts, targetKey, type Drag, type Target } from "./page-tree";
 
@@ -26,6 +27,11 @@ export type PageCanvasProps = {
   onSectionAction: (id: string, a: SectionAction) => void;
   onRowAction: (id: string, a: RowAction) => void;
   onBlockAction: (id: string, a: "duplicate" | "delete" | "up" | "down") => void;
+  /** Funnels and websites: where "next step", page and menu links go. */
+  links?: SiteLinks | null;
+  /** Websites: the shared header and footer, shown above and below the page. */
+  before?: ReactNode;
+  after?: ReactNode;
 };
 
 const BRAND = "#0a5fe3";
@@ -128,6 +134,8 @@ export function PageCanvas(props: PageCanvasProps) {
         }}
       >
         <style>{PAGE_CSS}</style>
+        <SiteLinksProvider value={props.links ?? null}>
+        {props.before}
         {def.sections.length === 0 ? (
           <div
             onDragOver={(e) => {
@@ -153,6 +161,8 @@ export function PageCanvas(props: PageCanvasProps) {
             {zone({ t: "sgap", before: null }, "sgap", "Drop here to add it at the end")}
           </>
         )}
+        {props.after}
+        </SiteLinksProvider>
       </div>
     </div>
   );

@@ -462,6 +462,11 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const resume = useRef<string>("");
+  // When the form appeared: answers sent within a couple of seconds are from bots.
+  const shownAt = useRef(0);
+  useEffect(() => {
+    shownAt.current = Date.now();
+  }, []);
   const box = useRef<HTMLDivElement>(null);
   const steps = def.steps;
   const step = steps[Math.min(stepIx, steps.length - 1)];
@@ -570,7 +575,7 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
     const r = await fetch(`/api/forms/${formId}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ answers: out, partial, resume: resume.current, website, ...tracking() }),
+      body: JSON.stringify({ answers: out, partial, resume: resume.current, website, t: shownAt.current ? Date.now() - shownAt.current : 0, sp: embed ? new URLSearchParams(window.location.search).get("sp") || "" : "", ...tracking() }),
     });
     return (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; errors?: Record<string, string>; redirect?: string | null; message?: string; resume?: string; step?: number };
   }
@@ -631,7 +636,10 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
           w.fbq?.("track", "Lead");
           w.gtag?.("event", "generate_lead", { form_name: formId });
         } catch {}
-        if (d.redirect) {
+        // On a funnel step, the page around the form moves people on to the next step.
+        if (embed && new URLSearchParams(window.location.search).get("then") === "parent") {
+          window.parent?.postMessage({ scalencyForm: formId, done: true }, "*");
+        } else if (d.redirect) {
           (embed ? (window.top ?? window) : window).location.href = d.redirect;
           return;
         }

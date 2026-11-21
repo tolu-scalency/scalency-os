@@ -32,7 +32,7 @@ export async function duplicateForm(id: string) {
   const ws = await getWorkspace();
   if (!can(ws, "sites.manage")) redirect("/forms?error=access");
   const supabase = await createClient();
-  const { data: f } = await supabase.from("forms").select("name, definition, tags, stage_id, pipeline_id, redirect_url").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  const { data: f } = await supabase.from("forms").select("name, definition, tags, stage_id, pipeline_id, redirect_url, folder").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
   if (!f) redirect("/forms?error=1");
   const base = `${f.name} (copy)`.slice(0, 80);
   let name = base;
@@ -44,7 +44,7 @@ export async function duplicateForm(id: string) {
   const slug = await freeSlug(supabase, ws.account.id, slugify(name));
   const { data, error } = await supabase
     .from("forms")
-    .insert({ account_id: ws.account.id, name, slug, status: "draft", definition: cleanDefinition(f.definition), tags: f.tags ?? [], stage_id: f.stage_id, pipeline_id: f.pipeline_id, redirect_url: f.redirect_url })
+    .insert({ account_id: ws.account.id, name, slug, status: "draft", definition: cleanDefinition(f.definition), tags: f.tags ?? [], stage_id: f.stage_id, pipeline_id: f.pipeline_id, redirect_url: f.redirect_url, folder: f.folder ?? "" })
     .select("id")
     .single();
   if (error || !data) redirect("/forms?error=1");
@@ -169,4 +169,36 @@ export async function deleteForm(id: string) {
   const supabase = await createClient();
   await supabase.from("forms").delete().eq("id", id).eq("account_id", ws.account.id);
   redirect("/forms");
+}
+
+// ---------------------------------------------------------------------------
+// Folders: a simple name on each form. A folder exists while a form is in it.
+// ---------------------------------------------------------------------------
+
+const cleanFolder = (v: unknown) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
+
+/** Moves a form into a folder ("" takes it out of any folder). */
+export async function moveFormToFolder(id: string, folder: string): Promise<{ error?: string; ok?: string }> {
+  const ws = await getWorkspace();
+  if (!can(ws, "sites.manage")) return { error: NO_ACCESS };
+  const name = cleanFolder(folder);
+  const supabase = await createClient();
+  const { error } = await supabase.from("forms").update({ folder: name }).eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't move it. Try again." };
+  refresh();
+  return { ok: name ? `Moved to "${name}"` : "Taken out of its folder" };
+}
+
+/** Renames a folder for every form in it. An empty name takes the forms out of the folder. */
+export async function renameFolder(from: string, to: string): Promise<{ error?: string; ok?: string }> {
+  const ws = await getWorkspace();
+  if (!can(ws, "sites.manage")) return { error: NO_ACCESS };
+  const a = cleanFolder(from);
+  const b = cleanFolder(to);
+  if (!a) return { error: "Choose a folder first." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("forms").update({ folder: b }).eq("account_id", ws.account.id).eq("folder", a);
+  if (error) return { error: "We couldn't rename it. Try again." };
+  refresh();
+  return { ok: b ? `Renamed to "${b}"` : "Folder removed. Its forms are still here." };
 }
