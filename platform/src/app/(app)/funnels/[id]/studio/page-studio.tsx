@@ -3,14 +3,16 @@
 // Page Studio: build a landing page by dragging sections, columns and blocks.
 // Saves automatically; publish when it's ready.
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { notify } from "@/components/toast";
-import { PageView } from "@/components/page-view";
-import type { PageDefinition } from "@/lib/page-builder";
-import { savePage, setSiteStatus } from "../../actions";
+import { BlockView, PageView, RowShell, SectionShell } from "@/components/page-view";
+import { textTone, type PageDefinition, type PageTheme, type Section } from "@/lib/page-builder";
+import { siteLinks, type SiteKind, type SitePageInfo, type SiteSettings } from "@/lib/site-builder";
+import { savePage, saveSitePart, setSiteStatus } from "../../actions";
 import { PageCanvas } from "./page-canvas";
 import { PageInspector } from "./page-inspector";
 import { PagePalette } from "./page-palette";
@@ -39,12 +41,31 @@ import {
   type Target,
 } from "./page-tree";
 
-export type StudioSite = { id: string; name: string; slug: string; status: "draft" | "live" | "archived"; pageId: string; definition: PageDefinition };
+export type StudioSite = {
+  id: string;
+  name: string;
+  slug: string;
+  status: "draft" | "live" | "archived";
+  kind: SiteKind;
+  pageId: string;
+  pageName: string;
+  pageSlug: string;
+  /** Editing a website's shared header or footer instead of a page. */
+  part: "header" | "footer" | null;
+  pages: SitePageInfo[];
+  parts: SiteSettings;
+  definition: PageDefinition;
+};
+
+const PART_NAME = { header: "Shared header", footer: "Shared footer" } as const;
 
 export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site: StudioSite; base: string; workspaceSlug: string; forms: { id: string; name: string }[]; canEdit: boolean }) {
   const readOnly = !canEdit;
+  const router = useRouter();
+  const single = site.kind === "page";
   const [def, setDefState] = useState<PageDefinition>(site.definition);
-  const [name, setName] = useState(site.name);
+  // A single page's name is the site's name; a funnel step or website page has its own.
+  const [name, setName] = useState(single ? site.name : site.part ? PART_NAME[site.part] : site.pageName);
   const [slug, setSlug] = useState(site.slug);
   const [status, setStatus] = useState(site.status);
   const [selected, setSelected] = useState<string | null>(null);
@@ -55,7 +76,11 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
   const [dirty, setDirty] = useState(false);
   const [msg, setMsg] = useState<{ ok?: string; error?: string }>({});
   const [pending, start] = useTransition();
-  const link = `${base}/p/${workspaceSlug}/${slug}`;
+  const siteBase = `/p/${workspaceSlug}/${slug}`;
+  const link = `${base}${siteBase}${site.pageSlug && !site.part ? `/${site.pageSlug}` : ""}`;
+  const overview = `/funnels/${site.id}/overview`;
+  // Where "next step", page and menu links go, drawn in the builder as on the live page.
+  const links = useMemo(() => (single ? null : siteLinks(site.pages, site.pageId, siteBase)), [single, site.pages, site.pageId, siteBase]);
 
   // ---------------------------------------------------------------- history
   const current = useRef<PageDefinition>(site.definition);
@@ -103,18 +128,33 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
 
   // ---------------------------------------------------------------- saving
   const first = useRef(true);
+  /** Saves to the server: the page, or a website's shared header or footer. */
+  const persist = useCallback(
+    (extra?: { slug?: string }): Promise<{ error?: string; ok?: string }> => {
+      const fail = () => ({ error: "We couldn't reach the server. Check your connection; your changes are kept here." });
+      if (site.part) return saveSitePart(site.id, site.part, current.current).catch(fail);
+      return savePage(site.id, {
+        name: single ? name : site.name,
+        ...(single ? {} : { pageName: name }),
+        pageId: site.pageId,
+        definition: current.current,
+        ...(extra ?? {}),
+      }).catch(fail);
+    },
+    [name, single, site.id, site.name, site.pageId, site.part],
+  );
   const save = useCallback(
     (extra?: { slug?: string }) =>
       new Promise<{ error?: string; ok?: string }>((resolve) =>
         start(async () => {
-          const r = await savePage(site.id, { name, pageId: site.pageId, definition: current.current, ...(extra ?? {}) }).catch(() => ({ error: "We couldn't reach the server. Check your connection; your changes are kept here." }) as { error?: string; ok?: string });
+          const r = await persist(extra);
           setMsg(r.error ? r : { ok: "All changes saved" });
           if (!extra) notify(r.error ? `Not saved: ${r.error}` : "Saved", r.error ? "bad" : "ok");
           if (!r.error) setDirty(false);
           resolve(r);
         }),
       ),
-    [name, site.id, site.pageId],
+    [persist],
   );
   useEffect(() => {
     if (first.current) {
@@ -126,10 +166,23 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
     return () => clearTimeout(t);
   }, [dirty, def, name, readOnly, save]);
 
+  /** Opens another step, page or shared part, saving this one first. */
+  function goTo(value: string) {
+    const url = value === "overview" ? overview : value.startsWith("part:") ? `/funnels/${site.id}?part=${value.slice(5)}` : `/funnels/${site.id}?page=${value}`;
+    start(async () => {
+      if (dirty && !readOnly) {
+        const r = await persist();
+        if (r.error) return void notify(`Not saved: ${r.error}`, "bad");
+        setDirty(false);
+      }
+      router.push(url);
+    });
+  }
+
   function publish(next: "live" | "draft") {
     start(async () => {
       if (dirty) {
-        const s = await savePage(site.id, { name, pageId: site.pageId, definition: current.current }).catch(() => ({ error: "We couldn't reach the server." }) as { error?: string });
+        const s = await persist();
         if (s.error) return void notify(`Not saved: ${s.error}`, "bad");
         setDirty(false);
       }
@@ -221,25 +274,44 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
   const blocks = def.sections.reduce((n, s) => n + s.rows.reduce((m, r) => m + r.columns.reduce((k, c) => k + c.blocks.length, 0), 0), 0);
 
   return (
-    <div className="-mx-4 -mt-6 flex flex-col sm:-mx-7 sm:-mt-8">
+    <div className="flex w-full min-w-0 flex-col overflow-x-clip">
       <div className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 sm:px-5">
-          <Link href="/funnels" className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted hover:bg-surface" aria-label="Back to pages">
+          <Link href={single ? "/funnels" : overview} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted hover:bg-surface" aria-label={single ? "Back to pages" : "Back to the overview"}>
             <Icon name="arrowLeft" size={17} />
           </Link>
           <span className="hidden items-center gap-1.5 rounded-lg bg-[linear-gradient(135deg,#0a3fa6,#0a5fe3_60%,#29b0f8)] px-2 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white sm:inline-flex">
             <Icon name="globe" size={12} /> Page Studio
           </span>
+          {!single && (
+            <select
+              value={site.part ? `part:${site.part}` : site.pageId}
+              onChange={(e) => goTo(e.target.value)}
+              className="field h-9 max-w-[220px] text-[13px] font-semibold"
+              aria-label={site.kind === "funnel" ? "Step" : "Page"}
+              title={site.name}
+            >
+              <option value="overview">{site.kind === "funnel" ? "All steps and stats" : "All pages and settings"}</option>
+              {site.pages.map((p, i) => (
+                <option key={p.id} value={p.id}>
+                  {site.kind === "funnel" ? `Step ${i + 1}: ` : ""}
+                  {p.name}
+                </option>
+              ))}
+              {site.kind === "website" && <option value="part:header">Shared header</option>}
+              {site.kind === "website" && <option value="part:footer">Shared footer</option>}
+            </select>
+          )}
           <input
             value={name}
-            disabled={readOnly}
+            disabled={readOnly || Boolean(site.part)}
             onChange={(e) => {
               setName(e.target.value);
               setDirty(true);
             }}
             maxLength={120}
             className="min-w-0 flex-[1_1_180px] rounded-lg bg-transparent px-2 py-1 text-[18px] font-semibold tracking-[-0.02em] outline-none hover:bg-surface focus:bg-surface focus:ring-2 focus:ring-sky/40"
-            aria-label="Page name"
+            aria-label={single ? "Page name" : site.kind === "funnel" ? "Step name" : "Page name"}
           />
           <span className={`inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold ${status === "live" ? "bg-ok-bg text-ok" : "bg-surface text-muted"}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${status === "live" ? "bg-ok" : "bg-faint"}`} /> {status === "live" ? "Live" : "Draft"}
@@ -305,6 +377,9 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             <PageCanvas
+              links={links}
+              before={site.kind === "website" && !site.part ? <SharedPart sections={site.parts.header} theme={def.theme} label="Shared header" onEdit={() => goTo("part:header")} /> : null}
+              after={site.kind === "website" && !site.part ? <SharedPart sections={site.parts.footer} theme={def.theme} label="Shared footer" onEdit={() => goTo("part:footer")} /> : null}
               def={def}
               device={device}
               selected={selected}
@@ -357,6 +432,8 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
               forms={forms}
               link={link}
               slug={slug}
+              site={{ kind: site.kind, pageId: site.pageId, pages: site.pages.map((p) => ({ id: p.id, name: p.name })) }}
+              overview={overview}
               onSelect={setSelected}
               onSlug={async (next) => {
                 const r = await save({ slug: next });
@@ -395,12 +472,63 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
             </div>
             <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
               <div className="mx-auto overflow-hidden rounded-xl bg-white" style={{ maxWidth: device === "mobile" ? 390 : "100%" }}>
-                <PageView def={def} sample />
+                <PageView
+                  def={def}
+                  sample
+                  links={links}
+                  header={site.kind === "website" && !site.part ? site.parts.header : []}
+                  footer={site.kind === "website" && !site.part ? site.parts.footer : []}
+                />
               </div>
             </div>
           </div>,
           document.body,
         )}
+    </div>
+  );
+}
+
+/** A website's shared header or footer, shown on every page. Edited in its own view. */
+function SharedPart({ sections, theme, label, onEdit }: { sections: Section[]; theme: PageTheme; label: string; onEdit: () => void }) {
+  if (!sections.length)
+    return (
+      <button type="button" onClick={onEdit} className="block w-full border-y border-dashed border-line bg-surface/60 py-3 text-center text-[12.5px] font-semibold text-muted hover:text-brand" style={{ fontFamily: "var(--font-sans, system-ui)" }}>
+        + Add a {label.toLowerCase()} to every page
+      </button>
+    );
+  return (
+    <div className="group relative">
+      <div style={{ pointerEvents: "none", opacity: 0.92 }}>
+        {sections.map((s) => {
+          const tone = textTone(s.style, theme);
+          return (
+            <SectionShell key={s.id} s={s} theme={theme}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
+                {s.rows.map((r) => (
+                  <RowShell key={r.id} r={r}>
+                    {r.columns.map((c) => (
+                      <div key={c.id} className="pv-col">
+                        {c.blocks.map((b) => (
+                          <BlockView key={b.id} b={b} theme={theme} tone={tone} editing />
+                        ))}
+                      </div>
+                    ))}
+                  </RowShell>
+                ))}
+              </div>
+            </SectionShell>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit the ${label.toLowerCase()}`}
+        className="absolute inset-0 flex items-center justify-center text-[13px] outline-dashed outline-1 -outline-offset-1 outline-transparent transition group-hover:bg-[#0a5fe3]/10 group-hover:outline-[#0a5fe3]"
+        style={{ fontFamily: "var(--font-sans, system-ui)" }}
+      >
+        <span className="rounded-lg bg-[#0a5fe3] px-3 py-1.5 font-semibold text-white opacity-0 shadow-lg transition group-hover:opacity-100">Edit the {label.toLowerCase()} (on every page)</span>
+      </button>
     </div>
   );
 }

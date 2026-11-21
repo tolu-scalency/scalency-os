@@ -8,7 +8,7 @@ import { AddSender, SenderCard, ScalencyCard } from "./sender-forms";
 export const metadata: Metadata = { title: "Email sending" };
 
 const COLUMNS =
-  "id, account_id, kind, from_name, from_email, reply_to, smtp_host, smtp_port, smtp_security, smtp_user, domain, provider_domain_id, dns_records, status, is_default, last_error, verified_at, last_used_at";
+  "id, account_id, kind, from_name, from_email, reply_to, smtp_host, smtp_port, smtp_security, smtp_user, domain, provider_domain_id, dns_records, status, is_default, last_error, verified_at, last_used_at, imap_enabled, imap_host, imap_checked_at, imap_error";
 
 export default async function EmailSendingPage() {
   const ws = await getWorkspace();
@@ -29,6 +29,7 @@ export default async function EmailSendingPage() {
             Scalency&apos;s address with your business name.
           </p>
           <p className="mt-3 text-[12.5px] text-faint">Replies go to the reply-to address if you set one, otherwise to the address emails are sent from.</p>
+          <p className="mt-2 text-[12.5px] text-faint">With your own mailbox, replies from contacts also show in their conversation in Scalency, checked every 5 minutes.</p>
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           <ScalencyCard active={!usingOwn} address={scalency} ready={providersReady().email} workspace={ws.account.name} manager={manager} />

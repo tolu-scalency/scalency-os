@@ -59,6 +59,7 @@ const paths = {
   undo: "M3 7v6h6M3 13a9 9 0 1 0 3-7.7L3 8",
   redo: "M21 7v6h-6M21 13a9 9 0 1 1-3-7.7L21 8",
   layout: "M3 4h18v16H3zM3 10h18M9 10v10",
+  folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   monitor: "M3 4h18v12H3zM8 20h8M12 16v4",
   smartphone: "M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM11 18h2",
   image: "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15.5 9.5a1.5 1.5 0 1 0 0-.01",

@@ -8,7 +8,7 @@ import { Icon } from "@/components/icon";
 import { notify } from "@/components/toast";
 import { archivePage, deletePage, duplicatePage } from "./actions";
 
-export function PageRowMenu({ id, archived, live, href }: { id: string; archived: boolean; live: boolean; href: string }) {
+export function PageRowMenu({ id, archived, live, href, edit, kind = "page" }: { id: string; archived: boolean; live: boolean; href: string; edit?: string; kind?: string }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const box = useRef<HTMLDivElement>(null);
@@ -26,12 +26,15 @@ export function PageRowMenu({ id, archived, live, href }: { id: string; archived
       </button>
       {open && (
         <div className="absolute right-0 top-10 z-20 w-52 rounded-xl border border-line bg-white p-1 shadow-lg">
-          <Link href={`/funnels/${id}`} className={item}>
-            <Icon name="edit" size={14} /> Edit
+          <Link href={edit ?? `/funnels/${id}`} className={item}>
+            <Icon name="edit" size={14} /> {kind === "page" ? "Edit" : "Open"}
+          </Link>
+          <Link href={`/funnels/${id}/overview`} className={item}>
+            <Icon name="globe" size={14} /> {kind === "page" ? "Stats and domain" : "Steps, stats and domain"}
           </Link>
           {live && (
             <a href={href} target="_blank" rel="noopener noreferrer" className={item}>
-              <Icon name="globe" size={14} /> Open the live page
+              <Icon name="arrowRight" size={14} /> Open the live {kind === "page" ? "page" : kind}
             </a>
           )}
           <button type="button" className={item} onClick={() => start(() => duplicatePage(id))}>

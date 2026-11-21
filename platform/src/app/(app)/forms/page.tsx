@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Page, PageHeader, Pill, Tile } from "@/components/ui";
+import { Icon } from "@/components/icon";
 import { can, getWorkspace, timeAgo } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { NewFormButton } from "./new-form";
 import { FormRowMenu } from "./row-menu";
+import { FolderBar } from "./folder-bar";
 import { formsHealth } from "@/lib/forms-health";
 
 export const metadata: Metadata = { title: "Forms" };
@@ -16,17 +18,23 @@ function daysAgoIso(n: number) {
 
 const statusLook = { live: { tone: "green", label: "Live" }, draft: { tone: "neutral", label: "Draft" }, archived: { tone: "neutral", label: "Archived" } } as const;
 
-export default async function FormsPage({ searchParams }: { searchParams: Promise<{ error?: string; show?: string }> }) {
-  const [ws, { error, show }] = await Promise.all([getWorkspace(), searchParams]);
+export default async function FormsPage({ searchParams }: { searchParams: Promise<{ error?: string; show?: string; folder?: string }> }) {
+  const [ws, { error, show, folder: folderIn }] = await Promise.all([getWorkspace(), searchParams]);
   const archived = show === "archived";
+  const folder = typeof folderIn === "string" ? folderIn.slice(0, 60) : null;
   const supabase = await createClient();
-  const formsQuery = supabase.from("forms").select("id, name, status, updated_at").eq("account_id", ws.account.id).order("updated_at", { ascending: false });
-  const [{ data: forms }, { count: archivedCount }, health, { data: stats }] = await Promise.all([
+  const formsQuery = supabase.from("forms").select("id, name, status, updated_at, folder").eq("account_id", ws.account.id).order("updated_at", { ascending: false });
+  const [{ data: all }, { count: archivedCount }, health, { data: stats }] = await Promise.all([
     archived ? formsQuery.eq("status", "archived") : formsQuery.neq("status", "archived"),
     supabase.from("forms").select("id", { count: "exact", head: true }).eq("account_id", ws.account.id).eq("status", "archived"),
     formsHealth(),
     supabase.from("form_stats").select("form_id, views").eq("account_id", ws.account.id).gte("day", daysAgoIso(30).slice(0, 10)),
   ]);
+  // Folders, from the forms in them.
+  const folderCounts = new Map<string, number>();
+  for (const f of all ?? []) if (f.folder) folderCounts.set(f.folder as string, (folderCounts.get(f.folder as string) ?? 0) + 1);
+  const folderList = [...folderCounts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, count]) => ({ name, count }));
+  const forms = folder === null || archived ? all : (all ?? []).filter((f) => (f.folder ?? "") === folder);
   const views = new Map<string, number>();
   for (const r of stats ?? []) views.set(r.form_id as string, (views.get(r.form_id as string) ?? 0) + ((r.views as number) ?? 0));
   const ids = (forms ?? []).map((f) => f.id as string);
@@ -75,6 +83,10 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
+      {!archived && (
+        <FolderBar folders={folderList} active={folder} total={all?.length ?? 0} loose={(all ?? []).filter((f) => !f.folder).length} canEdit={canEdit} />
+      )}
+
       {archived && !forms?.length ? (
         <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">Nothing archived.</p>
       ) : !forms?.length ? (
@@ -98,7 +110,14 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
                   <Tile icon="file" tone={f.status === "live" ? "blue" : "grey"} size={38} />
                   <div className="min-w-0">
                     <div className="truncate text-[14.5px] font-semibold">{f.name}</div>
-                    <div className="text-[12.5px] text-muted">Edited {timeAgo(f.updated_at as string)}</div>
+                    <div className="text-[12.5px] text-muted">
+                      {f.folder && folder === null ? (
+                        <span className="mr-1.5 inline-flex items-center gap-1">
+                          <Icon name="folder" size={11} /> {f.folder as string} ·
+                        </span>
+                      ) : null}
+                      Edited {timeAgo(f.updated_at as string)}
+                    </div>
                   </div>
                 </Link>
                 <div className="grid grid-cols-3 gap-5 text-[12px] text-muted" title="Last 30 days">
@@ -114,7 +133,7 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
                 </div>
                 <span className="hidden text-[12px] text-muted sm:inline">{counts.get(f.id as string) ?? 0} all time</span>
                 <Pill tone={look.tone}>{look.label}</Pill>
-                {canEdit && <FormRowMenu id={f.id as string} archived={f.status === "archived"} />}
+                {canEdit && <FormRowMenu id={f.id as string} archived={f.status === "archived"} folder={(f.folder as string) ?? ""} folders={folderList.map((x) => x.name)} />}
               </div>
             );
           })}

@@ -35,7 +35,7 @@ function activeHref(pathname: string) {
 const STORAGE_KEY = "scalency.sidebar";
 
 /** Builders (a form, a workflow, later pages and funnels) open full screen, like GHL. */
-const BUILDER = /^\/(forms|workflows|sites|funnels|websites)\/[^/]+/;
+const BUILDER = /^\/(forms|workflows|sites|funnels|websites)\/[^/]+(?!.*\/overview$)/;
 
 export function AppShell({ user, children }: { user: ShellUser; children: React.ReactNode }) {
   const pathname = usePathname();

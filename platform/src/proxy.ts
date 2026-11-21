@@ -7,7 +7,7 @@ import { PASS_COOKIE, loginCodesOn, needsCode, passValid, sessionStart } from "@
 // This is a quick first check only: every data read is also protected by row-level security in the database.
 
 // Pages anyone can open. "/" is the public homepage.
-const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/invite", "/f", "/p", "/api/cron", "/api/hooks", "/api/inbound", "/api/forms"];
+const PUBLIC_PATHS = ["/login", "/signup", "/auth", "/invite", "/f", "/p", "/d", "/api/cron", "/api/hooks", "/api/inbound", "/api/forms"];
 
 // Optional separate address for public forms, e.g. https://forms.scalency.us (NEXT_PUBLIC_FORMS_URL in Netlify).
 // On that address only forms work; anything else goes to the app's own address.
@@ -19,16 +19,46 @@ const FORMS_HOST = (() => {
   }
 })();
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://os.scalency.us";
+const APP_HOST = (() => {
+  try {
+    return new URL(APP_URL).host;
+  } catch {
+    return "os.scalency.us";
+  }
+})();
+
+/** Scalency's own addresses. Any other address is a client's own domain for a page, funnel or website. */
+function isAppHost(host: string) {
+  const h = host.toLowerCase().replace(/:\d+$/, "");
+  return (
+    host === APP_HOST ||
+    h === APP_HOST ||
+    (FORMS_HOST && host === FORMS_HOST) ||
+    h === "localhost" ||
+    h === "127.0.0.1" ||
+    h.endsWith(".netlify.app") ||
+    (process.env.APP_HOSTS ?? "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean).includes(h)
+  );
+}
 
 export async function proxy(request: NextRequest) {
   const p0 = request.nextUrl.pathname;
+  // A client's own domain: show their site. Forms still load from /f/ on the same domain.
+  const host = request.headers.get("host") ?? request.nextUrl.host;
+  if (host && !isAppHost(host)) {
+    if (p0.startsWith("/f/") || p0.startsWith("/api/forms/") || p0.startsWith("/_next/")) return NextResponse.next({ request });
+    const page = p0.replace(/\/+$/, "");
+    const to = request.nextUrl.clone();
+    to.pathname = `/d/${encodeURIComponent(host.toLowerCase().replace(/:\d+$/, ""))}${page}`;
+    return NextResponse.rewrite(to);
+  }
   if (FORMS_HOST && request.nextUrl.host === FORMS_HOST) {
     if (p0.startsWith("/f/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
     return NextResponse.redirect(new URL(p0 + request.nextUrl.search, APP_URL));
   }
   // Public forms, their embed script and submissions never need a login session.
   // Skipping the session check keeps them fast and means a sign-in problem can't break them.
-  if (p0.startsWith("/f/") || p0.startsWith("/p/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
+  if (p0.startsWith("/f/") || p0.startsWith("/p/") || p0.startsWith("/d/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
 

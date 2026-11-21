@@ -256,3 +256,16 @@ export async function removeSender(id: string): Promise<ActionResult> {
   refresh();
   return { ok: "Removed. Emails go out from Scalency's address unless another one is set as default." };
 }
+
+/** Switches reading replies from a connected mailbox on or off. */
+export async function setReplyReading(id: string, on: boolean): Promise<ActionResult> {
+  const s = await setup();
+  if ("error" in s) return { error: s.error };
+  const { ws, admin } = s;
+  const sender = await ownSender(admin, ws.account.id, id);
+  if (!sender || sender.kind !== "smtp") return { error: "That mailbox is no longer here." };
+  // Turning it back on starts from now, so old emails aren't imported.
+  await admin.from("email_senders").update({ imap_enabled: on, imap_error: null, ...(on ? { imap_last_uid: null } : {}) }).eq("id", id).eq("account_id", ws.account.id);
+  refresh();
+  return { ok: on ? "Replies will show in Scalency within 5 minutes." : "Replies won't be read from this mailbox." };
+}

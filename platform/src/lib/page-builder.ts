@@ -34,6 +34,10 @@ export type PBlock = {
   url?: string;
   /** form: which form. */
   formId?: string;
+  /** form in a funnel or website: after it's sent, show the form's own message or go to the next step. */
+  after?: "message" | "next";
+  /** menu in a website: list the website's pages automatically. */
+  auto?: boolean;
   /** spacer and code: height in pixels. */
   height?: number;
   /** image: rounded corners and width (%). */
@@ -301,9 +305,15 @@ export function videoEmbed(url: string): { kind: "iframe" | "file"; src: string 
 }
 
 /** Links people can put on buttons and images: web addresses, #sections, phone and email. */
+/** Links inside a funnel or website: the next step, or one of the site's pages by id. */
+export const NEXT_LINK = "@next";
+export const pageLink = (id: string) => `@page:${id}`;
+
 export function safeLink(v: unknown): string {
   const s = String(v ?? "").trim().slice(0, 500);
   if (!s || s === "#") return "#";
+  if (s === NEXT_LINK) return s;
+  if (/^@page:[0-9a-f-]{36}$/i.test(s)) return s.toLowerCase();
   if (/^#[a-z0-9-]{1,60}$/i.test(s)) return s.toLowerCase();
   if (/^(https?:\/\/)[^\s"'<>]+$/i.test(s)) return s;
   if (/^\/[^\s"'<>]*$/.test(s) && !s.startsWith("//")) return s;
@@ -369,6 +379,8 @@ export function cleanBlock(v: unknown): PBlock | null {
   if (o.full) b.full = true;
   if (o.url != null) b.url = str(o.url, 500);
   if (o.formId != null) b.formId = /^[0-9a-f-]{36}$/i.test(String(o.formId)) ? String(o.formId) : "";
+  if (kind === "form" && o.after === "next") b.after = "next";
+  if (kind === "menu" && o.auto) b.auto = true;
   if (o.height != null) b.height = num(o.height, 8, kind === "code" ? 2000 : 400, 40);
   if (o.radius != null) b.radius = num(o.radius, 0, 48, 12);
   if (o.width != null) b.width = num(o.width, 20, 100, 100);
