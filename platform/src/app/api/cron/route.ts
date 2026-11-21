@@ -18,5 +18,7 @@ export async function GET(request: Request) {
   const { data: steps, error } = await admin.rpc("run_due_workflows");
   const sent = await deliverPending(admin, undefined, 100);
   const hooks = await deliverWebhooks(admin);
+  // Clear out old sign-in codes once an hour.
+  if (new Date().getMinutes() === 0) await admin.rpc("prune_login_codes");
   return Response.json({ ok: !error, workflowsProcessed: steps ?? 0, messagesSent: sent, webhooksSent: hooks, error: error?.message });
 }

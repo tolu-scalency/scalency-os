@@ -33,7 +33,10 @@ const STEP_TYPES = new Set([
   "add_tag", "remove_tag", "assign", "if_else", "add_to_workflow", "remove_from_workflow", "webhook", "end",
   "update_field", "email_team",
 ]);
-const CONDITIONS = new Set(["has_tag", "has_email", "has_phone", "replied", "in_stage", "deal_status", "source_is", "has_owner", "contact_field", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day"]);
+const CONDITIONS = new Set([
+  "has_tag", "has_email", "has_phone", "replied", "in_stage", "deal_status", "source_is", "has_owner", "contact_field", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day",
+  "email_unsubscribed", "sms_unsubscribed", "contact_age", "reply_contains", "reply_channel", "submitted_form", "in_workflow", "finished_workflow", "has_open_deal", "deal_owner_is", "day_of_month", "date_is",
+]);
 const OPS = new Set(["is", "is_not", "contains", "not_contains", "empty", "not_empty", "gt", "lt"]);
 const UNITS = ["minutes", "hours", "days"];
 
@@ -54,7 +57,7 @@ function safeUrl(raw: string) {
   }
 }
 
-type Ctx = { stageIds: Set<string>; pipelineIds: Set<string>; memberIds: Set<string>; workflowIds: Set<string>; fieldKeys: Set<string>; selfId: string };
+type Ctx = { stageIds: Set<string>; pipelineIds: Set<string>; memberIds: Set<string>; workflowIds: Set<string>; formIds: Set<string>; fieldKeys: Set<string>; selfId: string };
 
 /** Plain text from HTML, for the text copy sent alongside a designed email. */
 function stripHtml(html: string) {
@@ -197,11 +200,29 @@ function cleanCondition(raw: unknown, ctx: Ctx, where: string): Condition | stri
   const value = String(c.value ?? "").slice(0, 100).trim();
   const key = String(c.key ?? "").slice(0, 60);
   const out: Condition = { field: field as Condition["field"], negate: Boolean(c.negate) || undefined, op, value: value || undefined };
-  const needsValue = ["has_tag", "source_is", "in_stage", "deal_status", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day"].includes(field) || (field === "contact_field" && op !== "empty" && op !== "not_empty");
+  const needsValue =
+    ["has_tag", "source_is", "in_stage", "deal_status", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day",
+     "contact_age", "reply_contains", "reply_channel", "submitted_form", "in_workflow", "finished_workflow", "deal_owner_is", "day_of_month", "date_is"].includes(field) ||
+    (field === "contact_field" && op !== "empty" && op !== "not_empty");
   if (needsValue && !value) return `${where}: finish the condition.`;
   if (field === "in_stage" && !ctx.stageIds.has(value)) return `${where}: choose a stage.`;
   if (field === "in_pipeline" && !ctx.pipelineIds.has(value)) return `${where}: choose a pipeline.`;
-  if (field === "owner_is" && !ctx.memberIds.has(value)) return `${where}: choose a team member.`;
+  if ((field === "owner_is" || field === "deal_owner_is") && !ctx.memberIds.has(value)) return `${where}: choose a team member.`;
+  if (field === "submitted_form" && !ctx.formIds.has(value)) return `${where}: choose a form.`;
+  if ((field === "in_workflow" || field === "finished_workflow") && (!ctx.workflowIds.has(value) || value === ctx.selfId)) return `${where}: choose another workflow.`;
+  if (field === "reply_channel" && !["email", "sms"].includes(value)) return `${where}: choose email or text.`;
+  if (field === "contact_age") {
+    if (!/^\d{1,5}$/.test(value)) return `${where}: enter a number of days.`;
+    if (op !== "gt" && op !== "lt") out.op = "gt";
+  }
+  if (field === "day_of_month") {
+    if (!/^([1-9]|[12]\d|3[01])$/.test(value)) return `${where}: choose a day from 1 to 31.`;
+    if (op !== "gt" && op !== "lt" && op !== "is") out.op = "is";
+  }
+  if (field === "date_is") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${where}: choose a date.`;
+    if (op !== "gt" && op !== "lt" && op !== "is") out.op = "is";
+  }
   if (field === "deal_status" && !["open", "won", "lost"].includes(value)) return `${where}: choose a deal status.`;
   if ((field === "deal_value" || ((op === "gt" || op === "lt") && field === "contact_field")) && Number.isNaN(Number(value))) return `${where}: enter a number.`;
   if (field === "deal_value" && !op) out.op = "gt";
@@ -273,13 +294,14 @@ export async function saveWorkflow(
   if (!name) return { error: "Give the workflow a name." };
   const ws = await getWorkspace();
   const supabase = await createClient();
-  const [pipeline, { data: members }, { data: flows }, { data: current }, { data: cf }, { data: pipes }] = await Promise.all([
+  const [pipeline, { data: members }, { data: flows }, { data: current }, { data: cf }, { data: pipes }, { data: formList }] = await Promise.all([
     listAllStages(ws.account.id),
     supabase.from("account_members").select("user_id").eq("account_id", ws.account.id),
     supabase.from("workflows").select("id").eq("account_id", ws.account.id).neq("status", "archived"),
     supabase.from("workflows").select("trigger").eq("id", id).eq("account_id", ws.account.id).maybeSingle(),
     supabase.from("custom_fields").select("key").eq("account_id", ws.account.id).eq("object", "contact"),
     supabase.from("pipelines").select("id").eq("account_id", ws.account.id),
+    supabase.from("forms").select("id").eq("account_id", ws.account.id),
   ]);
   if (!current) return { error: "This workflow no longer exists." };
   const stageIds = new Set(pipeline.map((s) => s.id));
@@ -291,6 +313,7 @@ export async function saveWorkflow(
     pipelineIds: new Set((pipes ?? []).map((p) => p.id as string)),
     memberIds: new Set((members ?? []).map((m) => m.user_id as string)),
     workflowIds: new Set((flows ?? []).map((f) => f.id as string)),
+    formIds: new Set((formList ?? []).map((f) => f.id as string)),
     fieldKeys: new Set((cf ?? []).map((f) => f.key as string)),
     selfId: id,
   }, new Set());
