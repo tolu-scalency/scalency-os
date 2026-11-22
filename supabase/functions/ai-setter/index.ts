@@ -106,7 +106,7 @@ export type Thread = {
   sent_ids: string[];
 };
 
-export type Turn = { who: "lead" | "ai" | "team" | "auto"; text: string; at: string; channel?: string };
+export type Turn = { who: "lead" | "ai" | "team" | "auto"; text: string; at: string; channel?: string; id?: string; subject?: string };
 export type Slot = { iso: string; label: string };
 export type Lead = { firstName: string; details: string };
 
@@ -271,6 +271,7 @@ export function systemPrompt(agent: Pick<Agent, "business" | "rules">, now: Date
 - Treat every lead as a good fit until they clearly show they're not.
 - Lead with value, never with selfish follow-up. Never write "just following up", "are you still interested?", "got 15 minutes?" or "did you get my message?". Every message gives them something (a fact, a price, an offer, a result) before asking for anything.
 - Ask simple yes/no questions. One question per message.
+- Never ask the same question twice in a row. If they answered something else instead, answer them, then move things forward (for example, offer to send times).
 - Before explaining the consultation or the offer, ask permission (e.g. "Mind if I explain how the consultation works?"). Don't ask "do you want [result]?".
 - Get one more yes before offering times (e.g. "Great, shall I send you a couple of times?").
 - Then call get_free_times and offer exactly two times from it, on different days if you can, and ask which suits. If neither works, ask what day or part of the day is better and check again.
@@ -279,7 +280,8 @@ export function systemPrompt(agent: Pick<Agent, "business" | "rules">, now: Date
 
 ## How you write
 - Like a friendly, confident front-desk coordinator texting, not a marketer. Warm, never pushy, never shaming. Talk about how they'll feel and what's involved, never about what's "wrong" with them.
-- Short: usually 1 to 3 sentences, under 300 characters for texts. No lists, no markdown, no hashtags, no emojis unless they use them first.
+- Short: usually 1 to 3 sentences, under 300 characters for texts. Emails can be a little longer (up to 5 short sentences), still with no lists.
+- Never mention glitches, errors, echoes, systems or anything technical. If a message is unclear, ask one short question about it. No lists, no markdown, no hashtags, no emojis unless they use them first.
 - Use their first name now and then, not in every message. Sign off as ${who} only in the very first message.
 - ${uk ? "UK" : "US"} spelling. Prices exactly as written in the clinic details.
 ${b.tone ? `- The clinic's tone notes: ${b.tone}\n` : ""}
@@ -598,11 +600,13 @@ export class Ghl {
     const list = Array.isArray(r.messages) ? r.messages : (r.messages?.messages ?? []);
     return list;
   }
-  async send(contactId: string, type: string, text: string, subject?: string) {
+  async send(contactId: string, type: string, text: string, email?: { subject: string; replyTo?: string }) {
     const body: Record<string, unknown> = { type, contactId, message: text };
     if (type === "Email") {
-      body.subject = subject || "Your enquiry";
+      body.subject = email?.subject || "Your enquiry";
       body.html = `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`;
+      // Answer in the same email thread, not as a new email.
+      if (email?.replyTo) body.replyMessageId = email.replyTo;
     }
     const r = await this.req<{ messageId?: string; emailMessageId?: string; conversationId?: string }>("POST", "/conversations/messages", "2021-04-15", body);
     return r.messageId ?? r.emailMessageId ?? "";
@@ -676,6 +680,25 @@ export type GhlMessage = {
 };
 
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+/** Just what they wrote: drops the quoted earlier email that email apps add underneath. */
+export function emailReplyText(raw: string) {
+  const html = raw
+    .replace(/<div[^>]*class="[^"]*(gmail_quote|gmail_extra|yahoo_quoted|moz-cite-prefix)[^"]*"[\s\S]*$/i, "")
+    .replace(/<blockquote[\s\S]*?<\/blockquote>/gi, "")
+    .replace(/<div[^>]*id="(appendonsend|divRplyFwdMsg)"[\s\S]*$/i, "");
+  const lines = stripHtml(html).split("\n");
+  const cut = lines.findIndex(
+    (l, i) =>
+      /^On .{6,200}wrote:\s*$/i.test(l.trim()) ||
+      (/^On .{6,200}$/i.test(l.trim()) && /wrote:\s*$/i.test(lines[i + 1] ?? "")) ||
+      /^-{2,}\s*Original Message\s*-{2,}/i.test(l.trim()) ||
+      (/^From:\s.+/i.test(l.trim()) && /^(Sent|Date):\s/i.test((lines[i + 1] ?? "").trim())) ||
+      /^>/.test(l.trim()),
+  );
+  const kept = (cut >= 0 ? lines.slice(0, cut) : lines).join("\n").trim();
+  return kept || stripHtml(html).trim();
+}
+
 const stripHtml = (s: string) =>
   s
     .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -708,9 +731,11 @@ export function toTurns(list: GhlMessage[], sentIds: string[]): Turn[] {
     .sort((a, b) => String(a.dateAdded ?? "").localeCompare(String(b.dateAdded ?? "")))
     .map((m) => ({
       who: m.direction === "inbound" ? "lead" : sentIds.includes(m.id) ? "ai" : m.userId ? "team" : "auto",
-      text: (channelOf(m.messageType) === "Email" ? stripHtml(m.body ?? "") : (m.body ?? "")).slice(0, 2000),
+      text: (channelOf(m.messageType) === "Email" ? (m.direction === "inbound" ? emailReplyText(m.body ?? "") : stripHtml(m.body ?? "")) : (m.body ?? "")).slice(0, 2000),
       at: m.dateAdded ?? "",
       channel: channelOf(m.messageType) ?? undefined,
+      id: m.id,
+      subject: m.meta?.email?.subject ?? (m as { subject?: string }).subject,
     }));
 }
 
@@ -900,8 +925,14 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
 
   let sentId = "";
   if (brain.message) {
-    const subject = channel === "Email" ? `${b.clinicName || "Your enquiry"}` : undefined;
-    sentId = await ghl.send(contactId, channel, brain.message, subject);
+    let email: { subject: string; replyTo?: string } | undefined;
+    if (channel === "Email") {
+      // Keep the conversation in one email thread: "Re:" the last email, replying to it.
+      const last = [...history].reverse().find((t) => t.channel === "Email" && t.id);
+      const base = (last?.subject || `Your enquiry with ${b.clinicName || "us"}`).replace(/^(re:\s*)+/i, "");
+      email = { subject: last ? `Re: ${base}` : base, replyTo: last?.id };
+    }
+    sentId = await ghl.send(contactId, channel, brain.message, email);
     await logTurn(db, { agent, thread, role: "ai", body: brain.message, channel, meta: { mode: mode.kind, ...(mode.kind === "followup" ? { touch: mode.touch + 1 } : {}) } });
   }
   for (const e of brain.events) await logTurn(db, { agent, thread, role: "event", body: e });

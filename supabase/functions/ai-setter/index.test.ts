@@ -11,6 +11,7 @@ import {
   channelOf,
   followUpAt,
   Ghl,
+  emailReplyText,
   isOptOut,
   nextOpening,
   pickSlots,
@@ -356,6 +357,36 @@ Deno.test("end to end: a lead with only an email address is emailed, with a subj
   await work(fakeDb().db, agent, newThread(), { kind: "opener" }, { claude: c.claude, ghl, now: new Date("2026-11-24T15:00:00Z") });
   const sent = calls.find((x) => x.path === "/conversations/messages")!;
   assertEquals(sent.body?.type, "Email");
-  assertEquals(sent.body?.subject, "Glow Aesthetics");
+  assertEquals(sent.body?.subject, "Your enquiry with Glow Aesthetics");
+  assertEquals(sent.body?.replyMessageId, undefined);
   assertStringIncludes(String(sent.body?.html), "Hi Jess");
+});
+
+Deno.test("email replies: the quoted earlier email is dropped", () => {
+  const gmail = '<div dir="ltr">how much is botox?</div><br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">On Sun, 22 Nov 2026 at 14:35, Scalency &lt;test@mg.msgsndr.org&gt; wrote:<br></div><blockquote class="gmail_quote">Hi David, it\'s Sophie</blockquote></div>';
+  assertEquals(emailReplyText(gmail), "how much is botox?");
+  assertEquals(emailReplyText("Yes please\n\nOn Sun, 22 Nov 2026 at 14:35, Sophie <a@b.com> wrote:\n> Hi David"), "Yes please");
+  assertEquals(emailReplyText('<p>Sounds good</p><div id="appendonsend"></div><div id="divRplyFwdMsg">From: Glow</div>'), "Sounds good");
+  assertEquals(emailReplyText("Just this"), "Just this");
+});
+
+Deno.test("email replies: the AI answers in the same thread, with Re: and the email it replies to", async () => {
+  const { ghl, calls } = fakeGhl({
+    noPhone: true,
+    messages: [
+      { id: "out1", direction: "outbound", body: "<p>Hi David, it's Sophie</p>", messageType: "TYPE_EMAIL", dateAdded: "2026-11-22T13:35:00Z", meta: { email: { subject: "Your enquiry with Glow Aesthetics" } } },
+      { id: "in1", direction: "inbound", body: '<div>how much is botox?</div><div class="gmail_quote">On Sun wrote: Hi David, it\'s Sophie</div>', messageType: "TYPE_EMAIL", dateAdded: "2026-11-22T13:38:00Z", meta: { email: { subject: "Re: Your enquiry with Glow Aesthetics" } } },
+    ],
+  });
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Botox is $12 a unit." })] })]);
+  await work(fakeDb().db, agent, { ...newThread(), sent_ids: ["out1"], channel: "Email" }, { kind: "reply" }, { claude: c.claude, ghl, now: new Date("2026-11-22T13:39:00Z") });
+  const sent = calls.find((x) => x.path === "/conversations/messages")!;
+  assertEquals(sent.body?.type, "Email");
+  assertEquals(sent.body?.subject, "Re: Your enquiry with Glow Aesthetics");
+  assertEquals(sent.body?.replyMessageId, "in1");
+  // The AI saw only what the lead wrote, not the quoted email.
+  const seen = JSON.stringify(c.seen[0].messages);
+  assertStringIncludes(seen, "Lead: how much is botox?");
+  assert(!seen.includes("On Sun wrote"));
+  assertStringIncludes(JSON.stringify(c.seen[0]), "Never mention glitches");
 });
