@@ -1266,9 +1266,13 @@ async function app(req: Request) {
   return json({ error: "Unknown action." }, 400);
 }
 
+/** Shown when the function's address is opened in a browser, so you can check which version is live. */
+export const VERSION = "v3 (22 Nov): email threads, quote stripping";
+
 if (import.meta.main) {
   Deno.serve(async (req) => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+    if (req.method === "GET") return json({ ok: true, version: VERSION });
     if (req.method !== "POST") return json({ error: "Use POST." }, 405);
     const url = new URL(req.url);
     const event = url.searchParams.get("event");

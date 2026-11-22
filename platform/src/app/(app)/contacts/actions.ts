@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getWorkspace } from "@/lib/data";
+import { can, getWorkspace } from "@/lib/data";
 import { EMAIL, PHONE_HELP, normalisePhone, parsePounds, text, type ActionResult } from "@/lib/forms";
 import { runWorkflowsSoon } from "@/lib/run-soon";
 
@@ -89,8 +89,22 @@ export async function updateContact(_prev: ActionResult, fd: FormData): Promise<
 export async function deleteContact(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   const id = text(fd, "id", 40);
   const ws = await getWorkspace();
+  if (!can(ws, "contacts.delete")) return { error: "You don't have access to delete contacts. Ask the workspace owner." };
   const supabase = await createClient();
   const { error } = await supabase.from("contacts").delete().eq("id", id).eq("account_id", ws.account.id);
   if (error) return { error: "We couldn't delete this contact." };
   redirect("/contacts");
+}
+
+/** Deletes several contacts at once (from the list), with everything linked to them. */
+export async function deleteContacts(ids: string[]): Promise<ActionResult> {
+  const ws = await getWorkspace();
+  if (!can(ws, "contacts.delete")) return { error: "You don't have access to delete contacts. Ask the workspace owner." };
+  const list = [...new Set((Array.isArray(ids) ? ids : []).filter((x) => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x)))].slice(0, 500);
+  if (!list.length) return { error: "Choose at least one contact." };
+  const supabase = await createClient();
+  const { error, count } = await supabase.from("contacts").delete({ count: "exact" }).in("id", list).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't delete those contacts. Try again." };
+  refresh();
+  return { ok: `Deleted ${count ?? list.length} contact${(count ?? list.length) === 1 ? "" : "s"}.` };
 }

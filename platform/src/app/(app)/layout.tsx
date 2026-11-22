@@ -2,8 +2,13 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/shell/app-shell";
 import { getWorkspace, initialsOf, leadsThisWeek, myPendingInvites } from "@/lib/data";
 
-// Signed-in screens are private, so keep them out of search engines.
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+// Signed-in screens are private, so keep them out of search engines. The browser tab
+// carries the workspace's own business name; Scalency is only the platform's name.
+export async function generateMetadata(): Promise<Metadata> {
+  const ws = await getWorkspace();
+  const name = ws.account.name.trim() || "Your workspace";
+  return { title: { default: name, template: `%s · ${name}` }, applicationName: name, robots: { index: false, follow: false } };
+}
 
 // Every signed-in screen shares the sidebar and top bar. The page is built on the server
 // with its data before it's shown, so screens arrive complete rather than as empty outlines.

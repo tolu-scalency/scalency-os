@@ -831,7 +831,7 @@ export async function listChatMessages(accountId: string, channelId: string, nam
   const { data } = await supabase.from("chat_messages").select("id, body, author_id, created_at, contact_id").eq("account_id", accountId).eq("channel_id", channelId).order("created_at", { ascending: false }).limit(limit);
   return (data ?? [])
     .reverse()
-    .map((m) => ({ id: m.id, body: m.body, authorId: m.author_id, authorName: m.author_id ? (names[m.author_id] ?? "Teammate") : "Scalency", createdAt: m.created_at, contactId: m.contact_id }));
+    .map((m) => ({ id: m.id, body: m.body, authorId: m.author_id, authorName: m.author_id ? (names[m.author_id] ?? "Teammate") : "Assistant", createdAt: m.created_at, contactId: m.contact_id }));
 }
 
 export type Thread = { contactId: string; name: string; initials: string; last: string; lastAt: string; channel: string; count: number };

@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { Icon, type IconName } from "./icon";
@@ -96,7 +97,11 @@ export function ConfirmSubmit({ children, message, className = "" }: { children:
       type="submit"
       disabled={pending}
       onClick={(e) => {
-        if (!window.confirm(message)) e.preventDefault();
+        // Ask first; only send the form once they confirm.
+        e.preventDefault();
+        const form = e.currentTarget.form;
+        const [title, ...rest] = message.split(/(?<=\?)\s+/);
+        void ask({ title, text: rest.join(" ") || undefined }).then((ok) => ok && form?.requestSubmit());
       }}
       className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-bad/25 bg-white px-4 text-[13.5px] font-semibold text-bad transition hover:bg-bad-bg disabled:opacity-60 ${className}`}
     >

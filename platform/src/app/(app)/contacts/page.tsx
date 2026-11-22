@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
-import { Avatar, Page, PageHeader, Pill } from "@/components/ui";
+import { Page, PageHeader } from "@/components/ui";
 import { EmptyState } from "@/components/states";
 import { can, contactSources, formatPence, getPipeline, getWorkspace, listContacts, listTags, memberNames, timeAgo } from "@/lib/data";
 import { AddContact } from "./add-contact";
+import { ContactList } from "./contact-list";
 
 export const metadata: Metadata = { title: "Contacts" };
 
@@ -140,37 +141,10 @@ async function Contacts({ searchParams }: { searchParams: Promise<Record<string,
           <EmptyState icon="users" title="No contacts yet">Add your first contact to start tracking deals and tasks.</EmptyState>
         )
       ) : (
-        <div className="card overflow-hidden">
-          <div className="hidden grid-cols-[minmax(240px,2fr)_minmax(140px,1fr)_minmax(150px,1.1fr)_110px_100px] gap-4 border-b border-line bg-surface px-5 py-3 text-[12px] font-medium text-muted md:grid">
-            <span>Name</span>
-            <span>Phone</span>
-            <span>Stage</span>
-            <span>Value</span>
-            <span className="text-right">Added</span>
-          </div>
-          <ul className="divide-y divide-line">
-            {contacts.map((c) => (
-              <li key={c.id}>
-                <Link
-                  href={`/contacts/${c.id}`}
-                  className="grid grid-cols-[1fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-surface md:grid-cols-[minmax(240px,2fr)_minmax(140px,1fr)_minmax(150px,1.1fr)_110px_100px]"
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <Avatar initials={c.initials} size={36} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[14px] font-semibold">{c.name}</span>
-                      <span className="block truncate text-[12.5px] text-muted">{c.email ?? c.phone ?? "No email"}</span>
-                    </span>
-                  </span>
-                  <span className="hidden text-[13.5px] tabular-nums text-muted md:block">{c.phone ?? "—"}</span>
-                  <span>{c.stage ? <Pill>{c.stage}</Pill> : <span className="hidden text-[13px] text-faint md:inline">Not in pipeline</span>}</span>
-                  <span className="hidden text-[13.5px] font-medium tabular-nums md:block">{formatPence(c.valuePence)}</span>
-                  <span className="hidden text-right text-[12.5px] text-faint md:block">{timeAgo(c.createdAt)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ContactList
+          canDelete={can(ws, "contacts.delete")}
+          rows={contacts.map((c) => ({ id: c.id, name: c.name, initials: c.initials, email: c.email ?? null, phone: c.phone ?? null, stage: c.stage ?? null, value: formatPence(c.valuePence), added: timeAgo(c.createdAt) }))}
+        />
       )}
     </>
   );

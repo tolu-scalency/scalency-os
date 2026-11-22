@@ -3,6 +3,8 @@
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { can, getWorkspace } from "@/lib/data";
+import { randomUUID } from "node:crypto";
+import { adminClient } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
 import { cleanBusiness, cleanRules, DEFAULT_RULES, DEMO_BUSINESS, type SetterStatus } from "@/lib/setter";
 
@@ -102,4 +104,19 @@ export async function deleteSetter(id: string) {
   const supabase = await createClient();
   await supabase.from("setter_agents").delete().eq("id", id).eq("account_id", ws.account.id);
   redirect("/agents");
+}
+
+/** Gives the setter new webhook addresses. The old ones stop working straight away. */
+export async function newWebhookAddresses(id: string): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const admin = adminClient();
+  if (!admin) return { error: "The server isn't set up for this yet (SUPABASE_SECRET_KEY is missing in Netlify)." };
+  const { error, count } = await admin
+    .from("setter_agents")
+    .update({ webhook_key: randomUUID().replace(/-/g, "") }, { count: "exact" })
+    .eq("id", id)
+    .eq("account_id", ws.account.id);
+  if (error || !count) return { error: "We couldn't change the addresses. Try again." };
+  return { ok: "New addresses made. Paste them into your 3 GHL workflows now, as the old ones have stopped working." };
 }

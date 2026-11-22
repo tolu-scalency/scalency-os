@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { Icon, type IconName } from "@/components/icon";
@@ -834,7 +835,7 @@ function Done({ result, onAgain }: { result: { id: string; data: SetupResult }; 
           disabled={pending}
           onClick={() =>
             start(async () => {
-              if (!window.confirm("Remove what this setup added? Anything you've already started using is kept.")) return;
+              if (!(await ask({ title: "Remove what this setup added?", text: "Anything you've already started using is kept.", confirm: "Remove" }))) return;
               const out = await undoSetup(result.id);
               setUndone(out.error ?? `Removed ${out.removed} item${out.removed === 1 ? "" : "s"}.${out.kept?.length ? ` Kept: ${out.kept.join(", ")}.` : ""}`);
             })
@@ -875,7 +876,7 @@ function UndoCard({ setup }: { setup: LastSetup }) {
         disabled={pending}
         onClick={() =>
           start(async () => {
-            if (!window.confirm("Remove what the last setup added? Anything you've already started using is kept.")) return;
+            if (!(await ask({ title: "Remove what the last setup added?", text: "Anything you've already started using is kept.", confirm: "Remove" }))) return;
             const out = await undoSetup(setup.id);
             setMsg(out.error ?? `Removed ${out.removed} item${out.removed === 1 ? "" : "s"}.${out.kept?.length ? ` Kept: ${out.kept.join(", ")}.` : ""}`);
           })

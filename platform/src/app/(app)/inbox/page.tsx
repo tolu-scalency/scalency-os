@@ -6,6 +6,8 @@ import { Avatar, Pill } from "@/components/ui";
 import { can, getContactDetail, getWorkspace, listThreadMessages, listThreads, timeAgo, type Thread } from "@/lib/data";
 import { sendMessage } from "./actions";
 import { ChannelPicker } from "./channel-picker";
+import { AiInbox } from "./ai-inbox";
+import { InboxTabs } from "./tabs";
 
 export const metadata: Metadata = { title: "Inbox" };
 
@@ -14,6 +16,7 @@ const statusLabel: Record<string, string> = { held_test_mode: "Test mode, not se
 export default async function InboxPage(props: PageProps<"/inbox">) {
   const params = await props.searchParams;
   const ws = await getWorkspace();
+  if (params.view === "ai") return <AiInbox accountId={ws.account.id} selectedId={typeof params.t === "string" ? params.t : undefined} canManage={can(ws, "ai.manage")} />;
   const threads = await listThreads(ws.account.id);
   const selectedId = typeof params.c === "string" ? params.c : threads[0]?.contactId;
   let selected: Thread | undefined = threads.find((t) => t.contactId === selectedId);
@@ -31,7 +34,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
       <aside className={`w-full flex-none flex-col border-r border-line bg-white md:flex md:w-[320px] ${picked && selected ? "hidden" : "flex"}`}>
         <div className="px-5 pb-3 pt-5">
           <h1 className="text-[20px] font-semibold tracking-[-0.02em]">Inbox</h1>
-          <p className="text-[12.5px] text-muted">Emails and texts with your contacts.</p>
+          <InboxTabs view="contacts" />
         </div>
         {threads.length === 0 ? (
           <div className="m-4 rounded-2xl border border-dashed border-line-strong p-6 text-center text-[13.5px] text-muted">

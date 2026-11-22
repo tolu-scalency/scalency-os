@@ -4,6 +4,7 @@
 // the GHL connection (key, calendar, pipeline, webhooks), a test chat that uses a
 // pretend calendar and sends nothing, and the conversations it has had.
 
+import { ask } from "@/components/confirm";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,7 +13,7 @@ import { notify } from "@/components/toast";
 import { Pill } from "@/components/ui";
 import { createClient } from "@/lib/supabase/browser";
 import { DAY_NAMES, THREAD_LOOK, TIMEZONES, type SetterBusiness, type SetterRules, type SetterStatus, type ThreadState } from "@/lib/setter";
-import { deleteSetter, saveGhlChoices, saveSetter, setSetterStatus, setThread } from "../actions";
+import { deleteSetter, newWebhookAddresses, saveGhlChoices, saveSetter, setSetterStatus, setThread } from "../actions";
 
 export type ThreadView = {
   id: string;
@@ -165,7 +166,7 @@ export function SetterEditor({ setter, threads, canEdit }: { setter: Setter; thr
         <div className="flex justify-end">
           <button
             type="button"
-            onClick={() => window.confirm("Delete this AI setter and its conversation history? It stops straight away. This can't be undone.") && start(() => deleteSetter(setter.id))}
+            onClick={async () => (await ask({ title: "Delete this AI setter?", text: "Its conversation history goes too, and it stops straight away. This can't be undone." })) && start(() => deleteSetter(setter.id))}
             className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-bad"
           >
             <Icon name="trash" size={14} /> Delete this AI setter
@@ -458,6 +459,22 @@ function GhlTab({ setter, ro }: { setter: Setter; ro: boolean }) {
       if ("error" in res && res.error) return void notify(String(res.error), "bad");
       setHooks(res as Record<string, string>);
     });
+  const renewHooks = () =>
+    void ask({
+      title: "Make new webhook addresses?",
+      text: "The current addresses stop working straight away. Until you paste the new ones into your 3 GHL workflows, the AI won't hear about new leads, replies or bookings.",
+      confirm: "Make new addresses",
+    }).then(
+      (ok) =>
+        ok &&
+        start(async () => {
+          const r = await newWebhookAddresses(setter.id);
+          if (r.error) return void notify(r.error, "bad");
+          const res = await callSetter({ action: "webhooks", agent_id: setter.id });
+          if (!("error" in res && res.error)) setHooks(res as Record<string, string>);
+          notify(r.ok ?? "Done", "ok");
+        }),
+    );
 
   return (
     <div className="flex flex-col gap-4">
@@ -591,6 +608,14 @@ function GhlTab({ setter, ro }: { setter: Setter; ro: boolean }) {
                 <CopyBox text={hooks[k] ?? ""} />
               </div>
             ))}
+            {!ro && (
+              <div className="border-t border-line pt-3">
+                <button type="button" disabled={pending} onClick={renewHooks} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
+                  <Icon name="refresh" size={14} /> New addresses
+                </button>
+                <p className={`${hint} mt-2`}>Use this if an address has been shared by mistake. The old ones stop working.</p>
+              </div>
+            )}
           </div>
         )}
       </Section>

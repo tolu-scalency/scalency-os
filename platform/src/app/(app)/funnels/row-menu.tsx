@@ -2,6 +2,7 @@
 
 // The "..." menu on each page in the list: edit, open, duplicate, archive or restore, delete.
 
+import { ask } from "@/components/confirm";
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
@@ -58,7 +59,7 @@ export function PageRowMenu({ id, archived, live, href, edit, kind = "page" }: {
               type="button"
               className={`${item} text-bad`}
               onClick={() => {
-                if (window.confirm("Delete this page for good? This can't be undone.")) start(() => deletePage(id));
+                void ask({ title: "Delete this for good?", text: "Its pages and stats go too. This can't be undone." }).then((ok) => ok && start(() => deletePage(id)));
               }}
             >
               <Icon name="trash" size={14} /> Delete for good
