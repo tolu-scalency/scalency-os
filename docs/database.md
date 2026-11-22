@@ -309,6 +309,16 @@ Migration `20261201090000_funnels_websites`.
 - `forms.folder`: a simple folder name ('' means no folder).
 - `email_senders.imap_*`: reading replies from a connected mailbox. `imap_last_uid` and `imap_uid_validity` say where the inbox is up to (the first check only notes that, so old emails aren't imported). `imap_enabled` switches it off; `imap_error` explains a problem. Replies from contacts are saved in `messages` as inbound email (`provider` = `imap`).
 
+## AI setter
+
+Migration `20261202090000_ai_setter`. The AI itself runs in the Supabase function `ai-setter`; it works inside each client's GoHighLevel sub-account for now (GHL's calendar, numbers and inbox).
+
+- `setter_agents`: one AI setter per business. `business` holds the details the AI may state (clinic, consultation, treatments and prices, offer, financing, policies, proof, tone). `rules` holds opening hours, follow-up days, minimum notice and whether to create tasks for the team. `status` is off, test (only contacts tagged `ai-test`) or live. `ghl_*` is the GHL connection: location, calendar, pipeline and stage IDs. `ghl_token` is the Private Integration key, encrypted by the function; `webhook_key` is part of the webhook addresses. People can't read either column; the function gives the webhook addresses to people with "Manage AI".
+- `setter_threads`: one conversation per lead (unique per setter and GHL contact). `state`: active, booked, handed_over, stopped, paused (a team member replied themselves) or finished (no reply after every follow-up). `next_action` and `next_action_at` say when the first text or the next follow-up is due; `reply_token` makes several texts in a row get one answer; `sent_ids` are the GHL message IDs the AI sent.
+- `setter_turns`: every message in and out and what the AI did (booked, handed over...). Test chat turns have `is_test` set, no thread, and are only used for the daily limit (300).
+- `setter_clock` and `claim_setter_tick()`: stop the follow-up clock running twice within 45 seconds. Server only.
+- Members can read setters and conversations; "Manage AI" (`ai.manage`) can change them.
+
 ## Not in this version yet
 
 Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

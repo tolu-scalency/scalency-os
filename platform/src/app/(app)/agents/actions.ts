@@ -1,0 +1,105 @@
+"use server";
+
+import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
+import { can, getWorkspace } from "@/lib/data";
+import { createClient } from "@/lib/supabase/server";
+import { cleanBusiness, cleanRules, DEFAULT_RULES, DEMO_BUSINESS, type SetterStatus } from "@/lib/setter";
+
+// The AI setter's settings. Saving the GHL key and the test chat go straight to the
+// ai-setter function from the page (it encrypts the key); everything else is here.
+
+const NO_ACCESS = "You don't have access to set up AI in this workspace. Ask the workspace owner.";
+type Result = { error?: string; ok?: string };
+
+/** A new AI setter, filled in with the med spa demo so it can be tested straight away. */
+export async function createSetter() {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) redirect("/agents?error=access");
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("setter_agents")
+    .insert({ account_id: ws.account.id, name: "AI setter", status: "off", business: DEMO_BUSINESS, rules: DEFAULT_RULES })
+    .select("id")
+    .single();
+  if (error || !data) redirect("/agents?error=1");
+  redirect(`/agents/${data.id}`);
+}
+
+export async function saveSetter(id: string, input: { name: string; business: unknown; rules: unknown }): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const name = String(input.name ?? "").trim().slice(0, 120) || "AI setter";
+  const business = cleanBusiness(input.business);
+  if (!business.clinicName) return { error: "Add the business name first." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("setter_agents").update({ name, business, rules: cleanRules(input.rules) }).eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't save that. Try again." };
+  return { ok: "Saved" };
+}
+
+/** Off, test (only contacts tagged ai-test) or live (every lead). Live needs GHL and a calendar. */
+export async function setSetterStatus(id: string, status: SetterStatus): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  if (!["off", "test", "live"].includes(status)) return { error: "Unknown status." };
+  const supabase = await createClient();
+  const { data: a } = await supabase.from("setter_agents").select("ghl_location_id, ghl_checked_at, ghl_error, ghl_calendar_id").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  if (!a) return { error: "We couldn't find that AI setter." };
+  if (status !== "off") {
+    if (!a.ghl_location_id || !a.ghl_checked_at || a.ghl_error) return { error: "Connect GHL first (the Connect GHL tab)." };
+    if (!a.ghl_calendar_id) return { error: "Choose the calendar to book into first (the Connect GHL tab)." };
+  }
+  const { error } = await supabase.from("setter_agents").update({ status }).eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't change that. Try again." };
+  refresh();
+  return { ok: status === "live" ? "Live: the AI setter now works every new lead." : status === "test" ? "Test mode: it only talks to contacts tagged ai-test." : "Switched off." };
+}
+
+/** The calendar to book into and the pipeline stages to move deals to. */
+export async function saveGhlChoices(
+  id: string,
+  input: { calendarId: string; calendarName: string; pipelineId: string; stages: { contacted?: string; booked?: string; not_interested?: string } },
+): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const idOk = (v: unknown) => typeof v === "string" && /^[A-Za-z0-9-]{1,60}$/.test(v);
+  const stages = Object.fromEntries(Object.entries(input.stages ?? {}).filter(([k, v]) => ["contacted", "booked", "not_interested"].includes(k) && idOk(v)));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("setter_agents")
+    .update({
+      ghl_calendar_id: idOk(input.calendarId) ? input.calendarId : null,
+      ghl_calendar_name: String(input.calendarName ?? "").slice(0, 120) || null,
+      ghl_pipeline_id: idOk(input.pipelineId) ? input.pipelineId : null,
+      ghl_stages: stages,
+    })
+    .eq("id", id)
+    .eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't save that. Try again." };
+  refresh();
+  return { ok: "Saved" };
+}
+
+/** Hand a conversation back to the AI, or stop it. */
+export async function setThread(threadId: string, to: "active" | "stopped"): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const supabase = await createClient();
+  const patch =
+    to === "active"
+      ? { state: "active", next_action: "followup", next_action_at: new Date(Date.now() + 86_400_000).toISOString(), note: "Handed back to the AI" }
+      : { state: "stopped", next_action: null, next_action_at: null, note: "Stopped by the team" };
+  const { error } = await supabase.from("setter_threads").update(patch).eq("id", threadId).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't change that. Try again." };
+  refresh();
+  return { ok: to === "active" ? "Handed back. The AI follows up from tomorrow if they don't reply." : "Stopped. The AI won't message them again." };
+}
+
+export async function deleteSetter(id: string) {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) redirect("/agents?error=access");
+  const supabase = await createClient();
+  await supabase.from("setter_agents").delete().eq("id", id).eq("account_id", ws.account.id);
+  redirect("/agents");
+}
