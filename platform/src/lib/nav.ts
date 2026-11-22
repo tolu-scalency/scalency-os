@@ -140,8 +140,7 @@ export const NAV: NavGroup[] = [
     label: "AI",
     icon: "spark",
     href: "/agents",
-    soon: true,
-    links: [{ label: "AI agents", href: "/agents", soon: true }, ...soonLinks("ai")],
+    links: [{ label: "AI setter", href: "/agents" }, ...soonLinks("ai")],
   },
   { key: "reporting", label: "Reporting", icon: "chart", href: "/reports", soon: true, links: [{ label: "Reports", href: "/reports", soon: true }, ...soonLinks("reporting")] },
 ];

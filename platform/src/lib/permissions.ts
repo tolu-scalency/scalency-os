@@ -18,7 +18,7 @@ export const PERMISSIONS = [
   { key: "payments.manage", group: "Payments", label: "Manage payments", hint: "Invoices, products, subscriptions and refunds.", soon: true },
   { key: "marketing.manage", group: "Marketing", label: "Manage marketing", hint: "Campaigns, social planner and templates.", soon: true },
   { key: "sites.manage", group: "Sites", label: "Manage sites and forms", hint: "Funnels, websites, forms and surveys." },
-  { key: "ai.manage", group: "AI", label: "Manage AI", hint: "AI agents, voice receptionist and creative studio.", soon: true },
+  { key: "ai.manage", group: "AI", label: "Manage AI", hint: "The AI setter, and later the voice receptionist and creative studio." },
   { key: "reporting.view", group: "Reporting", label: "See reports", hint: "Dashboards and reports.", soon: true },
   { key: "settings.manage", group: "Settings", label: "Change workspace settings", hint: "Custom fields, saved details, tags, sending and AI setup." },
   { key: "team.manage", group: "Settings", label: "Manage the team", hint: "Invite and remove people, and change roles." },
