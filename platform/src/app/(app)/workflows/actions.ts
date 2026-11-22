@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { deliverPending } from "@/lib/deliver";
-import { getWorkspace, type Condition, type WorkflowStep, type WorkflowTrigger, listAllStages } from "@/lib/data";
+import { can, getWorkspace, type Condition, type WorkflowStep, type WorkflowTrigger, listAllStages } from "@/lib/data";
 import { compile, countNodes, MAX_BRANCHES, MAX_NODES, newId, toTree, type FlowNode } from "@/lib/flow";
 import { actionLabel } from "./labels";
 import { text, type ActionResult } from "@/lib/forms";
@@ -434,4 +434,79 @@ export async function runDueNow(): Promise<void> {
   await supabase.rpc("run_due_workflows", { target_account: ws.account.id });
   await deliverPending(supabase, ws.account.id);
   refresh();
+}
+
+// ---------------------------------------------------------------------------
+// Delete, duplicate, and copy or move to another workspace
+// ---------------------------------------------------------------------------
+
+const NO_WF_ACCESS = "You don't have access to change workflows here. Ask the workspace owner.";
+type Db = Awaited<ReturnType<typeof createClient>>;
+
+async function freeWorkflowName(supabase: Db, accountId: string, base: string) {
+  const root = base.slice(0, 110);
+  for (let i = 1; i < 60; i++) {
+    const name = i === 1 ? root : `${root} ${i}`;
+    const { count } = await supabase.from("workflows").select("id", { count: "exact", head: true }).eq("account_id", accountId).eq("name", name);
+    if (!count) return name;
+  }
+  return `${root} ${Date.now().toString(36)}`;
+}
+
+/** A webhook trigger gets its own new address, so the copy never receives the original's leads. */
+function freshTrigger(trigger: unknown) {
+  const t = (trigger ?? {}) as Record<string, unknown>;
+  return t.type === "webhook" ? { ...t, token: newHookToken() } : t;
+}
+
+export async function deleteWorkflow(id: string): Promise<ActionResult> {
+  const ws = await getWorkspace();
+  if (!can(ws, "workflows.manage")) return { error: NO_WF_ACCESS };
+  const supabase = await createClient();
+  const { error, count } = await supabase.from("workflows").delete({ count: "exact" }).eq("id", id).eq("account_id", ws.account.id);
+  if (error || !count) return { error: "We couldn't delete that workflow. Try again." };
+  refresh();
+  return { ok: "Workflow deleted." };
+}
+
+export async function duplicateWorkflow(id: string): Promise<ActionResult> {
+  const ws = await getWorkspace();
+  if (!can(ws, "workflows.manage")) return { error: NO_WF_ACCESS };
+  const supabase = await createClient();
+  const { data: w } = await supabase.from("workflows").select("name, description, trigger, steps, graph, allow_re_entry, stop_on_reply").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  if (!w) return { error: "We couldn't find that workflow." };
+  const name = await freeWorkflowName(supabase, ws.account.id, `${w.name} (copy)`);
+  const { error } = await supabase
+    .from("workflows")
+    .insert({ account_id: ws.account.id, name, description: w.description, trigger: freshTrigger(w.trigger), steps: w.steps, graph: w.graph, allow_re_entry: w.allow_re_entry, stop_on_reply: w.stop_on_reply, status: "draft" });
+  if (error) return { error: "We couldn't copy it. Try again." };
+  refresh();
+  return { ok: `Copied as "${name}". It's a draft until you switch it on.` };
+}
+
+/** Copies a workflow into another workspace you manage, as a draft. With move, it's then deleted here. */
+export async function copyWorkflowTo(id: string, targetAccountId: string, move: boolean): Promise<ActionResult> {
+  const ws = await getWorkspace();
+  if (!can(ws, "workflows.manage")) return { error: NO_WF_ACCESS };
+  if (!/^[0-9a-f-]{36}$/i.test(targetAccountId) || targetAccountId === ws.account.id) return { error: "Choose another workspace." };
+  const target = ws.workspaces.find((w) => w.id === targetAccountId);
+  if (!target) return { error: "You're not in that workspace." };
+  const supabase = await createClient();
+  const { data: allowed } = await supabase.rpc("has_permission", { target: targetAccountId, perm: "workflows.manage" });
+  if (allowed !== true) return { error: `You don't have access to add workflows in ${target.name}.` };
+  const { data: w } = await supabase.from("workflows").select("name, description, trigger, steps, graph, allow_re_entry, stop_on_reply").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  if (!w) return { error: "We couldn't find that workflow." };
+  const name = await freeWorkflowName(supabase, targetAccountId, w.name);
+  const { error } = await supabase
+    .from("workflows")
+    .insert({ account_id: targetAccountId, name, description: w.description, trigger: freshTrigger(w.trigger), steps: w.steps, graph: w.graph, allow_re_entry: w.allow_re_entry, stop_on_reply: w.stop_on_reply, status: "draft" });
+  if (error) return { error: `We couldn't add it to ${target.name}. Try again.` };
+  if (move) {
+    const { error: delErr } = await supabase.from("workflows").delete().eq("id", id).eq("account_id", ws.account.id);
+    if (delErr) return { error: `It was copied to ${target.name}, but we couldn't remove it here. Delete it by hand.` };
+  }
+  refresh();
+  return {
+    ok: `${move ? "Moved" : "Copied"} to ${target.name} as a draft. Check any stages, tags, forms and team members in its steps, as they belong to this workspace.`,
+  };
 }

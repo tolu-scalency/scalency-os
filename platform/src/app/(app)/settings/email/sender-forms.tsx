@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import { useState, useTransition } from "react";
 import { ActionForm, SubmitButton, type ActionResult } from "@/components/action-form";
 import { Icon } from "@/components/icon";
@@ -171,7 +172,7 @@ export function SenderCard({ s, manager }: { s: Sender; manager: boolean }) {
             type="button"
             disabled={pending}
             onClick={() => {
-              if (window.confirm(`Disconnect ${s.from_email}? Emails will go out from Scalency's address unless another one is in use.`)) run(() => removeSender(s.id));
+              void ask({ title: `Disconnect ${s.from_email}?`, text: "Emails will go out from the workspace's default address unless another one is in use.", confirm: "Disconnect" }).then((ok) => ok && run(() => removeSender(s.id)));
             }}
             className="ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-semibold text-bad hover:bg-bad-bg"
           >

@@ -1,5 +1,6 @@
 "use client";
 
+import { ask } from "@/components/confirm";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
@@ -153,7 +154,7 @@ function DeleteDeal({ id, onDone }: { id: string; onDone: () => void }) {
       disabled={pending}
       onClick={() =>
         start(async () => {
-          if (!window.confirm("Delete this deal? The contact stays.")) return;
+          if (!(await ask({ title: "Delete this deal?", text: "The contact stays." }))) return;
           const fd = new FormData();
           fd.set("id", id);
           const res = await deleteDeal({}, fd);

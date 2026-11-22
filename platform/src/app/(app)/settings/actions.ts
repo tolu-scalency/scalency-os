@@ -194,13 +194,13 @@ function inviteHtml({ workspace, inviter, access, url }: { workspace: string; in
   return `<!doctype html><html lang="en-GB"><body style="margin:0;padding:0;background:#F3F6FB;font-family:Inter,Segoe UI,Helvetica,Arial,sans-serif;color:#0B1B3A;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F6FB;padding:32px 12px;"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#FFFFFF;border-radius:20px;">
-<tr><td style="padding:36px 32px 8px;"><img src="https://os.scalency.us/brand/wordmark.png" width="140" alt="Scalency" style="display:block;width:140px;height:auto;border:0;"></td></tr>
+<tr><td style="padding:36px 32px 8px;font-size:20px;font-weight:700;color:#0B1B3A;">${esc(workspace)}</td></tr>
 <tr><td style="padding:16px 32px 0;"><h1 style="margin:0 0 12px;font-size:22px;line-height:30px;">Join ${esc(workspace)}</h1>
 <p style="margin:0 0 24px;font-size:16px;line-height:26px;color:#3D5170;">${esc(inviter)} has invited you to join <strong>${esc(workspace)}</strong> as <strong>${esc(access)}</strong>.</p></td></tr>
 <tr><td style="padding:0 32px;"><a href="${esc(url)}" style="display:inline-block;padding:15px 32px;font-size:16px;font-weight:600;color:#FFFFFF;text-decoration:none;border-radius:12px;background:#0B63E5;">Accept invite</a></td></tr>
 <tr><td style="padding:24px 32px 36px;"><p style="margin:0;font-size:13px;line-height:20px;color:#6B7C93;">New here? You'll choose a password. Already have a login? You'll just sign in. The link works for 7 days.</p></td></tr>
 </table>
-<p style="margin:16px 0 0;font-size:12px;color:#6B7C93;">Sent by Scalency OS for ${esc(workspace)}.</p>
+<p style="margin:16px 0 0;font-size:12px;color:#6B7C93;">Sent from ${esc(workspace)}.</p>
 </td></tr></table></body></html>`;
 }
 

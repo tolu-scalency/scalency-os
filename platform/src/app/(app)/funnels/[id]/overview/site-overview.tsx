@@ -4,6 +4,7 @@
 // reorder, add, copy and delete them, the shared header and footer, the link, and
 // the site's own domains with the DNS records to add.
 
+import { ask } from "@/components/confirm";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -273,7 +274,7 @@ export function SiteOverview({
                           icon="trash"
                           label="Delete"
                           disabled={pending || pages.length < 2}
-                          onClick={() => window.confirm(`Delete "${p.name}"? This can't be undone.`) && run(() => deleteStep(site.id, p.id), () => router.refresh())}
+                          onClick={async () => (await ask({ title: `Delete "${p.name}"?`, text: "This can't be undone." })) && run(() => deleteStep(site.id, p.id), () => router.refresh())}
                         />
                       </>
                     )}
@@ -382,7 +383,7 @@ export function SiteOverview({
                   <button type="button" disabled={pending} onClick={() => run(() => checkDomain(d.id), () => router.refresh())} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold">
                     <Icon name="refresh" size={14} /> Check now
                   </button>
-                  <button type="button" disabled={pending} onClick={() => window.confirm(`Remove ${d.domain}? It stops showing this page straight away.`) && run(() => removeDomain(d.id), () => router.refresh())} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold text-bad">
+                  <button type="button" disabled={pending} onClick={async () => (await ask({ title: `Remove ${d.domain}?`, text: "It stops showing this page straight away.", confirm: "Remove" })) && run(() => removeDomain(d.id), () => router.refresh())} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold text-bad">
                     <Icon name="trash" size={14} /> Remove
                   </button>
                 </div>

@@ -26,7 +26,7 @@ const ACTIONS: Action[] = [
   { label: "Settings", icon: "settings", href: "/settings" },
 ];
 
-/** Ctrl+K (or Cmd+K): jump anywhere, find a contact, or ask Scalency AI. */
+/** Ctrl+K (or Cmd+K): jump anywhere, find a contact, or ask AI. */
 export function CommandBar({ open, onClose, permissions = [] }: { open: boolean; onClose: () => void; permissions?: string[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -57,11 +57,11 @@ export function CommandBar({ open, onClose, permissions = [] }: { open: boolean;
       ? [
           {
             key: "ai",
-            run: () => startThinking(async () => setAnswer(await askAI(q).catch(() => ({ notice: "Scalency AI couldn't be reached. Please try again." })))),
+            run: () => startThinking(async () => setAnswer(await askAI(q).catch(() => ({ notice: "The AI assistant couldn't be reached. Please try again." })))),
             node: (
               <>
                 <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[linear-gradient(135deg,#a5b4fc,#4f46e5)] text-white"><Icon name="spark" size={15} /></span>
-                <span className="min-w-0 flex-1 truncate">Ask Scalency AI: <strong>{q}</strong></span>
+                <span className="min-w-0 flex-1 truncate">Ask AI: <strong>{q}</strong></span>
               </>
             ),
           },
@@ -128,7 +128,7 @@ export function CommandBar({ open, onClose, permissions = [] }: { open: boolean;
                 items[active]?.run();
               }
             }}
-            placeholder="Search, jump to a page, or ask Scalency AI…"
+            placeholder="Search, jump to a page, or ask AI…"
             className="h-14 flex-1 bg-transparent text-[15px] outline-none placeholder:text-faint"
           />
           <kbd className="rounded-md border border-line px-1.5 py-0.5 font-mono text-[11px] text-faint">Esc</kbd>
@@ -137,7 +137,7 @@ export function CommandBar({ open, onClose, permissions = [] }: { open: boolean;
         {(thinking || answer) && (
           <div className="border-b border-line bg-[linear-gradient(180deg,#f5f7ff,#ffffff)] px-5 py-4">
             <div className="mb-1.5 flex items-center gap-2 text-[12px] font-semibold text-[#4f46e5]">
-              <Icon name="spark" size={14} /> Scalency AI
+              <Icon name="spark" size={14} /> AI assistant
             </div>
             {thinking ? (
               <div className="flex flex-col gap-2">

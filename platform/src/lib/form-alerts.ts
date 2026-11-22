@@ -56,7 +56,7 @@ export function formAlerts(admin: SupabaseClient, x: Input) {
 
       const rows: Record<string, unknown>[] = [];
       if (wantsEmail) {
-        const body = [head, "", ...lines, "", "Open Scalency OS to see the contact and reply."].join("\n");
+        const body = [head, "", ...lines, "", "Open your workspace to see the contact and reply."].join("\n");
         for (const to of def.notify.emails)
           rows.push({ account_id: x.accountId, contact_id: x.contactId, direction: "outbound", channel: "email", to_address: to, subject: `New form submission: ${x.formName}`.slice(0, 200), body, status: "queued" });
       }

@@ -38,10 +38,10 @@ async function makeDefault(admin: NonNullable<ReturnType<typeof adminClient>>, a
 }
 
 function testMail(to: string, workspace: string, from: string) {
-  const text = `This is a test from Scalency OS. Emails from ${workspace} will now go out from ${from}.`;
+  const text = `This is a test from ${workspace}. Your emails will now go out from ${from}.`;
   return {
     to,
-    subject: "Test email from Scalency OS",
+    subject: `Test email from ${workspace}`,
     text,
     html: `<p style="font:15px/24px -apple-system,Segoe UI,Arial,sans-serif;color:#1F2D45">${text}</p>`,
   };

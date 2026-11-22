@@ -26,7 +26,7 @@ const modules: { group: string; items: { name: string; text: string; icon: IconN
     group: "Automate",
     items: [
       { name: "Workflows", text: "Triggers, waits, texts and emails", icon: "zap", live: true },
-      { name: "Scalency AI", text: "Ask anything about your pipeline", icon: "spark", live: true },
+      { name: "AI assistant", text: "Ask anything about your pipeline", icon: "spark", live: true },
       { name: "AI agents", text: "Reply and book while you sleep", icon: "user", live: false },
       { name: "AI builder", text: "Describe it, we build the workflow", icon: "activity", live: false },
     ],

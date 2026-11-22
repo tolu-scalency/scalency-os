@@ -1,11 +1,11 @@
 "use client";
 
 import { Toaster } from "@/components/toast";
+import { ConfirmHost } from "@/components/confirm";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/icon";
-import { Logo } from "@/components/logo";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { acceptInvite, createWorkspace, switchWorkspace } from "@/app/(app)/workspace-actions";
 import { CommandBar } from "./command";
@@ -87,6 +87,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
     return (
       <div className="min-h-screen bg-canvas" style={{ ["--chrome-h" as string]: "0px" }}>
         <Toaster />
+        <ConfirmHost />
         <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} permissions={user.permissions} />
         <div key={pathname} className="page-in">
           {page}
@@ -97,6 +98,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
   return (
     <div className="flex min-h-screen bg-canvas" style={{ ["--chrome-h" as string]: "64px" }}>
       <Toaster />
+        <ConfirmHost />
       <aside className={`sticky top-0 z-40 hidden h-screen flex-none transition-[width] duration-200 ease-out lg:block ${collapsed ? "w-[76px]" : "w-[256px]"}`}>
         <Sidebar pathname={pathname} user={user} collapsed={collapsed} onToggle={toggle} />
       </aside>
@@ -180,12 +182,11 @@ function Sidebar({ pathname, user, collapsed, onToggle, mobile = false }: { path
     <nav aria-label="Main" className="sidebar-blue relative isolate flex h-full flex-col overflow-hidden text-white">
       <SidebarGlow />
       <div className={`flex flex-none items-center px-4 pb-4 pt-4 ${collapsed ? "flex-col gap-3" : "justify-between"}`}>
-        <Link href="/dashboard" className="flex items-center" aria-label="Scalency OS home">
+        <Link href="/dashboard" className={`flex min-w-0 items-center ${collapsed ? "" : "flex-1 pr-2"}`} aria-label={`${user.workspace} home`} title={user.workspace}>
           {collapsed ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src="/brand/mark.png" alt="" width={28} height={28} className="h-7 w-7 brightness-0 invert" />
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 text-[15px] font-bold">{user.workspace.charAt(0).toUpperCase()}</span>
           ) : (
-            <Logo variant="white" height={22} />
+            <span className="truncate text-[17px] font-bold tracking-tight">{user.workspace}</span>
           )}
         </Link>
         <button

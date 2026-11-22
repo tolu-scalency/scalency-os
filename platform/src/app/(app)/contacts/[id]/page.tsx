@@ -65,7 +65,7 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
   return (
     <>
       <section className="card p-5 sm:p-6">
-        <ContactEditor contact={{ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email ?? "", phone: c.phone ?? "" }}>
+        <ContactEditor canDelete={can(ws, "contacts.delete")} contact={{ id: c.id, firstName: c.firstName, lastName: c.lastName, email: c.email ?? "", phone: c.phone ?? "" }}>
           <div className="flex flex-wrap items-center gap-4">
             <span className="tile h-16 w-16 rounded-[20px] text-[22px] font-semibold">{c.initials}</span>
             <div className="min-w-0 flex-[1_1_220px]">

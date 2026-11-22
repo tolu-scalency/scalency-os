@@ -62,7 +62,7 @@ export function ChatRoom({
         setMessages((list) =>
           list.some((x) => x.id === m.id)
             ? list
-            : [...list, { id: m.id, body: m.body, authorId: m.author_id, authorName: m.author_id ? (names[m.author_id] ?? "Teammate") : "Scalency", createdAt: m.created_at, contactId: m.contact_id }],
+            : [...list, { id: m.id, body: m.body, authorId: m.author_id, authorName: m.author_id ? (names[m.author_id] ?? "Teammate") : "Assistant", createdAt: m.created_at, contactId: m.contact_id }],
         );
       })
       .subscribe();

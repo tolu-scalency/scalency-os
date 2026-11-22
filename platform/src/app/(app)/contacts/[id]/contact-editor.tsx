@@ -8,20 +8,26 @@ import { deleteContact, updateContact } from "../actions";
 type Editable = { id: string; firstName: string; lastName: string; email: string; phone: string };
 
 /** Shows the contact header, with "Edit" to change details and "Delete" to remove them. */
-export function ContactEditor({ contact, children }: { contact: Editable; children: React.ReactNode }) {
+export function ContactEditor({ contact, children, canDelete = true }: { contact: Editable; children: React.ReactNode; canDelete?: boolean }) {
   const [editing, setEditing] = useState(false);
 
   if (!editing) {
     return (
       <div className="relative">
         {children}
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-muted hover:text-brand"
-        >
-          <Icon name="edit" size={14} /> Edit details
-        </button>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <button type="button" onClick={() => setEditing(true)} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted hover:text-brand">
+            <Icon name="edit" size={14} /> Edit details
+          </button>
+          {canDelete && (
+            <ActionForm action={deleteContact} className="contents">
+              <input type="hidden" name="id" value={contact.id} />
+              <ConfirmSubmit message="Delete this contact? Their notes, tasks, deals and messages are deleted too. This can't be undone." className="min-h-8! border-transparent! px-0! text-[13px]! font-medium! hover:bg-transparent!">
+                <Icon name="trash" size={14} /> Delete contact
+              </ConfirmSubmit>
+            </ActionForm>
+          )}
+        </div>
       </div>
     );
   }
@@ -45,13 +51,13 @@ export function ContactEditor({ contact, children }: { contact: Editable; childr
           <SubmitButton>Save changes</SubmitButton>
         </div>
       </ActionForm>
-      <ActionForm action={deleteContact} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/15 bg-bad-bg/40 p-3">
+      {canDelete && <ActionForm action={deleteContact} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/15 bg-bad-bg/40 p-3">
         <input type="hidden" name="id" value={contact.id} />
         <span className="text-[13px] text-muted">Delete this contact, their notes and tasks.</span>
-        <ConfirmSubmit message="Delete this contact? This can't be undone.">
+        <ConfirmSubmit message="Delete this contact? Their notes, tasks, deals and messages are deleted too. This can't be undone.">
           <Icon name="trash" size={15} /> Delete
         </ConfirmSubmit>
-      </ActionForm>
+      </ActionForm>}
     </div>
   );
 }
