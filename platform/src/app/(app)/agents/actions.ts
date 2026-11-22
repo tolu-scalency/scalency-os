@@ -84,10 +84,24 @@ export async function saveGhlChoices(
 }
 
 /** Hand a conversation back to the AI, or stop it. */
-export async function setThread(threadId: string, to: "active" | "stopped"): Promise<Result> {
+export async function setThread(threadId: string, to: "active" | "stopped" | "opener"): Promise<Result> {
   const ws = await getWorkspace();
   if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
   const supabase = await createClient();
+  if (to === "opener") {
+    // Only for a lead who hasn't had a first message yet. The clock sends it within a minute.
+    const { data, error } = await supabase
+      .from("setter_threads")
+      .update({ state: "active", next_action: "opener", next_action_at: new Date().toISOString(), note: null })
+      .eq("id", threadId)
+      .eq("account_id", ws.account.id)
+      .is("last_outbound_at", null)
+      .select("id");
+    if (error) return { error: "We couldn't do that. Try again." };
+    if (!data?.length) return { error: "The AI has already messaged this lead." };
+    refresh();
+    return { ok: "Queued. The first message goes out within a minute, if it's within opening hours. In test mode the contact needs the ai-test tag in GHL." };
+  }
   const patch =
     to === "active"
       ? { state: "active", next_action: "followup", next_action_at: new Date(Date.now() + 86_400_000).toISOString(), note: "Handed back to the AI" }

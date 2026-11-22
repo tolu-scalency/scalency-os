@@ -8,9 +8,9 @@ import type { ThreadState } from "@/lib/setter";
 import { setThread } from "../agents/actions";
 
 /** Hand a lead back to the AI, or stop the AI messaging them. */
-export function SetterThreadButtons({ id, state }: { id: string; state: ThreadState }) {
+export function SetterThreadButtons({ id, state, contacted }: { id: string; state: ThreadState; contacted: boolean }) {
   const [pending, start] = useTransition();
-  const run = (to: "active" | "stopped") =>
+  const run = (to: "active" | "stopped" | "opener") =>
     start(async () => {
       const r = await setThread(id, to);
       notify(r.error ?? r.ok ?? "Done", r.error ? "bad" : "ok");
@@ -20,6 +20,11 @@ export function SetterThreadButtons({ id, state }: { id: string; state: ThreadSt
       {(state === "paused" || state === "handed_over" || state === "finished") && (
         <button type="button" disabled={pending} onClick={() => run("active")} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
           <Icon name="refresh" size={13} /> Hand back to the AI
+        </button>
+      )}
+      {state === "active" && !contacted && (
+        <button type="button" disabled={pending} onClick={() => run("opener")} className="btn-primary inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
+          <Icon name="send" size={13} /> Send first message now
         </button>
       )}
       {state === "active" && (

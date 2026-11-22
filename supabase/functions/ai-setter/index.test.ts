@@ -25,6 +25,8 @@ import {
   unseal,
   withinHours,
   work,
+  WAITING_FOR_TAG,
+  NO_TAG,
   type Agent,
   type ClaudeResponse,
   type Thread,
@@ -389,4 +391,21 @@ Deno.test("email replies: the AI answers in the same thread, with Re: and the em
   assertStringIncludes(seen, "Lead: how much is botox?");
   assert(!seen.includes("On Sun wrote"));
   assertStringIncludes(JSON.stringify(c.seen[0]), "Never mention glitches");
+});
+
+Deno.test("test mode: the first message waits 2 minutes for the ai-test tag once, then says why it wasn't sent", async () => {
+  const c = scripted([() => ({ content: [tool("send_message", { text: "hi" })] })]);
+  const now = new Date("2026-11-24T15:00:00Z");
+  const first = fakeDb();
+  const r1 = await work(first.db, { ...agent, status: "test" }, newThread(), { kind: "opener" }, { claude: c.claude, ghl: fakeGhl({}).ghl, now });
+  assertMatch(String(r1.skipped), /waiting/);
+  const wait = first.rows.find((r) => r.table === "setter_threads" && r.op === "update")?.data as Record<string, unknown>;
+  assertEquals(wait.next_action, "opener");
+  assertEquals(wait.next_action_at, "2026-11-24T15:02:00.000Z");
+
+  const second = fakeDb();
+  const r2 = await work(second.db, { ...agent, status: "test" }, { ...newThread(), note: WAITING_FOR_TAG }, { kind: "opener" }, { claude: c.claude, ghl: fakeGhl({}).ghl, now });
+  assertMatch(String(r2.skipped), /isn't tagged/);
+  assert(second.rows.some((r) => r.table === "setter_threads" && (r.data as Record<string, unknown>).note === NO_TAG));
+  assert(second.rows.some((r) => r.table === "setter_turns" && String((r.data as Record<string, unknown>).body).includes("ai-test")));
 });

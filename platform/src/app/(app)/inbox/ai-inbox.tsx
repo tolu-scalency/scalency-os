@@ -19,6 +19,7 @@ type Row = {
   channel: string;
   appointment_at: string | null;
   note: string | null;
+  last_outbound_at: string | null;
   updated_at: string;
 };
 type Turn = { id: string; role: "lead" | "ai" | "event"; body: string; channel: string | null; created_at: string };
@@ -30,7 +31,7 @@ export async function AiInbox({ accountId, selectedId, canManage }: { accountId:
   const [{ data: rows }, { data: agents }] = await Promise.all([
     supabase
       .from("setter_threads")
-      .select("id, agent_id, ghl_contact_id, contact_name, state, channel, appointment_at, note, updated_at")
+      .select("id, agent_id, ghl_contact_id, contact_name, state, channel, appointment_at, note, last_outbound_at, updated_at")
       .eq("account_id", accountId)
       .order("updated_at", { ascending: false })
       .limit(100),
@@ -144,10 +145,11 @@ export async function AiInbox({ accountId, selectedId, canManage }: { accountId:
               )}
             </ul>
             <div className="flex-none border-t border-line bg-white p-3 sm:p-4">
+              {selected.note && <p className="mb-2 text-center text-[12.5px] font-medium text-navy">{selected.note}</p>}
               <p className="mb-2 text-center text-[12.5px] text-muted">
                 Replies to this lead are sent from GHL. If you reply there yourself, the AI steps back.
               </p>
-              {canManage && <SetterThreadButtons id={selected.id} state={selected.state} />}
+              {canManage && <SetterThreadButtons id={selected.id} state={selected.state} contacted={Boolean(selected.last_outbound_at)} />}
             </div>
           </>
         )}
