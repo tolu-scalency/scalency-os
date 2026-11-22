@@ -20,7 +20,7 @@ export default async function SetterRoute({ params }: { params: Promise<{ id: st
       .maybeSingle(),
     supabase
       .from("setter_threads")
-      .select("id, ghl_contact_id, contact_name, state, channel, total_touches, next_action_at, appointment_at, note, updated_at, setter_turns(role, body, channel, created_at)")
+      .select("id, ghl_contact_id, contact_name, state, channel, total_touches, next_action, next_action_at, last_outbound_at, appointment_at, note, updated_at, setter_turns(role, body, channel, created_at)")
       .eq("agent_id", id)
       .eq("account_id", ws.account.id)
       .order("updated_at", { ascending: false })
@@ -35,6 +35,8 @@ export default async function SetterRoute({ params }: { params: Promise<{ id: st
     channel: t.channel as string,
     touches: (t.total_touches as number) ?? 0,
     nextAt: (t.next_action_at as string) ?? null,
+    nextIsOpener: t.next_action === "opener",
+    contacted: Boolean(t.last_outbound_at),
     appointmentAt: (t.appointment_at as string) ?? null,
     note: (t.note as string) ?? null,
     updatedAt: t.updated_at as string,

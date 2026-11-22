@@ -23,6 +23,8 @@ export type ThreadView = {
   channel: string;
   touches: number;
   nextAt: string | null;
+  nextIsOpener: boolean;
+  contacted: boolean;
   appointmentAt: string | null;
   note: string | null;
   updatedAt: string;
@@ -804,7 +806,8 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
                   <div className="truncate text-[12px] text-muted">
                     {t.channel} · {t.touches} follow-up{t.touches === 1 ? "" : "s"} · updated {fmt(t.updatedAt)}
                     {t.appointmentAt ? ` · consult ${fmt(t.appointmentAt)}` : ""}
-                    {t.state === "active" && t.nextAt ? ` · next follow-up ${fmt(t.nextAt)}` : ""}
+                    {t.state === "active" && t.nextAt ? ` · ${t.nextIsOpener ? "first message" : "next follow-up"} ${fmt(t.nextAt)}` : ""}
+                    {t.state === "active" && !t.contacted && !t.nextAt ? " · first message not sent" : ""}
                   </div>
                 </div>
                 <Pill tone={look.tone}>{look.label}</Pill>
@@ -830,6 +833,11 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
                       {(t.state === "paused" || t.state === "handed_over" || t.state === "finished") && (
                         <button type="button" disabled={pending} onClick={() => start(async () => void notifyResult(await setThread(t.id, "active")))} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
                           <Icon name="refresh" size={13} /> Hand back to the AI
+                        </button>
+                      )}
+                      {t.state === "active" && !t.contacted && (
+                        <button type="button" disabled={pending} onClick={() => start(async () => void notifyResult(await setThread(t.id, "opener")))} className="btn-primary inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
+                          <Icon name="send" size={13} /> Send first message now
                         </button>
                       )}
                       {t.state === "active" && (

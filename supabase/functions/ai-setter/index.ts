@@ -104,6 +104,7 @@ export type Thread = {
   last_inbound_at: string | null;
   last_outbound_at: string | null;
   sent_ids: string[];
+  note?: string | null;
 };
 
 export type Turn = { who: "lead" | "ai" | "team" | "auto"; text: string; at: string; channel?: string; id?: string; subject?: string };
@@ -830,6 +831,9 @@ async function update(db: Db, thread: Thread, patch: Partial<Thread> & Record<st
   await db.from("setter_threads").update(patch).eq("id", thread.id);
 }
 
+export const WAITING_FOR_TAG = "Test mode: waiting for the ai-test tag in GHL before the first message.";
+export const NO_TAG = "Not sent. In test mode the AI only messages contacts tagged ai-test in GHL. Add the tag, then click Send first message now.";
+
 /** One go at a lead: the first text, a reply or a follow-up, with everything it leads to in GHL. */
 export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, deps: { claude: BrainDeps["claude"]; ghl: Ghl; now?: Date }) {
   const now = deps.now ?? new Date();
@@ -841,7 +845,16 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
 
   const { contact = {} } = await ghl.contact(contactId);
   const tags = ((contact.tags as string[]) ?? []).map((t) => String(t).toLowerCase());
-  if (agent.status === "test" && !tags.includes("ai-test")) return { skipped: "test mode: contact isn't tagged ai-test" };
+  if (agent.status === "test" && !tags.includes("ai-test")) {
+    // GHL often adds the tag a moment after the webhook fires, so give the first message one more go.
+    if (mode.kind === "opener" && thread.note !== WAITING_FOR_TAG) {
+      await update(db, thread, { next_action: "opener", next_action_at: new Date(now.getTime() + 2 * 60_000).toISOString(), note: WAITING_FOR_TAG });
+      return { skipped: "test mode: waiting for the ai-test tag" };
+    }
+    await update(db, thread, { next_action: null, next_action_at: null, note: NO_TAG });
+    if (mode.kind === "opener") await logTurn(db, { agent, thread, role: "event", body: "Not sent: test mode needs the ai-test tag" });
+    return { skipped: "test mode: contact isn't tagged ai-test" };
+  }
   if (contact.dnd === true) {
     await update(db, thread, { state: "stopped", next_action_at: null, next_action: null, note: "Do not disturb is on in GHL" });
     return { skipped: "do not disturb" };
@@ -939,6 +952,7 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
 
   // What happens next.
   const patch: Partial<Thread> & Record<string, unknown> = { state, channel, contact_name: name, last_outbound_at: brain.message ? now.toISOString() : thread.last_outbound_at };
+  if (brain.message && (thread.note === WAITING_FOR_TAG || thread.note === NO_TAG || thread.note?.startsWith("First message failed"))) patch.note = null;
   if (sentId) patch.sent_ids = [...(thread.sent_ids ?? []), sentId].slice(-200);
   if (state === "active") {
     const touch = mode.kind === "followup" ? mode.touch + 1 : 0;
@@ -1067,7 +1081,12 @@ async function webhook(event: string, url: URL, req: Request) {
         (async () => {
           const { data: fresh } = await db.from("setter_threads").update({ next_action_at: null, next_action: null }).eq("id", thread.id).eq("next_action", "opener").select("*").maybeSingle();
           if (!fresh) return;
-          await work(db, agent, fresh as Thread, { kind: "opener" }, { claude: claudeClient(apiKey), ghl: await ghlFor(agent) });
+          try {
+            await work(db, agent, fresh as Thread, { kind: "opener" }, { claude: claudeClient(apiKey), ghl: await ghlFor(agent) });
+          } catch (e) {
+            console.error("Opener failed", thread.id, e);
+            await update(db, fresh as Thread, { next_action: "opener", next_action_at: new Date(Date.now() + 5 * 60_000).toISOString(), note: `First message failed, trying again in 5 minutes: ${String((e as Error).message ?? e).slice(0, 240)}` });
+          }
         })(),
       );
     }
@@ -1267,7 +1286,7 @@ async function app(req: Request) {
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v3 (22 Nov): email threads, quote stripping";
+export const VERSION = "v4 (22 Nov): waits for the ai-test tag, shows why a message wasn't sent";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {
