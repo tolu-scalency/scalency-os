@@ -181,7 +181,7 @@ Deno.test("brain: STOP-style refusal sends nothing; plain text answers work", as
 
 type Call = { method: string; path: string; body: Record<string, unknown> | null };
 
-function fakeGhl(opts: { tags?: string[]; messages?: unknown[]; dnd?: boolean; noPhone?: boolean }) {
+function fakeGhl(opts: { tags?: string[]; messages?: unknown[]; dnd?: boolean; noPhone?: boolean; noThreading?: boolean }) {
   const calls: Call[] = [];
   const fetcher = (async (url: string | URL, init?: RequestInit) => {
     const u = new URL(String(url));
@@ -192,6 +192,7 @@ function fakeGhl(opts: { tags?: string[]; messages?: unknown[]; dnd?: boolean; n
     if (u.pathname.startsWith("/contacts/") && method === "GET") return ok({ contact: { id: "c1", firstName: "Jess", lastName: "Doe", phone: opts.noPhone ? "" : "+15551234567", email: "jess@example.com", tags: opts.tags ?? [], dnd: opts.dnd ?? false, customFields: [{ id: "f1", value: "Botox/Fillers" }] } });
     if (u.pathname === "/conversations/search") return ok({ conversations: [{ id: "conv1" }] });
     if (u.pathname === "/conversations/conv1/messages") return ok({ messages: { messages: opts.messages ?? [] } });
+    if (u.pathname === "/conversations/messages" && opts.noThreading && body?.replyMessageId) return new Response(JSON.stringify({ message: "bad replyMessageId" }), { status: 422 });
     if (u.pathname === "/conversations/messages") return ok({ messageId: `sent-${calls.length}` });
     if (u.pathname.endsWith("/free-slots")) {
       return ok({ "2026-11-25": { slots: ["2026-11-25T10:00:00-05:00", "2026-11-25T14:00:00-05:00"] }, traceId: "x" });
@@ -203,7 +204,7 @@ function fakeGhl(opts: { tags?: string[]; messages?: unknown[]; dnd?: boolean; n
   return { ghl: new Ghl("pit-test", "loc1", fetcher), calls };
 }
 
-function fakeDb() {
+function fakeDb(saved: unknown[] = []) {
   const rows: { table: string; op: string; data: unknown }[] = [];
   const builder = (table: string) => {
     let op = "select";
@@ -223,9 +224,12 @@ function fakeDb() {
       },
       select: () => b,
       eq: () => b,
+      gte: () => b,
+      order: () => b,
+      limit: () => b,
       maybeSingle: async () => ({ data: null }),
       single: async () => ({ data: null }),
-      then: (res: (v: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(res),
+      then: (res: (v: unknown) => unknown) => Promise.resolve({ data: table === "setter_turns" && op === "select" ? saved : null, error: null }).then(res),
     };
     return b;
   };
@@ -408,4 +412,34 @@ Deno.test("test mode: the first message waits 2 minutes for the ai-test tag once
   assertMatch(String(r2.skipped), /isn't tagged/);
   assert(second.rows.some((r) => r.table === "setter_threads" && (r.data as Record<string, unknown>).note === NO_TAG));
   assert(second.rows.some((r) => r.table === "setter_turns" && String((r.data as Record<string, unknown>).body).includes("ai-test")));
+});
+
+Deno.test("email replies: if GHL won't thread it, it's still sent as a Re: email", async () => {
+  const { ghl, calls } = fakeGhl({
+    noPhone: true,
+    noThreading: true,
+    messages: [{ id: "in1", direction: "inbound", body: "how much is botox?", messageType: "TYPE_EMAIL", dateAdded: "2026-11-22T13:38:00Z", meta: { email: { subject: "Re: Your enquiry with Glow Aesthetics" } } }],
+  });
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Botox is $12 a unit." })] })]);
+  const r = await work(fakeDb().db, agent, { ...newThread(), channel: "Email" }, { kind: "reply" }, { claude: c.claude, ghl, now: new Date("2026-11-22T13:39:00Z") });
+  assertEquals(r.sent, "Botox is $12 a unit.");
+  const sends = calls.filter((x) => x.path === "/conversations/messages");
+  assertEquals(sends.length, 2);
+  assertEquals(sends[1].body?.replyMessageId, undefined);
+  assertEquals(sends[1].body?.subject, "Re: Your enquiry with Glow Aesthetics");
+});
+
+Deno.test("email replies: if GHL lists the lead's email with no text, the saved copy is used", async () => {
+  const { ghl } = fakeGhl({
+    noPhone: true,
+    messages: [
+      { id: "out1", direction: "outbound", body: "<p>Hi Jess, it's Sophie</p>", messageType: "TYPE_EMAIL", dateAdded: "2026-11-22T16:23:00Z" },
+      { id: "in1", direction: "inbound", body: "", messageType: "TYPE_EMAIL", dateAdded: "2026-11-22T16:25:00Z" },
+    ],
+  });
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Botox is $12 a unit, and most say it feels like a quick pinch." })] })]);
+  const db = fakeDb([{ body: "Hi, how much is botox and does it hurt?", channel: "TYPE_EMAIL", created_at: "2026-11-22T16:25:05Z" }]);
+  const thread = { ...newThread(), channel: "Email", sent_ids: ["out1"], last_outbound_at: "2026-11-22T16:23:00Z", last_inbound_at: "2026-11-22T16:25:05Z" };
+  await work(db.db, agent, thread, { kind: "reply" }, { claude: c.claude, ghl, now: new Date("2026-11-22T16:26:00Z") });
+  assertStringIncludes(JSON.stringify(c.seen[0].messages), "how much is botox and does it hurt?");
 });

@@ -24,7 +24,13 @@ type Row = {
 };
 type Turn = { id: string; role: "lead" | "ai" | "event"; body: string; channel: string | null; created_at: string };
 
-const when = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const whenIn = (tz: string) => (iso: string) => {
+  try {
+    return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: tz });
+  } catch {
+    return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+};
 
 export async function AiInbox({ accountId, selectedId, canManage }: { accountId: string; selectedId?: string; canManage: boolean }) {
   const supabase = await createClient();
@@ -35,7 +41,7 @@ export async function AiInbox({ accountId, selectedId, canManage }: { accountId:
       .eq("account_id", accountId)
       .order("updated_at", { ascending: false })
       .limit(100),
-    supabase.from("setter_agents").select("id, name, ghl_location_id").eq("account_id", accountId),
+    supabase.from("setter_agents").select("id, name, ghl_location_id, business").eq("account_id", accountId),
   ]);
   const threads = (rows ?? []) as Row[];
   const agentOf = new Map((agents ?? []).map((a) => [a.id as string, { name: a.name as string, location: (a.ghl_location_id as string) ?? "" }]));
@@ -54,6 +60,9 @@ export async function AiInbox({ accountId, selectedId, canManage }: { accountId:
     : { data: [] };
   const turns = (turnRows ?? []) as Turn[];
   const agent = selected ? agentOf.get(selected.agent_id) : undefined;
+  // Times in the business's own time zone (set on the AI setter's Clinic tab).
+  const tz = String(((agents ?? []).find((a) => a.id === selected?.agent_id)?.business as { timezone?: string } | null)?.timezone || "Europe/London");
+  const when = whenIn(tz);
   const ghlLink = selected && agent?.location ? `https://app.gohighlevel.com/v2/location/${agent.location}/contacts/detail/${selected.ghl_contact_id}` : null;
 
   return (

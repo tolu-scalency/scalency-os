@@ -869,10 +869,30 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
     await logTurn(db, { agent, thread, role: "event", body: "A team member replied to this lead, so the AI stepped back." });
     return { skipped: "team took over" };
   }
+  // GHL sometimes lists an email with no text. If the lead's newest message is missing, use the copy
+  // we saved when the webhook came in, so the AI always sees what they actually said.
+  const repliedSince = thread.last_inbound_at && (!thread.last_outbound_at || thread.last_inbound_at > thread.last_outbound_at);
+  if (repliedSince) {
+    const aiAt = [...history].reverse().find((t) => t.who === "ai" || t.who === "auto")?.at ?? "";
+    if (!history.some((t) => t.who === "lead" && t.at > aiAt)) {
+      const { data: saved } = await db
+        .from("setter_turns")
+        .select("body, channel, created_at")
+        .eq("thread_id", thread.id)
+        .eq("role", "lead")
+        .gte("created_at", thread.last_outbound_at ?? "1970-01-01")
+        .order("created_at", { ascending: true })
+        .limit(5);
+      for (const r of (saved ?? []) as { body: string; channel: string | null; created_at: string }[]) {
+        const ch = channelOf(r.channel ?? "") ?? undefined;
+        history.push({ who: "lead", text: ch === "Email" ? emailReplyText(r.body) : r.body, at: r.created_at, channel: ch });
+      }
+    }
+  }
   // A follow-up isn't needed if they've replied since (the reply is answered instead).
   const lastLead = [...history].reverse().find((t) => t.who === "lead");
   const lastAi = [...history].reverse().find((t) => t.who === "ai");
-  if (mode.kind === "followup" && lastLead && (!lastAi || lastLead.at > lastAi.at)) mode = { kind: "reply" };
+  if (mode.kind === "followup" && ((lastLead && (!lastAi || lastLead.at > lastAi.at)) || repliedSince)) mode = { kind: "reply" };
 
   // Reply on the channel they used; otherwise text, or email if there's no phone number.
   let channel = (mode.kind === "reply" && lastLead?.channel) || thread.channel || "SMS";
@@ -945,14 +965,21 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
       const base = (last?.subject || `Your enquiry with ${b.clinicName || "us"}`).replace(/^(re:\s*)+/i, "");
       email = { subject: last ? `Re: ${base}` : base, replyTo: last?.id };
     }
-    sentId = await ghl.send(contactId, channel, brain.message, email);
+    try {
+      sentId = await ghl.send(contactId, channel, brain.message, email);
+    } catch (e) {
+      if (!email?.replyTo) throw e;
+      // GHL wouldn't thread it: send it as a "Re:" email instead, which most inboxes still group.
+      console.error("Threaded email failed, sending without it", (e as Error).message);
+      sentId = await ghl.send(contactId, channel, brain.message, { subject: email.subject });
+    }
     await logTurn(db, { agent, thread, role: "ai", body: brain.message, channel, meta: { mode: mode.kind, ...(mode.kind === "followup" ? { touch: mode.touch + 1 } : {}) } });
   }
   for (const e of brain.events) await logTurn(db, { agent, thread, role: "event", body: e });
 
   // What happens next.
   const patch: Partial<Thread> & Record<string, unknown> = { state, channel, contact_name: name, last_outbound_at: brain.message ? now.toISOString() : thread.last_outbound_at };
-  if (brain.message && (thread.note === WAITING_FOR_TAG || thread.note === NO_TAG || thread.note?.startsWith("First message failed"))) patch.note = null;
+  if (brain.message && (thread.note === WAITING_FOR_TAG || thread.note === NO_TAG || (thread.note?.startsWith("First message failed") || thread.note?.startsWith("Reply failed")))) patch.note = null;
   if (sentId) patch.sent_ids = [...(thread.sent_ids ?? []), sentId].slice(-200);
   if (state === "active") {
     const touch = mode.kind === "followup" ? mode.touch + 1 : 0;
@@ -1118,7 +1145,13 @@ async function webhook(event: string, url: URL, req: Request) {
         await new Promise((r) => setTimeout(r, rules.replyDelaySeconds * 1000));
         const { data: fresh } = await db.from("setter_threads").update({ reply_token: null }).eq("id", thread.id).eq("reply_token", token).select("*").maybeSingle();
         if (!fresh) return;
-        await work(db, agent, fresh as Thread, { kind: "reply" }, { claude: claudeClient(apiKey), ghl: await ghlFor(agent) });
+        try {
+          await work(db, agent, fresh as Thread, { kind: "reply" }, { claude: claudeClient(apiKey), ghl: await ghlFor(agent) });
+        } catch (e) {
+          console.error("Reply failed", thread.id, e);
+          // The clock tries again in 2 minutes (a due follow-up becomes a reply, as they wrote last).
+          await update(db, fresh as Thread, { next_action: "followup", next_action_at: new Date(Date.now() + 2 * 60_000).toISOString(), note: `Reply failed, trying again in 2 minutes: ${String((e as Error).message ?? e).slice(0, 240)}` });
+        }
       })(),
     );
     return json({ ok: true });
@@ -1286,7 +1319,7 @@ async function app(req: Request) {
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v4 (22 Nov): waits for the ai-test tag, shows why a message wasn't sent";
+export const VERSION = "v5 (22 Nov): email replies always answered, failures retried";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {
