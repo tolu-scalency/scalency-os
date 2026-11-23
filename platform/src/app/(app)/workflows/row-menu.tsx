@@ -2,6 +2,7 @@
 
 // The "..." menu on each workflow in the list: open, duplicate, copy or move to another workspace, delete.
 
+import { shortId } from "@/lib/short-id-shared";
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
@@ -76,7 +77,7 @@ export function WorkflowRowMenu({ id, name, running, others }: { id: string; nam
             </>
           ) : (
             <>
-              <Link href={`/workflows/${id}`} className={item}>
+              <Link href={`/workflows/${shortId(id)}`} className={item}>
                 <Icon name="edit" size={14} /> Open
               </Link>
               <button type="button" className={item} onClick={() => start(async () => done(await duplicateWorkflow(id)))}>

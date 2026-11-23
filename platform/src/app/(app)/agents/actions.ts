@@ -1,5 +1,6 @@
 "use server";
 
+import { shortId } from "@/lib/short-id-shared";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { can, getWorkspace } from "@/lib/data";
@@ -25,7 +26,7 @@ export async function createSetter() {
     .select("id")
     .single();
   if (error || !data) redirect("/agents?error=1");
-  redirect(`/agents/${data.id}`);
+  redirect(`/agents/${shortId(data.id)}`);
 }
 
 export async function saveSetter(id: string, input: { name: string; business: unknown; rules: unknown }): Promise<Result> {

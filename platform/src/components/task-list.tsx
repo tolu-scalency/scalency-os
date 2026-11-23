@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import Link from "next/link";
 import { ActionForm, IconSubmit } from "@/components/action-form";
 import { Pill } from "@/components/ui";
@@ -31,7 +32,7 @@ export function TaskList({ tasks, compact = false, showContact = true }: { tasks
             <div className="min-w-0 flex-1">
               <div className={`truncate text-[14px] ${done ? "text-faint line-through" : "font-medium"}`}>{t.title}</div>
               {showContact && t.contactId && t.contactName && (
-                <Link href={`/contacts/${t.contactId}`} className="text-[12.5px] text-muted hover:text-brand">
+                <Link href={`/contacts/${shortId(t.contactId)}`} className="text-[12.5px] text-muted hover:text-brand">
                   {t.contactName}
                 </Link>
               )}

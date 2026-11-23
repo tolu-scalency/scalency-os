@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { fullId } from "@/lib/short-id";
 import { notFound } from "next/navigation";
 import { can, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
@@ -8,8 +9,8 @@ import { SetterEditor, type ThreadView } from "./setter-editor";
 export const metadata: Metadata = { title: "AI setter" };
 
 export default async function SetterRoute({ params }: { params: Promise<{ id: string }> }) {
-  const [{ id }, ws] = await Promise.all([params, getWorkspace()]);
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const [{ id: raw }, ws] = await Promise.all([params, getWorkspace()]);
+  const id = await fullId("setter_agents", raw);
   const supabase = await createClient();
   const [{ data: a }, { data: threads }] = await Promise.all([
     supabase

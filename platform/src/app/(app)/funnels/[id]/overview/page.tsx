@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { fullId } from "@/lib/short-id";
 import { notFound } from "next/navigation";
 import { can, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
@@ -15,8 +16,8 @@ function daysAgo(n: number) {
 // A funnel's steps or a website's pages, with views and sign-ups for each,
 // the shared header and footer, the link and the site's own domains.
 export default async function OverviewRoute({ params }: { params: Promise<{ id: string }> }) {
-  const [{ id }, ws] = await Promise.all([params, getWorkspace()]);
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const [{ id: raw }, ws] = await Promise.all([params, getWorkspace()]);
+  const id = await fullId("sites", raw);
   const supabase = await createClient();
   const since = daysAgo(30);
   const [{ data: site }, { data: rows }, { data: stats }, { data: domains }, { data: acc }] = await Promise.all([

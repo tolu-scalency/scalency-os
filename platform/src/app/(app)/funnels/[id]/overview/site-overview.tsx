@@ -4,6 +4,7 @@
 // reorder, add, copy and delete them, the shared header and footer, the link, and
 // the site's own domains with the DNS records to add.
 
+import { shortId } from "@/lib/short-id-shared";
 import { ask } from "@/components/confirm";
 import { useState, useTransition } from "react";
 import Link from "next/link";
@@ -199,7 +200,7 @@ export function SiteOverview({
                     const r = await addStep(site.id, starter, newName).catch(() => ({ error: "We couldn't reach the server." }) as { error?: string; id?: string });
                     if (r.error || !r.id) return void notify(r.error ?? "We couldn't add it.", "bad");
                     notify(`${funnel ? "Step" : "Page"} added`, "ok");
-                    router.push(`/funnels/${site.id}?page=${r.id}`);
+                    router.push(`/funnels/${shortId(site.id)}?page=${r.id}`);
                   })
                 }
                 className="btn-primary inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold"
@@ -223,7 +224,7 @@ export function SiteOverview({
               <li key={p.id} className="flex flex-col">
                 <div className="flex flex-wrap items-center gap-3 px-5 py-3.5">
                   <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface text-[12.5px] font-bold text-muted">{i + 1}</span>
-                  <Link href={`/funnels/${site.id}?page=${p.id}`} className="min-w-0 flex-[1_1_220px]">
+                  <Link href={`/funnels/${shortId(site.id)}?page=${p.id}`} className="min-w-0 flex-[1_1_220px]">
                     <div className="truncate text-[14.5px] font-semibold hover:text-brand">
                       {p.name}
                       {i === 0 && website && <span className="ml-2 text-[11.5px] font-medium text-muted">Home</span>}
@@ -254,7 +255,7 @@ export function SiteOverview({
                     </label>
                   )}
                   <div className="ml-auto flex items-center gap-0.5">
-                    <Link href={`/funnels/${site.id}?page=${p.id}`} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold">
+                    <Link href={`/funnels/${shortId(site.id)}?page=${p.id}`} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold">
                       <Icon name="edit" size={14} /> Edit
                     </Link>
                     {canEdit && (
@@ -320,10 +321,10 @@ export function SiteOverview({
             <h2 className="text-[15px] font-semibold">Shared header and footer</h2>
             <p className="text-[12.5px] text-muted">Shown on every page: your logo, menu, button and footer. Change them once and every page updates.</p>
           </div>
-          <Link href={`/funnels/${site.id}?part=header`} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
+          <Link href={`/funnels/${shortId(site.id)}?part=header`} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
             <Icon name="edit" size={14} /> Edit header
           </Link>
-          <Link href={`/funnels/${site.id}?part=footer`} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
+          <Link href={`/funnels/${shortId(site.id)}?part=footer`} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
             <Icon name="edit" size={14} /> Edit footer
           </Link>
         </section>

@@ -1,4 +1,6 @@
+import { shortId } from "@/lib/short-id-shared";
 import { createClient } from "@/lib/supabase/server";
+import { fullId } from "@/lib/short-id";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -27,8 +29,8 @@ function runText(detail: Record<string, unknown>) {
 }
 
 export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) {
-  const { id } = await props.params;
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const { id: raw } = await props.params;
+  const id = await fullId("workflows", raw);
   const ws = await getWorkspace();
   const [wf, pipeline, names, flows, tags, h, customFields, customValues, pipes, { data: formRows }] = await Promise.all([
     getWorkflow(id, ws.account.id),
@@ -52,36 +54,6 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
         <Icon name="arrowLeft" size={15} /> Workflows
       </Link>
 
-      <section className="card flex flex-wrap items-center justify-between gap-3 p-4">
-        <div className="flex items-center gap-3">
-          <Pill tone={wf.status === "active" ? "green" : wf.status === "paused" ? "amber" : "neutral"}>{wf.status === "active" ? "On" : wf.status === "paused" ? "Paused" : "Draft"}</Pill>
-          <span className="text-[13px] text-muted">
-            {wf.status === "active" && wf.approvedBy ? `Approved by ${wf.approvedBy}` : "Nothing runs until you approve and turn it on."}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {wf.status !== "active" ? (
-            <ActionForm action={setWorkflowStatus} className="flex flex-col items-end gap-1">
-              <input type="hidden" name="id" value={wf.id} />
-              <input type="hidden" name="status" value="active" />
-              <SubmitButton icon="check" pendingText="Turning on…">Approve and turn on</SubmitButton>
-            </ActionForm>
-          ) : (
-            <ActionForm action={setWorkflowStatus}>
-              <input type="hidden" name="id" value={wf.id} />
-              <input type="hidden" name="status" value="paused" />
-              <SubmitButton variant="ghost" pendingText="Pausing…">Pause</SubmitButton>
-            </ActionForm>
-          )}
-          <ActionForm action={setWorkflowStatus}>
-            <input type="hidden" name="id" value={wf.id} />
-            <input type="hidden" name="status" value="archived" />
-            <SubmitButton variant="plain" pendingText="Archiving…">Archive</SubmitButton>
-          </ActionForm>
-        </div>
-        <CopyId label="Workflow ID" id={wf.id} className="mt-3" />
-      </section>
-
       <WorkflowEditor
         key={wf.id}
         workflow={{ id: wf.id, name: wf.name, description: wf.description, trigger: wf.trigger, steps: wf.steps, graph: wf.graph, stopOnReply: wf.stopOnReply }}
@@ -95,6 +67,41 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
         customFields={customFields}
         customValues={customValues}
         locked={wf.status === "active"}
+        statusBar={
+          <div className="flex items-center gap-2">
+            <Pill tone={wf.status === "active" ? "green" : wf.status === "paused" ? "amber" : "neutral"}>{wf.status === "active" ? "On" : wf.status === "paused" ? "Paused" : "Draft"}</Pill>
+            {wf.status !== "active" ? (
+              <ActionForm action={setWorkflowStatus} className="flex items-center gap-1">
+                <input type="hidden" name="id" value={wf.id} />
+                <input type="hidden" name="status" value="active" />
+                <SubmitButton icon="check" pendingText="Turning on…" className="min-h-9 px-3 text-[13px]">
+                  Approve and turn on
+                </SubmitButton>
+              </ActionForm>
+            ) : (
+              <ActionForm action={setWorkflowStatus}>
+                <input type="hidden" name="id" value={wf.id} />
+                <input type="hidden" name="status" value="paused" />
+                <SubmitButton variant="ghost" pendingText="Pausing…" className="min-h-9 px-3 text-[13px]">
+                  Pause
+                </SubmitButton>
+              </ActionForm>
+            )}
+          </div>
+        }
+        settingsExtra={
+          <>
+            <p className="text-[12.5px] text-muted">{wf.status === "active" && wf.approvedBy ? `Approved by ${wf.approvedBy}.` : "Nothing runs until you approve and turn it on."}</p>
+            <CopyId label="Workflow ID" id={wf.id} />
+            <ActionForm action={setWorkflowStatus}>
+              <input type="hidden" name="id" value={wf.id} />
+              <input type="hidden" name="status" value="archived" />
+              <SubmitButton variant="ghost" pendingText="Archiving…">
+                Archive this workflow
+              </SubmitButton>
+            </ActionForm>
+          </>
+        }
       />
 
       <section className="card p-5 sm:p-6">
@@ -116,7 +123,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
             {wf.enrollments.map((e) => (
               <li key={e.id} className="rounded-xl border border-line p-3.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Link href={`/contacts/${e.contactId}`} className="text-[14px] font-semibold hover:text-brand">{e.contactName}</Link>
+                  <Link href={`/contacts/${shortId(e.contactId)}`} className="text-[14px] font-semibold hover:text-brand">{e.contactName}</Link>
                   <Pill tone={e.status === "completed" ? "green" : e.status === "waiting" ? "blue" : e.status === "active" ? "blue" : "neutral"}>
                     <span className="capitalize">{e.status}</span>
                   </Pill>

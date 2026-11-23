@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionForm, SubmitButton } from "@/components/action-form";
@@ -78,7 +79,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
             <header className="flex flex-none items-center gap-3 border-b border-line bg-white px-5 py-3">
               <Link href="/inbox" className="text-muted md:hidden" aria-label="Back"><Icon name="arrowLeft" size={18} /></Link>
               <Avatar initials={selected.initials} size={34} />
-              <Link href={`/contacts/${selected.contactId}`} className="text-[15px] font-semibold hover:text-brand">{selected.name}</Link>
+              <Link href={`/contacts/${shortId(selected.contactId)}`} className="text-[15px] font-semibold hover:text-brand">{selected.name}</Link>
               {ws.account.testMode && <span className="ml-auto"><Pill tone="amber">Test mode</Pill></span>}
             </header>
             <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">

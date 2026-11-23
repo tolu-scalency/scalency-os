@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Page, PageHeader, Pill, Tile } from "@/components/ui";
@@ -107,7 +108,7 @@ export default async function FunnelsPage({ searchParams }: { searchParams: Prom
             const href = `${base}/p/${wsSlug}/${s.slug}`;
             const k = KINDS[(s.kind as keyof typeof KINDS) ?? "page"] ?? KINDS.page;
             const count = (s.site_pages as unknown as { count: number }[] | null)?.[0]?.count ?? 1;
-            const open = s.kind === "page" ? `/funnels/${s.id}` : `/funnels/${s.id}/overview`;
+            const open = s.kind === "page" ? `/funnels/${shortId(s.id)}` : `/funnels/${shortId(s.id)}/overview`;
             return (
               <div key={s.id} className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-surface">
                 <Link href={open} className="flex min-w-0 flex-[1_1_260px] items-center gap-4">

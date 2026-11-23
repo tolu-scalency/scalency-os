@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -186,7 +187,7 @@ async function Home() {
               const look = activityLook[a.type] ?? { icon: "activity" as const, tone: "grey" as const };
               return (
                 <li key={a.id}>
-                  <Link href={a.contactId ? `/contacts/${a.contactId}` : "/dashboard"} className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-surface">
+                  <Link href={a.contactId ? `/contacts/${shortId(a.contactId)}` : "/dashboard"} className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-surface">
                     <Tile icon={look.icon} tone={look.tone} size={30} />
                     <span className="min-w-0 flex-1 truncate text-[14px]">{a.summary}</span>
                     <span className="whitespace-nowrap text-[12.5px] text-faint">{timeAgo(a.createdAt)}</span>

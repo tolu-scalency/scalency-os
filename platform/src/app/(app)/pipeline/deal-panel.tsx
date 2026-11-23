@@ -1,5 +1,6 @@
 "use client";
 
+import { shortId } from "@/lib/short-id-shared";
 import { ask } from "@/components/confirm";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
@@ -46,7 +47,7 @@ export function DealPanel({ id, stages, people, onClose }: { id: string; stages:
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-[17px] font-semibold">{d?.name ?? "Deal"}</h2>
             {d && (
-              <Link href={`/contacts/${d.contactId}`} className="text-[13px] font-medium text-brand hover:underline">
+              <Link href={`/contacts/${shortId(d.contactId)}`} className="text-[13px] font-medium text-brand hover:underline">
                 {d.contactName} →
               </Link>
             )}

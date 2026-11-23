@@ -40,6 +40,8 @@ export function WorkflowEditor({
   customFields,
   customValues,
   forms = [],
+  statusBar,
+  settingsExtra,
 }: {
   workflow: Editable;
   stages: Stage[];
@@ -52,6 +54,10 @@ export function WorkflowEditor({
   customFields: CustomField[];
   customValues: CustomValue[];
   forms?: Option[];
+  /** On, paused or draft, with Approve or Pause: shown in the toolbar so the canvas gets the space. */
+  statusBar?: React.ReactNode;
+  /** Shown at the bottom of Workflow settings (the workflow's ID, Archive). */
+  settingsExtra?: React.ReactNode;
 }) {
   const fieldsList = mergeFields(customFields, customValues);
   const others = workflows.filter((w) => w.id !== workflow.id);
@@ -511,6 +517,7 @@ export function WorkflowEditor({
               </span>
             </label>
           </fieldset>
+          {settingsExtra && <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4">{settingsExtra}</div>}
         </FloatingPanel>
       );
     if (sel.t === "trigger") {
@@ -680,6 +687,7 @@ export function WorkflowEditor({
           <span className="truncate text-[15px] font-semibold">{name || "Untitled workflow"}</span>
           <Icon name="edit" size={13} className="flex-none text-faint" />
         </button>
+        {statusBar}
         <span className={`min-w-0 flex-1 truncate text-[12.5px] ${message.error ? "text-bad" : message.ok ? "text-ok" : "text-muted"}`}>
           {locked ? (
             <span className="inline-flex items-center gap-1.5"><Icon name="lock" size={13} /> On. Pause it to make changes.</span>

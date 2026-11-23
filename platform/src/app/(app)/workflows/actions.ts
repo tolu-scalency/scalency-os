@@ -1,5 +1,6 @@
 "use server";
 
+import { shortId } from "@/lib/short-id-shared";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -25,7 +26,7 @@ export async function createWorkflow(fd: FormData) {
   const trigger = t.trigger.type === "webhook" ? { type: "webhook", token: newHookToken() } : t.trigger;
   const { data, error } = await supabase.from("workflows").insert({ account_id: ws.account.id, name, description: t.description, trigger, steps: t.steps }).select("id").single();
   if (error || !data) redirect("/workflows?error=1");
-  redirect(`/workflows/${data.id}`);
+  redirect(`/workflows/${shortId(data.id)}`);
 }
 
 const STEP_TYPES = new Set([

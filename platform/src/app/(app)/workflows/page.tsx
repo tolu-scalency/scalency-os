@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icon";
@@ -146,7 +147,7 @@ export default async function WorkflowsPage() {
                 className="flex items-center gap-2 pr-3 transition-colors hover:bg-surface"
               >
                 <Link
-                  href={`/workflows/${w.id}`}
+                  href={`/workflows/${shortId(w.id)}`}
                   className="flex min-w-0 flex-1 flex-wrap items-center gap-4 py-4 pl-5"
                 >
                   <Tile

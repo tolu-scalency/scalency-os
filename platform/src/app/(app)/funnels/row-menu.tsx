@@ -2,6 +2,7 @@
 
 // The "..." menu on each page in the list: edit, open, duplicate, archive or restore, delete.
 
+import { shortId } from "@/lib/short-id-shared";
 import { ask } from "@/components/confirm";
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
@@ -27,10 +28,10 @@ export function PageRowMenu({ id, archived, live, href, edit, kind = "page" }: {
       </button>
       {open && (
         <div className="absolute right-0 top-10 z-20 w-52 rounded-xl border border-line bg-white p-1 shadow-lg">
-          <Link href={edit ?? `/funnels/${id}`} className={item}>
+          <Link href={edit ?? `/funnels/${shortId(id)}`} className={item}>
             <Icon name="edit" size={14} /> {kind === "page" ? "Edit" : "Open"}
           </Link>
-          <Link href={`/funnels/${id}/overview`} className={item}>
+          <Link href={`/funnels/${shortId(id)}/overview`} className={item}>
             <Icon name="globe" size={14} /> {kind === "page" ? "Stats and domain" : "Steps, stats and domain"}
           </Link>
           {live && (

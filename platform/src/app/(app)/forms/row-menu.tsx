@@ -2,6 +2,7 @@
 
 // The "..." menu on each form in the list: open, share, duplicate, move to a folder, archive or restore.
 
+import { shortId } from "@/lib/short-id-shared";
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
@@ -68,10 +69,10 @@ export function FormRowMenu({ id, archived, folder = "", folders = [] }: { id: s
             </form>
           ) : (
             <>
-              <Link href={`/forms/${id}`} className={item}>
+              <Link href={`/forms/${shortId(id)}`} className={item}>
                 <Icon name="edit" size={14} /> Edit
               </Link>
-              <Link href={`/forms/${id}?tab=share`} className={item}>
+              <Link href={`/forms/${shortId(id)}?tab=share`} className={item}>
                 <Icon name="share" size={14} /> Share and embed
               </Link>
               <button type="button" className={item} onClick={() => start(() => duplicateForm(id))}>

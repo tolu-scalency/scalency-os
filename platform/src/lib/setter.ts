@@ -20,6 +20,7 @@ export type SetterBusiness = {
   faqs: string;
   tone: string;
   bookingLink: string;
+  bookingMode: "times" | "link" | "both";
   spelling: "US" | "UK";
   businessType: BusinessType;
   /** The business's own extra rules for the AI, in plain words. */
@@ -140,6 +141,13 @@ export type SetterRules = {
   syncContacts: boolean;
   minNoticeHours: number;
   replyDelaySeconds: number;
+  /** When the AI joins. */
+  joinNewLeads: boolean;
+  joinReplies: "all" | "own";
+  onlyTags: string[];
+  skipTags: string[];
+  /** After a team member replies: 0 = until handed back, otherwise hours. */
+  teamPauseHours: number;
 };
 
 export type SetterStatus = "off" | "test" | "live";
@@ -163,6 +171,11 @@ export const DEFAULT_RULES: SetterRules = {
   syncContacts: true,
   minNoticeHours: 2,
   replyDelaySeconds: 20,
+  joinNewLeads: true,
+  joinReplies: "all",
+  onlyTags: [],
+  skipTags: [],
+  teamPauseHours: 0,
 };
 
 /** The pilot demo: a med spa built from the niche playbook's typical US prices. Replace with the real clinic's details. */
@@ -198,6 +211,7 @@ export const DEMO_BUSINESS: SetterBusiness = {
   faqs: "Parking is free behind the building. Open Monday to Saturday.",
   tone: "Warm, calm and confident. No pressure and honest pricing: many people have had a pushy upsell elsewhere.",
   bookingLink: "",
+  bookingMode: "times",
   spelling: "US",
   businessType: "med_spa",
   instructions: "",
@@ -239,11 +253,15 @@ export function cleanBusiness(v: unknown): SetterBusiness {
     faqs: str(o.faqs, 4000),
     tone: str(o.tone, 600),
     bookingLink: /^https:\/\/[^\s]+$/.test(link) ? link : "",
+    bookingMode: o.bookingMode === "link" || o.bookingMode === "both" ? o.bookingMode : "times",
     spelling: o.spelling === "UK" ? "UK" : "US",
     businessType: BUSINESS_TYPES.some((t) => t.id === o.businessType) ? (o.businessType as BusinessType) : "med_spa",
     instructions: str(o.instructions, 3000),
   };
 }
+
+const cleanTags = (v: unknown) =>
+  [...new Set((Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : []).map((t) => String(t).trim().toLowerCase().slice(0, 60)).filter(Boolean))].slice(0, 20);
 
 export function cleanRules(v: unknown): SetterRules {
   const o = (v ?? {}) as Record<string, unknown>;
@@ -260,7 +278,13 @@ export function cleanRules(v: unknown): SetterRules {
     teamTasks: o.teamTasks !== false,
     syncContacts: o.syncContacts !== false,
     minNoticeHours: Math.min(72, Math.max(0, Math.round(Number(o.minNoticeHours ?? DEFAULT_RULES.minNoticeHours)) || 0)),
-    replyDelaySeconds: Math.min(60, Math.max(0, Math.round(Number(o.replyDelaySeconds ?? DEFAULT_RULES.replyDelaySeconds)) || 0)),
+    // At least 10 seconds, so it never answers the instant someone hits send.
+    replyDelaySeconds: Math.min(60, Math.max(10, Math.round(Number(o.replyDelaySeconds ?? DEFAULT_RULES.replyDelaySeconds)) || DEFAULT_RULES.replyDelaySeconds)),
+    joinNewLeads: o.joinNewLeads !== false,
+    joinReplies: o.joinReplies === "own" ? "own" : "all",
+    onlyTags: cleanTags(o.onlyTags),
+    skipTags: cleanTags(o.skipTags),
+    teamPauseHours: [0, 4, 24, 72, 168].includes(Number(o.teamPauseHours)) ? Number(o.teamPauseHours) : 0,
   };
 }
 

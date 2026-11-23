@@ -3,6 +3,7 @@
 // Page Studio: build a landing page by dragging sections, columns and blocks.
 // Saves automatically; publish when it's ready.
 
+import { shortId } from "@/lib/short-id-shared";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -78,7 +79,7 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
   const [pending, start] = useTransition();
   const siteBase = `/p/${workspaceSlug}/${slug}`;
   const link = `${base}${siteBase}${site.pageSlug && !site.part ? `/${site.pageSlug}` : ""}`;
-  const overview = `/funnels/${site.id}/overview`;
+  const overview = `/funnels/${shortId(site.id)}/overview`;
   // Where "next step", page and menu links go, drawn in the builder as on the live page.
   const links = useMemo(() => (single ? null : siteLinks(site.pages, site.pageId, siteBase)), [single, site.pages, site.pageId, siteBase]);
 
@@ -168,7 +169,7 @@ export function PageStudio({ site, base, workspaceSlug, forms, canEdit }: { site
 
   /** Opens another step, page or shared part, saving this one first. */
   function goTo(value: string) {
-    const url = value === "overview" ? overview : value.startsWith("part:") ? `/funnels/${site.id}?part=${value.slice(5)}` : `/funnels/${site.id}?page=${value}`;
+    const url = value === "overview" ? overview : value.startsWith("part:") ? `/funnels/${shortId(site.id)}?part=${value.slice(5)}` : `/funnels/${shortId(site.id)}?page=${value}`;
     start(async () => {
       if (dirty && !readOnly) {
         const r = await persist();
