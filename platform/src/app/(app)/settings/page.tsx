@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ActionForm, SubmitButton } from "@/components/action-form";
+import { TimeSelect } from "@/components/time-select";
 import { can, getProfile, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { isPlatformAdmin, providersReady } from "@/lib/deliver";
@@ -141,11 +142,11 @@ async function General() {
               </label>
               <label className="flex flex-col gap-1.5">
                 <span className="text-[13px] font-medium">Texts from</span>
-                <input name="sms_window_start" type="time" required defaultValue={(acc?.sms_window_start ?? "08:00").slice(0, 5)} className="field" />
+                <TimeSelect name="sms_window_start" defaultValue={(acc?.sms_window_start ?? "08:00").slice(0, 5)} />
               </label>
               <label className="flex flex-col gap-1.5">
                 <span className="text-[13px] font-medium">Texts until</span>
-                <input name="sms_window_end" type="time" required defaultValue={(acc?.sms_window_end ?? "20:00").slice(0, 5)} className="field" />
+                <TimeSelect name="sms_window_end" defaultValue={(acc?.sms_window_end ?? "20:00").slice(0, 5)} />
               </label>
               <p className="text-[12.5px] text-muted sm:col-span-3">
                 Automated texts outside these hours wait until the morning. In test mode they send any time so you can test.

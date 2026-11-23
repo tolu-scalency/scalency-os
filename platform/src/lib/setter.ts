@@ -21,7 +21,115 @@ export type SetterBusiness = {
   tone: string;
   bookingLink: string;
   spelling: "US" | "UK";
+  businessType: BusinessType;
+  /** The business's own extra rules for the AI, in plain words. */
+  instructions: string;
 };
+
+export type BusinessType = "med_spa" | "dental" | "home_services" | "coaching" | "real_estate" | "fitness" | "other";
+
+/** Each kind of business: its name, and example details to start from (all editable). */
+export const BUSINESS_TYPES: { id: BusinessType; label: string; expert: string; example: Partial<SetterBusiness> }[] = [
+  { id: "med_spa", label: "Med spa or aesthetics", expert: "practitioner", example: {} },
+  {
+    id: "dental",
+    label: "Dental practice",
+    expert: "dentist",
+    example: {
+      clinicName: "Bright Smile Dental",
+      consultName: "free smile consultation",
+      consultLength: "30 minutes",
+      consultPrice: "free, no obligation",
+      services: "Teeth whitening: from £299\nInvisalign: from £2,500, with monthly payment plans\nComposite bonding: from £180 a tooth\nDental implants: from £2,000",
+      offer: "Free smile consultation with a 3D scan for new patients this month.",
+      financing: "0% finance over 12 months on treatments over £1,000.",
+      whoTreats: "All treatments are done by GDC-registered dentists.",
+      policies: "We need 48 hours' notice to cancel or move an appointment.",
+      proof: "Rated 4.9 stars from 200+ Google reviews.",
+      faqs: "Free parking on site. Open Monday to Saturday.",
+      tone: "Friendly and reassuring. Many people are nervous about the dentist.",
+    },
+  },
+  {
+    id: "home_services",
+    label: "Home services (plumbing, HVAC, roofing, cleaning…)",
+    expert: "technician",
+    example: {
+      clinicName: "Spark Plumbing & Heating",
+      consultName: "free quote visit",
+      consultLength: "about 30 minutes",
+      consultPrice: "free, no obligation",
+      services: "Boiler service: £89\nNew boiler installed: from £1,950\nLeak repairs: from £75 call-out\nBathroom fitting: free quote",
+      offer: "£50 off any new boiler booked this month.",
+      financing: "Pay monthly available on new boilers.",
+      whoTreats: "Gas Safe registered engineers, fully insured.",
+      policies: "Quotes are free and valid for 30 days.",
+      proof: "Over 1,000 jobs done, 4.8 stars on Google.",
+      faqs: "We cover the whole city and nearby towns.",
+      tone: "Practical, friendly and quick. People want a clear price and a time.",
+    },
+  },
+  {
+    id: "coaching",
+    label: "Coaching or consulting",
+    expert: "coach",
+    example: {
+      clinicName: "Clear Path Coaching",
+      consultName: "free discovery call",
+      consultLength: "20 minutes",
+      consultPrice: "free",
+      services: "1:1 coaching: 12 weeks\nGroup programme: 8 weeks\nVIP day: one full day",
+      offer: "A free 20-minute discovery call to map out your next step.",
+      financing: "Monthly payment options on all programmes.",
+      whoTreats: "Calls are with the founder, a certified coach with 10 years' experience.",
+      policies: "Please give 24 hours' notice to move a call.",
+      proof: "Over 300 clients coached.",
+      faqs: "All calls are on Zoom.",
+      tone: "Warm, encouraging and direct.",
+    },
+  },
+  {
+    id: "real_estate",
+    label: "Real estate",
+    expert: "agent",
+    example: {
+      clinicName: "Oak & Co Estates",
+      consultName: "free valuation",
+      consultLength: "45 minutes",
+      consultPrice: "free, no obligation",
+      services: "Selling your home\nLettings and property management\nBuying help for first-time buyers",
+      offer: "Free valuation with a local market report.",
+      financing: "",
+      whoTreats: "Valuations are done by our senior agents.",
+      policies: "",
+      proof: "Over 500 homes sold in the area.",
+      faqs: "Office open Monday to Saturday.",
+      tone: "Professional, local and helpful.",
+    },
+  },
+  {
+    id: "fitness",
+    label: "Gym or fitness",
+    expert: "coach",
+    example: {
+      clinicName: "Forge Fitness",
+      consultName: "free trial session",
+      consultLength: "45 minutes",
+      consultPrice: "free",
+      services: "Membership: £49 a month\nPersonal training: from £35 a session\n6-week kickstart: £149",
+      offer: "First session free, plus no joining fee this month.",
+      financing: "",
+      whoTreats: "Sessions are run by qualified personal trainers.",
+      policies: "No contract: cancel with 30 days' notice.",
+      proof: "4.9 stars from 150+ members.",
+      faqs: "Open 6am to 10pm every day. Free parking.",
+      tone: "Upbeat and encouraging, never pushy. Beginners are welcome.",
+    },
+  },
+  { id: "other", label: "Something else", expert: "team", example: { consultName: "free consultation" } },
+];
+
+export const businessTypeOf = (b: Pick<SetterBusiness, "businessType">) => BUSINESS_TYPES.find((t) => t.id === b.businessType) ?? BUSINESS_TYPES[0];
 
 export type SetterRules = {
   start: string;
@@ -29,6 +137,7 @@ export type SetterRules = {
   days: number[];
   followUpDays: number[];
   teamTasks: boolean;
+  syncContacts: boolean;
   minNoticeHours: number;
   replyDelaySeconds: number;
 };
@@ -51,6 +160,7 @@ export const DEFAULT_RULES: SetterRules = {
   days: [1, 2, 3, 4, 5, 6],
   followUpDays: [1, 3, 5, 8, 12, 16],
   teamTasks: true,
+  syncContacts: true,
   minNoticeHours: 2,
   replyDelaySeconds: 20,
 };
@@ -89,7 +199,13 @@ export const DEMO_BUSINESS: SetterBusiness = {
   tone: "Warm, calm and confident. No pressure and honest pricing: many people have had a pushy upsell elsewhere.",
   bookingLink: "",
   spelling: "US",
+  businessType: "med_spa",
+  instructions: "",
 };
+
+// The med spa example is the demo itself.
+const EXAMPLE_KEYS = ["clinicName", "consultName", "consultLength", "consultPrice", "services", "offer", "financing", "whoTreats", "policies", "proof", "faqs", "tone"] as const;
+BUSINESS_TYPES[0].example = Object.fromEntries(EXAMPLE_KEYS.map((k) => [k, DEMO_BUSINESS[k]]));
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\r\n/g, "\n").trim().slice(0, max) : "");
 
@@ -124,6 +240,8 @@ export function cleanBusiness(v: unknown): SetterBusiness {
     tone: str(o.tone, 600),
     bookingLink: /^https:\/\/[^\s]+$/.test(link) ? link : "",
     spelling: o.spelling === "UK" ? "UK" : "US",
+    businessType: BUSINESS_TYPES.some((t) => t.id === o.businessType) ? (o.businessType as BusinessType) : "med_spa",
+    instructions: str(o.instructions, 3000),
   };
 }
 
@@ -140,6 +258,7 @@ export function cleanRules(v: unknown): SetterRules {
     days: days.length ? days : DEFAULT_RULES.days,
     followUpDays: follow,
     teamTasks: o.teamTasks !== false,
+    syncContacts: o.syncContacts !== false,
     minNoticeHours: Math.min(72, Math.max(0, Math.round(Number(o.minNoticeHours ?? DEFAULT_RULES.minNoticeHours)) || 0)),
     replyDelaySeconds: Math.min(60, Math.max(0, Math.round(Number(o.replyDelaySeconds ?? DEFAULT_RULES.replyDelaySeconds)) || 0)),
   };

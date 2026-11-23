@@ -156,6 +156,30 @@ export function WorkflowEditor({
 
   // ---------------------------------------------------------------- canvas
   const viewport = useRef<HTMLDivElement>(null);
+  // Full screen: the builder fills the whole window. Otherwise the step panel only shows while
+  // the canvas is on screen, so it doesn't follow you down the page.
+  const [full, setFull] = useState(false);
+  const [canvasOnScreen, setCanvasOnScreen] = useState(true);
+  useEffect(() => {
+    const v = viewport.current;
+    if (!v || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setCanvasOnScreen(e.intersectionRatio > 0.25), { threshold: [0, 0.25, 0.5] });
+    io.observe(v);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector('[role="dialog"]')) setFull(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const before = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = before;
+    };
+  }, [full]);
   const content = useRef<HTMLDivElement>(null);
   const [zoom, setZoomState] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 24 });
@@ -623,7 +647,7 @@ export function WorkflowEditor({
   // ---------------------------------------------------------------- page
   const zbtn = "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px] font-semibold text-navy transition-colors hover:bg-surface disabled:opacity-40";
   return (
-    <div className="flex flex-col gap-3">
+    <div className={full ? "fixed inset-0 z-50 flex flex-col gap-3 bg-canvas p-3" : "flex flex-col gap-3"}>
       <datalist id="wf-tags">
         {tags.map((t) => (
           <option key={t} value={t} />
@@ -667,6 +691,15 @@ export function WorkflowEditor({
           <button type="button" onClick={() => setZoom(zoom + 0.1)} disabled={zoom >= 1.5} aria-label="Zoom in" className={zbtn}>+</button>
           <button type="button" onClick={fit} className={`${zbtn} gap-1.5`} title="Fit the whole workflow on screen"><Icon name="panel" size={14} /> Fit</button>
         </div>
+        <button
+          type="button"
+          onClick={() => setFull((f) => !f)}
+          aria-pressed={full}
+          title={full ? "Back to the normal page (Esc)" : "Use the whole screen for building"}
+          className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold"
+        >
+          <Icon name={full ? "x" : "expand"} size={14} /> {full ? "Exit full screen" : "Full screen"}
+        </button>
         <button type="button" onClick={() => setSel({ t: "settings" })} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold">
           <Icon name="settings" size={14} /> Settings
         </button>
@@ -687,7 +720,7 @@ export function WorkflowEditor({
         onPointerMove={onPanMove}
         onPointerUp={onPanEnd}
         onPointerCancel={onPanEnd}
-        className="relative h-[calc(100vh-166px-var(--chrome-h,64px))] min-h-[520px] cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing"
+        className={`relative cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing ${full ? "min-h-0 flex-1" : "h-[calc(100vh-112px-var(--chrome-h,64px))] min-h-[600px]"}`}
         style={{ backgroundColor: "#f6f8fc", backgroundImage: "radial-gradient(#d5dbe6 1.2px, transparent 1.2px)", backgroundSize: `${22 * zoom}px ${22 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}
       >
         <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }} className="absolute left-0 top-0">
@@ -717,7 +750,7 @@ export function WorkflowEditor({
         </div>
       </div>
 
-      {renderPanel()}
+      {(full || canvasOnScreen) && renderPanel()}
     </div>
   );
 }

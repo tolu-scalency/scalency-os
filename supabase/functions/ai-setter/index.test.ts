@@ -25,6 +25,7 @@ import {
   unseal,
   withinHours,
   work,
+  copyContactsIn,
   WAITING_FOR_TAG,
   NO_TAG,
   type Agent,
@@ -121,7 +122,7 @@ Deno.test("GHL key is sealed and opened again", async () => {
 
 Deno.test("prompt carries the SOP, the safety rules and the clinic's details", () => {
   const p = systemPrompt({ business, rules: {} }, new Date("2026-11-24T15:00:00Z"));
-  for (const bit of ["Sophie", "Glow Aesthetics", "Botox from $12/unit", "just following up", "one more yes", "medical advice", "virtual assistant", "hand_over", "send_message", "US spelling"]) assertStringIncludes(p, bit);
+  for (const bit of ["Sophie", "Glow Aesthetics", "Botox from $12/unit", "just following up", "Never ask permission", "in the same message", "medical advice", "virtual assistant", "hand_over", "send_message", "US spelling"]) assertStringIncludes(p, bit);
   assert(!p.includes("undefined"));
 });
 
@@ -172,7 +173,7 @@ Deno.test("brain: STOP-style refusal sends nothing; plain text answers work", as
   const plain = scripted([() => ({ content: [{ type: "text", text: "- Hi Jess!" }] })]);
   const r2 = await runBrain({ business, rules: {} }, { mode: { kind: "opener" }, turns: [], lead: { firstName: "Jess", details: "" } }, { claude: plain.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) });
   assertEquals(r2.message, "Hi Jess!");
-  assertStringIncludes(JSON.stringify(plain.seen[0].messages), "Don't offer times yet");
+  assertStringIncludes(JSON.stringify(plain.seen[0].messages), "don't offer times yet");
 });
 
 // ---------------------------------------------------------------------------
@@ -181,7 +182,7 @@ Deno.test("brain: STOP-style refusal sends nothing; plain text answers work", as
 
 type Call = { method: string; path: string; body: Record<string, unknown> | null };
 
-function fakeGhl(opts: { tags?: string[]; messages?: unknown[]; dnd?: boolean; noPhone?: boolean; noThreading?: boolean }) {
+function fakeGhl(opts: { tags?: string[]; messages?: unknown[]; dnd?: boolean; noPhone?: boolean; noThreading?: boolean; emails?: Record<string, unknown> }) {
   const calls: Call[] = [];
   const fetcher = (async (url: string | URL, init?: RequestInit) => {
     const u = new URL(String(url));
@@ -192,6 +193,10 @@ function fakeGhl(opts: { tags?: string[]; messages?: unknown[]; dnd?: boolean; n
     if (u.pathname.startsWith("/contacts/") && method === "GET") return ok({ contact: { id: "c1", firstName: "Jess", lastName: "Doe", phone: opts.noPhone ? "" : "+15551234567", email: "jess@example.com", tags: opts.tags ?? [], dnd: opts.dnd ?? false, customFields: [{ id: "f1", value: "Botox/Fillers" }] } });
     if (u.pathname === "/conversations/search") return ok({ conversations: [{ id: "conv1" }] });
     if (u.pathname === "/conversations/conv1/messages") return ok({ messages: { messages: opts.messages ?? [] } });
+    if (u.pathname.startsWith("/conversations/messages/email/")) {
+      const e = opts.emails?.[u.pathname.split("/").pop()!];
+      return e ? ok({ emailMessage: e }) : new Response("{}", { status: 404 });
+    }
     if (u.pathname === "/conversations/messages" && opts.noThreading && body?.replyMessageId) return new Response(JSON.stringify({ message: "bad replyMessageId" }), { status: 422 });
     if (u.pathname === "/conversations/messages") return ok({ messageId: `sent-${calls.length}` });
     if (u.pathname.endsWith("/free-slots")) {
@@ -442,4 +447,75 @@ Deno.test("email replies: if GHL lists the lead's email with no text, the saved 
   const thread = { ...newThread(), channel: "Email", sent_ids: ["out1"], last_outbound_at: "2026-11-22T16:23:00Z", last_inbound_at: "2026-11-22T16:25:05Z" };
   await work(db.db, agent, thread, { kind: "reply" }, { claude: c.claude, ghl, now: new Date("2026-11-22T16:26:00Z") });
   assertStringIncludes(JSON.stringify(c.seen[0].messages), "how much is botox and does it hurt?");
+});
+
+Deno.test("email replies: GHL lists emails without text, so each email is read, and the reply goes in the same thread", async () => {
+  const { ghl, calls } = fakeGhl({
+    noPhone: true,
+    messages: [{ id: "holder1", direction: "inbound", body: "", messageType: "TYPE_EMAIL", dateAdded: "2026-11-23T07:54:00Z", meta: { email: { messageIds: ["em1", "em2"] } } }],
+    emails: {
+      em1: { id: "em1", direction: "outbound", body: "<p>Hi Jess, it's Sophie</p>", subject: "Your enquiry with Glow Aesthetics", dateAdded: "2026-11-22T17:23:00Z", threadId: "holder1" },
+      em2: { id: "em2", direction: "inbound", body: '<div>Can I come in this week?</div><div class="gmail_quote">On Sun wrote: Hi Jess</div>', subject: "Re: Your enquiry with Glow Aesthetics", dateAdded: "2026-11-23T07:54:00Z", threadId: "holder1" },
+    },
+  });
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Yes, we have Wednesday at 10am or Thursday at 2pm." })] })]);
+  await work(fakeDb().db, agent, { ...newThread(), channel: "Email", sent_ids: ["em1"] }, { kind: "reply" }, { claude: c.claude, ghl, now: new Date("2026-11-23T07:55:00Z") });
+  const seen = JSON.stringify(c.seen[0].messages);
+  assertStringIncludes(seen, "Lead: Can I come in this week?");
+  assert(!seen.includes("On Sun wrote"));
+  const sent = calls.find((x) => x.path === "/conversations/messages")!;
+  assertEquals(sent.body?.threadId, "holder1");
+  assertEquals(sent.body?.replyMessageId, "em2");
+  assertEquals(sent.body?.subject, "Re: Your enquiry with Glow Aesthetics");
+});
+
+Deno.test("prompt: other business types get their own wording, and the business's instructions are followed", () => {
+  const p = systemPrompt({ business: { ...business, clinicName: "Spark Plumbing", businessType: "home_services", consultName: "", instructions: "Always ask for their postcode." }, rules: {} }, new Date("2026-11-24T15:00:00Z"));
+  for (const bit of ["booking coordinator (a virtual assistant) for Spark Plumbing", "free quote visit", "gas smell", "Always ask for their postcode.", "the technician"]) assertStringIncludes(p, bit);
+  assert(!p.includes("Botox and filler"));
+  assert(!p.includes("pregnancy"));
+});
+
+Deno.test("GHL contacts: new ones are added with source GHL, existing ones are linked, nothing is overwritten", async () => {
+  const writes: { table: string; op: string; data: unknown }[] = [];
+  const existing = [{ id: "k1", email: "jess@example.com", phone: null, first_name: "Jessica", last_name: null, custom: {} }];
+  const db = {
+    from(table: string) {
+      let op = "select";
+      let payload: unknown = null;
+      const b: Record<string, unknown> = {
+        select: () => b,
+        eq: () => b,
+        in: (col: string) => {
+          (b as { col?: string }).col = col;
+          return b;
+        },
+        ilike: () => b,
+        insert: (d: unknown) => ((op = "insert"), (payload = d), writes.push({ table, op, data: d }), b),
+        update: (d: unknown) => ((op = "update"), (payload = d), writes.push({ table, op, data: d }), b),
+        upsert: (d: unknown) => ((op = "upsert"), writes.push({ table, op, data: d }), b),
+        maybeSingle: () => Promise.resolve({ data: op === "insert" ? { id: "new1", ...(payload as object) } : null, error: null }),
+        then: (res: (v: unknown) => unknown) => {
+          const col = (b as { col?: string }).col;
+          const data = table === "contacts" && op === "select" && col === "email" ? existing : table === "tags" && op === "select" ? [{ id: "t1", name: "ai-test" }] : [];
+          return Promise.resolve({ data, error: null }).then(res);
+        },
+      };
+      return b;
+    },
+  } as unknown as Parameters<typeof copyContactsIn>[0];
+  const r = await copyContactsIn(db, "acc1", [
+    { id: "g1", firstName: "Jess", email: "JESS@example.com", tags: ["ai-test"] },
+    { id: "g2", firstName: "Dan", phone: "+447700900123" },
+    { id: "g3", firstName: "Nobody" },
+  ]);
+  assertEquals(r, { added: 1, linked: 1 });
+  const upd = writes.find((w) => w.table === "contacts" && w.op === "update")!.data as Record<string, unknown>;
+  assertEquals(upd.first_name, undefined); // "Jessica" stays
+  assertEquals((upd.custom as Record<string, unknown>).ghl_id, "g1");
+  const ins = writes.find((w) => w.table === "contacts" && w.op === "insert")!.data as Record<string, unknown>;
+  assertEquals(ins.source, "GHL");
+  assertEquals(ins.phone, "+447700900123");
+  assertEquals(ins.email_consent_at, undefined);
+  assert(writes.some((w) => w.table === "contact_tags"));
 });

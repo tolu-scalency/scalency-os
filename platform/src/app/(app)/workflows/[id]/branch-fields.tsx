@@ -4,6 +4,7 @@
 // checked from the top. Anyone who matches none goes down the last branch.
 
 import { useRef, useState } from "react";
+import { TimeSelect } from "@/components/time-select";
 import { Icon, type IconName } from "@/components/icon";
 import { Popover, useListKeys } from "@/components/popover";
 import type { Condition, ConditionField, ConditionOp, CustomField, Stage } from "@/lib/data";
@@ -424,7 +425,7 @@ function ValueInput({
     case "number":
       return <input type="number" min={0} value={v} onChange={(e) => set({ value: e.target.value })} placeholder="e.g. 1000" className={cls} aria-label="Amount" />;
     case "time":
-      return <input type="time" value={v || "09:00"} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Time" />;
+      return <TimeSelect value={v || "09:00"} onChange={(x) => set({ value: x })} className={cls} aria-label="Time" />;
     case "days": {
       const on = new Set(v.split(",").filter(Boolean));
       return (

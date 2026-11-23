@@ -1,5 +1,6 @@
 "use client";
 
+import { TimeSelect } from "@/components/time-select";
 // Settings for each kind of step, shown in the builder's side panel.
 
 import { TagsInput } from "@/components/editor/tags-input";
@@ -121,14 +122,13 @@ export function StepFields({
       return (
         <div className="flex flex-wrap items-center gap-2 text-[14px]">
           Wait until
-          <input
-            type="time"
+<TimeSelect
             value={`${String(step.hour).padStart(2, "0")}:${String(step.minute).padStart(2, "0")}`}
-            onChange={(e) => {
-              const [h, m] = e.target.value.split(":").map(Number);
+            onChange={(v) => {
+              const [h, m] = v.split(":").map(Number);
               onChange({ hour: h || 0, minute: m || 0 });
             }}
-            className="field h-10 w-32"
+            className="field h-10 w-44"
             aria-label="Time"
           />
           <label className="flex items-center gap-2">

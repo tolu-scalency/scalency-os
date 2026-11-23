@@ -5,6 +5,7 @@
 // pretend calendar and sends nothing, and the conversations it has had.
 
 import { ask } from "@/components/confirm";
+import { TimeSelect } from "@/components/time-select";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,7 +13,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { notify } from "@/components/toast";
 import { Pill } from "@/components/ui";
 import { createClient } from "@/lib/supabase/browser";
-import { DAY_NAMES, THREAD_LOOK, TIMEZONES, type SetterBusiness, type SetterRules, type SetterStatus, type ThreadState } from "@/lib/setter";
+import { BUSINESS_TYPES, DAY_NAMES, THREAD_LOOK, TIMEZONES, businessTypeOf, type SetterBusiness, type SetterRules, type SetterStatus, type ThreadState } from "@/lib/setter";
 import { deleteSetter, newWebhookAddresses, saveGhlChoices, saveSetter, setSetterStatus, setThread } from "../actions";
 
 export type ThreadView = {
@@ -99,7 +100,7 @@ export function SetterEditor({ setter, threads, canEdit }: { setter: Setter; thr
   }, [dirty]);
 
   const tabs: [Tab, string, string][] = [
-    ["clinic", "Clinic", "building"],
+    ["clinic", "Business", "building"],
     ["rules", "Hours and follow-up", "clock"],
     ["ghl", "Connect GHL", "link"],
     ["test", "Test chat", "mail"],
@@ -146,7 +147,7 @@ export function SetterEditor({ setter, threads, canEdit }: { setter: Setter; thr
       </div>
       {setter.status === "test" && (
         <p className="rounded-xl bg-warn-bg px-4 py-2.5 text-[13px] text-warn">
-          Test mode: the AI only talks to contacts tagged <strong>ai-test</strong> in GHL. Add that tag to yourself, then text the clinic&apos;s number or send yourself in as a new lead.
+          Test mode: the AI only talks to contacts tagged <strong>ai-test</strong> in GHL. Add that tag to yourself, then text the business&apos;s number or send yourself in as a new lead.
         </p>
       )}
 
@@ -195,12 +196,39 @@ function Section({ title, text, children }: { title: string; text?: string; chil
 
 function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterBusiness>) => void; ro: boolean }) {
   const t = (k: keyof SetterBusiness) => ({ value: String(b[k] ?? ""), disabled: ro, onChange: (e: { target: { value: string } }) => set({ [k]: e.target.value } as Partial<SetterBusiness>) });
+  const kind = businessTypeOf(b);
+  const fillExample = () =>
+    void ask({
+      title: `Fill in the ${kind.label.toLowerCase()} example?`,
+      text: "This replaces the business name, first step, services, offer, proof and tone with example wording you can edit. Your assistant's name, location, time zone and instructions stay as they are.",
+      confirm: "Fill in example",
+      danger: false,
+    }).then((ok) => ok && set({ ...kind.example }));
   return (
     <div className="flex flex-col gap-4">
       <p className="rounded-xl bg-chip px-4 py-3 text-[13px] text-brand">
-        The AI only states facts from here. Anything missing, it says it&apos;ll check with the team or that the practitioner covers it at the consultation. The demo is filled in with typical US med spa prices: replace them with the clinic&apos;s own.
+        The AI only states facts from here. Anything missing, it says it&apos;ll check with the team. Start with the example for your kind of business, then change it to the real details.
       </p>
-      <Section title="Who's texting" text="The AI introduces itself by this name as the clinic's coordinator. It never claims to be a person.">
+      <Section title="Kind of business" text="This sets how the AI talks, the questions it expects and its safety rules. Works for any business, not just clinics.">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className={`${label} min-w-[240px] flex-1`}>
+            Business type
+            <select value={b.businessType} disabled={ro} onChange={(e) => set({ businessType: e.target.value as SetterBusiness["businessType"] })} className={field}>
+              {BUSINESS_TYPES.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!ro && (
+            <button type="button" onClick={fillExample} className="btn-ghost inline-flex min-h-11 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
+              <Icon name="spark" size={14} /> Fill in example details
+            </button>
+          )}
+        </div>
+      </Section>
+      <Section title="Who's messaging" text="The AI introduces itself by this name as the business's coordinator. It never claims to be a person.">
         <div className="grid gap-4 sm:grid-cols-3">
           <label className={label}>
             Assistant&apos;s name
@@ -223,7 +251,7 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={label}>
             Location
-            <input {...t("location")} maxLength={200} placeholder="Austin, Texas" className={field} />
+            <input {...t("location")} maxLength={200} placeholder="London" className={field} />
           </label>
           <label className={label}>
             Time zone
@@ -245,11 +273,11 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
           </label>
         </div>
       </Section>
-      <Section title="The consultation" text="What the AI books. Its job is the consultation, not selling treatments.">
+      <Section title="The first step it books" text="A consultation, discovery call, quote visit, valuation or trial. The AI books this; it doesn't sell the service itself.">
         <div className="grid gap-4 sm:grid-cols-3">
           <label className={label}>
             Called
-            <input {...t("consultName")} maxLength={80} className={field} />
+            <input {...t("consultName")} maxLength={80} placeholder="free consultation" className={field} />
           </label>
           <label className={label}>
             How long
@@ -266,11 +294,11 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
           <span className={hint}>Only sent if someone asks for a link. Otherwise the AI books them in itself.</span>
         </label>
       </Section>
-      <Section title="Treatments, prices and offer">
+      <Section title="Services, prices and offer">
         <label className={label}>
-          Treatments and starting prices
+          Services and starting prices
           <textarea {...t("services")} rows={7} className={area} />
-          <span className={hint}>One per line. The AI gives these starting prices and says the practitioner confirms the plan.</span>
+          <span className={hint}>One per line. The AI gives these starting prices and says the {kind.expert} confirms the exact price.</span>
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={label}>
@@ -278,14 +306,14 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
             <textarea {...t("offer")} rows={3} className={area} />
           </label>
           <label className={label}>
-            Financing
+            Payment options
             <textarea {...t("financing")} rows={3} className={area} />
           </label>
         </div>
       </Section>
       <Section title="Trust and rules">
         <label className={label}>
-          Who does the treatments
+          Who does the work
           <textarea {...t("whoTreats")} rows={2} className={area} />
         </label>
         <label className={label}>
@@ -306,6 +334,19 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
           <textarea {...t("tone")} rows={2} className={area} />
         </label>
       </Section>
+      <Section title="Your instructions" text="Anything else the AI should always or never do, in plain words. It follows these on top of its standard rules (its safety rules always come first).">
+        <label className={label}>
+          Instructions
+          <textarea
+            {...t("instructions")}
+            rows={6}
+            maxLength={3000}
+            placeholder={"Always ask what area they live in before offering times.\nNever offer appointments on Saturdays.\nIf they mention a wedding, ask the date."}
+            className={area}
+          />
+          <span className={hint}>One rule per line works best. Try them straight away in the Test chat.</span>
+        </label>
+      </Section>
     </div>
   );
 }
@@ -320,11 +361,11 @@ function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={label}>
             From
-            <input type="time" value={r.start} disabled={ro} onChange={(e) => set({ start: e.target.value })} className={field} />
+            <TimeSelect value={r.start} disabled={ro} onChange={(v) => set({ start: v })} className={field} />
           </label>
           <label className={label}>
             Until
-            <input type="time" value={r.end} disabled={ro} onChange={(e) => set({ end: e.target.value })} className={field} />
+            <TimeSelect value={r.end} disabled={ro} onChange={(v) => set({ end: v })} className={field} />
           </label>
         </div>
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Days">
@@ -366,6 +407,15 @@ function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules
           <span>
             Create tasks in GHL for what a person does
             <span className="block text-[12px] text-muted">Call twice when a lead comes in, Instagram DM on day 1, selfie video on day 3, &quot;we&apos;re all busy&quot; video on day 8.</span>
+          </span>
+        </label>
+      </Section>
+      <Section title="Contacts">
+        <label className="flex items-start gap-2 text-[13.5px]">
+          <input type="checkbox" checked={r.syncContacts} disabled={ro} onChange={(e) => set({ syncContacts: e.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]" />
+          <span>
+            Copy each new GHL lead into Scalency&apos;s contacts
+            <span className="block text-[12px] text-muted">One way only. Copied contacts aren&apos;t messaged by Scalency and don&apos;t start Scalency workflows.</span>
           </span>
         </label>
       </Section>
@@ -636,7 +686,74 @@ function GhlTab({ setter, ro }: { setter: Setter; ro: boolean }) {
           </li>
         </ol>
       </Section>
+      <GhlContactsImport setterId={setter.id} connected={connected} ro={ro} />
     </div>
+  );
+}
+
+/** Copies every contact in the GHL sub-account into Scalency, 500 at a time, without duplicates. */
+function GhlContactsImport({ setterId, connected, ro }: { setterId: string; connected: boolean; ro: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ added: number; linked: number; seen: number; total: number | null } | null>(null);
+  const run = async () => {
+    const ok = await ask({
+      title: "Copy all GHL contacts into Scalency?",
+      text: "Names, emails, phone numbers and tags are copied. Anyone already in Scalency with the same email or phone is linked, not duplicated, and nothing they have is overwritten. Copied contacts aren't emailed or texted by Scalency and don't start Scalency workflows: GHL stays in charge of them.",
+      confirm: "Copy contacts",
+      danger: false,
+    });
+    if (!ok) return;
+    setBusy(true);
+    const sum = { added: 0, linked: 0, seen: 0, total: null as number | null };
+    let after: unknown = null;
+    let page = 1;
+    try {
+      for (let round = 0; round < 60; round++) {
+        const res = await callSetter({ action: "import_contacts", agent_id: setterId, after, page });
+        if ("error" in res && res.error) {
+          notify(String(res.error), "bad");
+          break;
+        }
+        sum.added += Number(res.added) || 0;
+        sum.linked += Number(res.linked) || 0;
+        sum.seen += Number(res.seen) || 0;
+        sum.total = (res.total as number | null) ?? sum.total;
+        setProgress({ ...sum });
+        if (res.done) {
+          notify(`Done: ${sum.added} added, ${sum.linked} already in Scalency and linked.`, "ok");
+          break;
+        }
+        after = res.after;
+        page = (Number(res.page) || page) + 1;
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section title="GHL contacts in Scalency" text="Keeps a copy of the sub-account's contacts in Scalency, so the business can move over to Scalency later with everything in place. It only copies from GHL into Scalency, never back.">
+      <ul className="list-disc pl-5 text-[13px] text-muted">
+        <li>New leads that reach the AI setter are copied in automatically (switch this off in Hours and follow-up).</li>
+        <li>Use the button once to bring in everyone already in GHL. You can run it again any time: it won&apos;t make duplicates.</li>
+      </ul>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={ro || !connected || busy}
+          onClick={() => void run()}
+          className="btn-primary inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold disabled:opacity-50"
+        >
+          <Icon name="users" size={14} /> {busy ? "Copying…" : "Copy all GHL contacts into Scalency"}
+        </button>
+        {!connected && <span className={hint}>Connect GHL first.</span>}
+        {progress && (
+          <span className="text-[13px] text-muted" aria-live="polite">
+            {progress.seen}
+            {progress.total ? ` of ${progress.total}` : ""} checked · {progress.added} added · {progress.linked} linked
+          </span>
+        )}
+      </div>
+    </Section>
   );
 }
 

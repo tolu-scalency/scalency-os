@@ -23,6 +23,7 @@ const paths = {
   checkCircle: "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3",
   x: "M18 6L6 18M6 6l12 12",
   plus: "M12 5v14M5 12h14",
+  expand: "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
   arrowRight: "M5 12h14M13 6l6 6-6 6",
   arrowLeft: "M19 12H5M11 18l-6-6 6-6",
   chevronDown: "M6 9l6 6 6-6",
