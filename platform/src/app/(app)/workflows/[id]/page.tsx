@@ -47,7 +47,7 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
 
   return (
-    <Page>
+    <Page wide>
       <Link href="/workflows" className="-mb-2 inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted hover:text-brand">
         <Icon name="arrowLeft" size={15} /> Workflows
       </Link>
