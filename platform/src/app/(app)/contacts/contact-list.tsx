@@ -2,6 +2,7 @@
 
 // The contacts list, with tick boxes to select several and delete them in one go.
 
+import { shortId } from "@/lib/short-id-shared";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -80,7 +81,7 @@ export function ContactList({ rows, canDelete }: { rows: ContactRow[]; canDelete
         {rows.map((c) => (
           <li key={c.id} className={`flex items-center gap-4 pl-5 transition-colors hover:bg-surface ${picked.has(c.id) ? "bg-chip/60" : ""}`}>
             {canDelete && <input type="checkbox" aria-label={`Select ${c.name}`} checked={picked.has(c.id)} onChange={() => toggle(c.id)} className="h-4 w-4 flex-none accent-[var(--color-brand)]" />}
-            <Link href={`/contacts/${c.id}`} className={`grid min-w-0 flex-1 grid-cols-[1fr_auto] items-center gap-4 py-3.5 pr-5 ${GRID}`}>
+            <Link href={`/contacts/${shortId(c.id)}`} className={`grid min-w-0 flex-1 grid-cols-[1fr_auto] items-center gap-4 py-3.5 pr-5 ${GRID}`}>
               <span className="flex min-w-0 items-center gap-3">
                 <Avatar initials={c.initials} size={36} />
                 <span className="min-w-0">

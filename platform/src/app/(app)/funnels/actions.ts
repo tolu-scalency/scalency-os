@@ -1,5 +1,6 @@
 "use server";
 
+import { shortId } from "@/lib/short-id-shared";
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -58,7 +59,7 @@ export async function createPage(fd: FormData) {
     await supabase.from("sites").delete().eq("id", site.id);
     redirect("/funnels?error=1");
   }
-  redirect(`/funnels/${site.id}`);
+  redirect(`/funnels/${shortId(site.id)}`);
 }
 
 type SaveInput = { name: string; slug?: string; pageId: string; definition: unknown; pageName?: string };
@@ -123,7 +124,7 @@ export async function duplicatePage(id: string) {
   if (pages?.length) {
     await supabase.from("site_pages").insert(pages.map((p) => ({ account_id: ws.account.id, site_id: site.id, name: p.position === 0 ? name : p.name, slug: p.slug, position: p.position, definition: cleanPage(p.definition) })));
   }
-  redirect(s.kind === "page" ? `/funnels/${site.id}` : `/funnels/${site.id}/overview`);
+  redirect(s.kind === "page" ? `/funnels/${shortId(site.id)}` : `/funnels/${shortId(site.id)}/overview`);
 }
 
 export async function archivePage(id: string, archived: boolean) {
@@ -168,7 +169,7 @@ export async function createSite(fd: FormData) {
     await supabase.from("sites").delete().eq("id", site.id);
     redirect("/funnels?error=1");
   }
-  redirect(`/funnels/${site.id}/overview`);
+  redirect(`/funnels/${shortId(site.id)}/overview`);
 }
 
 async function sitePages(supabase: Db, accountId: string, siteId: string) {

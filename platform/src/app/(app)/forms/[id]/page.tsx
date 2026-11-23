@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { fullId } from "@/lib/short-id";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Page } from "@/components/ui";
@@ -16,8 +17,8 @@ function daysAgo(n: number) {
 }
 
 export default async function FormPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
-  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const [{ id: raw }, { tab }] = await Promise.all([params, searchParams]);
+  const id = await fullId("forms", raw);
   const ws = await getWorkspace();
   const supabase = await createClient();
   const { data: form } = await supabase.from("forms").select("id, name, slug, status, definition, tags, stage_id, redirect_url").eq("id", id).eq("account_id", ws.account.id).maybeSingle();

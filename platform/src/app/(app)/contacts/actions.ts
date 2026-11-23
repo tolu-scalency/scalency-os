@@ -1,5 +1,6 @@
 "use server";
 
+import { shortId } from "@/lib/short-id-shared";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -64,7 +65,7 @@ export async function addContact(_prev: ActionResult, fd: FormData): Promise<Act
 
   // Run any workflow steps this contact just triggered, so follow-ups start straight away.
   runWorkflowsSoon(supabase, ws.account.id);
-  redirect(`/contacts/${contact.id}`);
+  redirect(`/contacts/${shortId(contact.id)}`);
 }
 
 /** Saves changes to a contact's name, email and phone. */

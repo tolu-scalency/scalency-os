@@ -26,6 +26,8 @@ import {
   withinHours,
   work,
   copyContactsIn,
+  tagRuleBlocks,
+  leadOf,
   WAITING_FOR_TAG,
   NO_TAG,
   type Agent,
@@ -73,6 +75,44 @@ Deno.test("rules: bad values fall back to safe defaults", () => {
   assertEquals(r.followUpDays, [2]);
   assertEquals(r.minNoticeHours, 0);
   assertEquals(r.replyDelaySeconds, 60);
+  assertEquals(rulesOf({ replyDelaySeconds: 0 }).replyDelaySeconds, 10);
+  assertEquals(rulesOf({}).joinReplies, "all");
+  assertEquals(rulesOf({ joinReplies: "own", onlyTags: [" VIP ", 3] as unknown as string[], teamPauseHours: -2 }).onlyTags, ["vip", "3"]);
+});
+
+Deno.test("when the AI joins: tag rules and stepping back for the team", () => {
+  const r = rulesOf({ skipTags: ["customer"], onlyTags: ["new lead"] });
+  assertMatch(String(tagRuleBlocks(["Customer", "new lead"], r)), /customer/);
+  assertMatch(String(tagRuleBlocks(["other"], r)), /only works/);
+  assertEquals(tagRuleBlocks(["New Lead"], r), null);
+  const now = new Date("2026-11-24T15:00:00Z");
+  const turns = [
+    { who: "ai" as const, text: "hi", at: "2026-11-24T09:00:00Z" },
+    { who: "team" as const, text: "I'll take this", at: "2026-11-24T10:00:00Z" },
+  ];
+  assertEquals(teamTookOver(turns, now, 0), true); // within a day
+  assertEquals(teamTookOver(turns, now, 3), false); // 5 hours ago, the setter steps back for 3
+  assertEquals(teamTookOver(turns, now, 6), true);
+});
+
+Deno.test("the lead: form answers use their field names, with source, ad and Scalency details", () => {
+  const l = leadOf(
+    { firstName: "Dan", source: "Facebook lead form", attributionSource: { sessionSource: "Paid Social", campaign: "Botox Nov" }, tags: ["fb"], customFields: [{ id: "f1", value: "Lip filler" }] },
+    { fieldNames: { f1: "Treatment wanted" }, form: { name: "New patient form", others: { when_can_you_come: "Evenings", email: "x@y.z" } }, scalency: { custom: { budget: "500", ghl_id: "g1" } } },
+  );
+  for (const bit of ["Source: Facebook lead form", "Came from: Paid Social", "Ad or campaign: Botox Nov", "Answer: Treatment wanted: Lip filler", "Form: when can you come: Evenings", "Detail: budget: 500"]) assertStringIncludes(l.details, bit);
+  assert(!l.details.includes("ghl_id"));
+  assert(!l.details.includes("x@y.z"));
+});
+
+Deno.test("prompt: booking link modes", () => {
+  const at = new Date("2026-11-24T15:00:00Z");
+  const link = "https://book.example.com/glow";
+  assertStringIncludes(systemPrompt({ business: { ...business, bookingLink: link, bookingMode: "link" }, rules: {} }, at), `send the booking link (${link})`);
+  assertStringIncludes(systemPrompt({ business: { ...business, bookingLink: link, bookingMode: "both" }, rules: {} }, at), "also give the booking link");
+  // No link saved: always offers times.
+  assert(!systemPrompt({ business: { ...business, bookingLink: "", bookingMode: "link" }, rules: {} }, at).includes("send the booking link"));
+  assertStringIncludes(systemPrompt({ business, rules: {} }, at), "Recommend the one or two services");
 });
 
 Deno.test("free times: 3 days x 3 times, with notice, day and part-of-day filters", () => {

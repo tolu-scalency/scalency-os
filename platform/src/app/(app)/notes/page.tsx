@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icon";
@@ -34,7 +35,7 @@ export default async function NotesPage(props: PageProps<"/notes">) {
               <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed">{n.text}</p>
               <div className="mt-auto flex items-center gap-2.5 border-t border-line pt-3 text-[12.5px] text-muted">
                 {n.contactName && n.contactId ? (
-                  <Link href={`/contacts/${n.contactId}`} className="flex min-w-0 items-center gap-2 font-medium text-navy hover:text-brand">
+                  <Link href={`/contacts/${shortId(n.contactId)}`} className="flex min-w-0 items-center gap-2 font-medium text-navy hover:text-brand">
                     <Avatar initials={initialsOf(n.contactName)} size={24} />
                     <span className="truncate">{n.contactName}</span>
                   </Link>

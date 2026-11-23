@@ -1,5 +1,6 @@
 "use client";
 
+import { shortId } from "@/lib/short-id-shared";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { ActionForm, SubmitButton } from "@/components/action-form";
@@ -187,7 +188,7 @@ export function ChatRoom({
                         )}
                         <p className={`whitespace-pre-wrap break-words text-[14px] leading-relaxed ${m.id < 0 ? "opacity-60" : ""}`}>{m.body}</p>
                         {m.contactId && (
-                          <Link href={`/contacts/${m.contactId}`} className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-medium text-brand hover:underline">
+                          <Link href={`/contacts/${shortId(m.contactId)}`} className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-medium text-brand hover:underline">
                             Open contact <Icon name="arrowRight" size={12} />
                           </Link>
                         )}

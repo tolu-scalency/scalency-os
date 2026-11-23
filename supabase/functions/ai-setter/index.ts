@@ -60,6 +60,8 @@ export type Business = {
   faqs?: string;
   tone?: string;
   bookingLink?: string;
+  /** How the AI gets them booked: offer 2 times, send the booking link, or offer times and the link. */
+  bookingMode?: "times" | "link" | "both";
   spelling?: "US" | "UK";
   businessType?: string;
   /** The business's own extra rules for the AI, in plain words. */
@@ -76,6 +78,16 @@ export type Rules = {
   replyDelaySeconds?: number;
   /** Copy each new GHL lead into Scalency's contacts. On unless switched off. */
   syncContacts?: boolean;
+  /** When the AI joins: message new leads (the new-lead webhook). */
+  joinNewLeads?: boolean;
+  /** Replies: "all" answers anyone who messages in; "own" only people the AI has already messaged. */
+  joinReplies?: "all" | "own";
+  /** Only work contacts with at least one of these GHL tags (empty: everyone). */
+  onlyTags?: string[];
+  /** Never work contacts with any of these GHL tags. */
+  skipTags?: string[];
+  /** After a team member replies: 0 keeps the AI out until someone hands the lead back; otherwise the AI may join again after this many hours. */
+  teamPauseHours?: number;
 };
 
 export type Agent = {
@@ -141,6 +153,11 @@ export const DEFAULT_RULES: Required<Rules> = {
   minNoticeHours: 2,
   replyDelaySeconds: 20,
   syncContacts: true,
+  joinNewLeads: true,
+  joinReplies: "all",
+  onlyTags: [],
+  skipTags: [],
+  teamPauseHours: 0,
 };
 
 export const rulesOf = (r: Rules | null | undefined): Required<Rules> => {
@@ -153,8 +170,14 @@ export const rulesOf = (r: Rules | null | undefined): Required<Rules> => {
     followUpDays: (Array.isArray(o.followUpDays) ? o.followUpDays : DEFAULT_RULES.followUpDays).map(Number).filter((d) => d > 0 && d <= 60).slice(0, 10),
     teamTasks: o.teamTasks !== false,
     syncContacts: o.syncContacts !== false,
+    joinNewLeads: o.joinNewLeads !== false,
+    joinReplies: o.joinReplies === "own" ? "own" : "all",
+    onlyTags: ((v: unknown) => (Array.isArray(v) ? v : []).map((t) => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 20))(o.onlyTags),
+    skipTags: ((v: unknown) => (Array.isArray(v) ? v : []).map((t) => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 20))(o.skipTags),
+    teamPauseHours: Math.min(720, Math.max(0, Math.round(Number(o.teamPauseHours) || 0))),
     minNoticeHours: Math.min(72, Math.max(0, Number(o.minNoticeHours) || 0)),
-    replyDelaySeconds: Math.min(60, Math.max(0, Number(o.replyDelaySeconds ?? 20))),
+    // At least 10 seconds, so it never answers the instant someone hits send.
+    replyDelaySeconds: Math.min(60, Math.max(10, Number.isFinite(Number(o.replyDelaySeconds ?? 20)) ? Number(o.replyDelaySeconds ?? 20) : 20)),
   };
 };
 
@@ -366,16 +389,29 @@ export function systemPrompt(agent: Pick<Agent, "business" | "rules">, now: Date
   const biz = b.clinicName || "the business";
   const call = b.consultName || ind.call;
   const uk = b.spelling === "UK";
+  const mode = b.bookingLink ? (b.bookingMode ?? "times") : "times";
+  const bookingStep =
+    mode === "link"
+      ? `send the booking link (${b.bookingLink}) and say they can pick any time that suits; if they'd rather you book it, call get_free_times and offer two times`
+      : mode === "both"
+        ? `call get_free_times and offer exactly two times on different days if you can, and also give the booking link (${b.bookingLink}) in case neither suits`
+        : "call get_free_times and offer exactly two times on different days if you can. Ask which suits";
   const nowText = new Intl.DateTimeFormat("en-GB", { timeZone: tz, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" }).format(now);
   return `You are ${who}, the ${ind.role} (a virtual assistant) for ${biz}. You message people who asked about ${biz}, usually through an ad, a form or the website. Your one job is to get them booked into a ${call}${b.consultLength ? ` (${b.consultLength})` : ""}${b.consultPrice ? `, ${b.consultPrice}` : ""}. You don't do the selling: ${ind.expert} does that on the ${call}.
 
 ## How the conversation flows
 1. First message: say who you are, give one useful thing (the offer, a starting price, or what the ${call} gets them), then ask ONE easy question about them, for example what they'd most like help with or what made them reach out. Never ask permission ("mind if I explain…?").
 2. When they answer: reply to exactly what they said, using their words. Give the one or two facts that matter to them (price, what's involved, what's typical). Then move one step closer to booking.
-3. As soon as they show any interest (a yes, a "sounds good", a question about price or timing, "when can I come?"): explain the ${call} in one short sentence AND, in the same message, call get_free_times and offer exactly two times on different days if you can. Ask which suits. Don't ask "shall I send you some times?" first.
+3. As soon as they show any interest (a yes, a "sounds good", a question about price or timing, "when can I come?"): explain the ${call} in one short sentence AND, in the same message, ${bookingStep}. Don't ask "shall I send you some times?" first.
 4. If neither time works, ask what day or part of the day is better and check again.
-5. Only call book_consultation once they've clearly picked a time, using a time from get_free_times exactly. Then confirm the day and time, what happens, and anything in the policies they need to know (such as cancellation notice). Keep it short.
-6. If they ask for a booking link instead${b.bookingLink ? `, send this: ${b.bookingLink}` : ", offer to book them in yourself"}.
+5. Only call book_consultation once they've clearly picked a time, using a time from get_free_times exactly. Then confirm the day and time, what happens, and anything in the policies they need to know (such as cancellation notice). Keep it short. Never say they're booked unless book_consultation said it worked.
+6. ${b.bookingLink ? `If they'd rather book themselves or ask for a link, send this: ${b.bookingLink}` : "If they ask for a booking link, say you can book them in right here and offer times"}.
+7. If they messaged first (for example "hey" or a question), answer what they said before anything else.
+
+## Reading the lead first
+- Before you write, read <lead>: where they came from (source, ad or campaign), their form answers, tags and notes. They tell you what they want, when, and anything they've already said. Use it.
+- Mention what they asked about specifically. Never ask something their form already answered.
+- Recommend the one or two services from the business details that best fit what they asked for, with the starting price if there is one. Never recommend something that isn't in the details.
 
 ## Rules for every message
 - Treat every lead as a good fit until they clearly show they're not.
@@ -690,6 +726,17 @@ export class Ghl {
   contact(id: string) {
     return this.req<{ contact?: Record<string, unknown> }>("GET", `/contacts/${id}`, "2021-07-28");
   }
+  /** Custom field IDs to their names, so form answers read as "Treatment wanted: Botox". */
+  async fieldNames(): Promise<Record<string, string>> {
+    const r = await this.req<{ customFields?: { id: string; name?: string }[] }>("GET", `/locations/${this.locationId}/customFields?model=contact`, "2021-07-28");
+    return Object.fromEntries((r.customFields ?? []).filter((f) => f.id && f.name).map((f) => [f.id, String(f.name)]));
+  }
+  /** Their latest form submission (by email), if any. */
+  async latestForm(email: string): Promise<Record<string, unknown> | null> {
+    if (!email) return null;
+    const r = await this.req<{ submissions?: Record<string, unknown>[] }>("GET", `/forms/submissions?locationId=${this.locationId}&q=${encodeURIComponent(email)}&limit=1`, "2021-07-28");
+    return r.submissions?.[0] ?? null;
+  }
   /** A page of the sub-account's contacts, oldest first. Pass the last page's cursor for the next. */
   async contactsPage(after?: unknown[], page = 1) {
     const body: Record<string, unknown> = { locationId: this.locationId, pageLimit: 100, sort: [{ field: "dateAdded", direction: "asc" }] };
@@ -897,9 +944,21 @@ export function toTurns(list: GhlMessage[], sentIds: string[]): Turn[] {
 }
 
 /** A team member replied to the lead themselves (after the AI's last message, in the last day): the AI steps back. */
-export function teamTookOver(turns: Turn[], now = new Date()) {
+/** A team member has replied since the AI's last message, recently enough that the AI should stay out.
+ *  `hours` is the setter's "step back for" setting; 0 means a day (and the lead then stays paused). */
+export function teamTookOver(turns: Turn[], now = new Date(), hours = 0) {
+  const windowMs = (hours > 0 ? hours : 24) * 3_600_000;
   const lastAi = Math.max(0, ...turns.filter((t) => t.who === "ai").map((t) => new Date(t.at).getTime() || 0));
-  return turns.some((t) => t.who === "team" && new Date(t.at).getTime() > lastAi && now.getTime() - new Date(t.at).getTime() < 86_400_000);
+  return turns.some((t) => t.who === "team" && new Date(t.at).getTime() > lastAi && now.getTime() - new Date(t.at).getTime() < windowMs);
+}
+
+/** Whether the setter's tag rules let the AI work this contact, and if not, why. */
+export function tagRuleBlocks(tags: string[], rules: Required<Rules>): string | null {
+  const have = new Set(tags.map((t) => t.toLowerCase()));
+  const skip = rules.skipTags.find((t) => have.has(t));
+  if (skip) return `Skipped: the contact has the tag "${skip}", which the AI leaves alone.`;
+  if (rules.onlyTags.length && !rules.onlyTags.some((t) => have.has(t))) return `Skipped: the AI only works contacts tagged ${rules.onlyTags.map((t) => `"${t}"`).join(" or ")}.`;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -934,23 +993,56 @@ export async function unseal(box: string) {
 type Db = SupabaseClient;
 const AGENT_COLS = "id, account_id, name, status, business, rules, ghl_location_id, ghl_calendar_id, ghl_pipeline_id, ghl_stages, ghl_token, webhook_key";
 
-function leadOf(contact: Record<string, unknown>): Lead {
+/** What the AI knows about the lead before writing: source, ad, form answers (with their real field
+ *  names), tags, and anything extra saved on their Scalency contact. */
+export function leadOf(contact: Record<string, unknown>, extra: { fieldNames?: Record<string, string>; form?: Record<string, unknown> | null; scalency?: Record<string, unknown> | null } = {}): Lead {
   const first = String(contact.firstName ?? contact.first_name ?? "").trim();
   const bits: string[] = [];
+  const seen = new Set<string>();
   const add = (k: string, v: unknown) => {
-    if (v == null || v === "" || (Array.isArray(v) && !v.length)) return;
-    bits.push(`${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`.slice(0, 300));
+    if (v == null || v === "" || (Array.isArray(v) && !v.length) || (typeof v === "object" && !Array.isArray(v))) return;
+    const text = `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`.replace(/\s+/g, " ").slice(0, 300);
+    if (seen.has(text.toLowerCase())) return;
+    seen.add(text.toLowerCase());
+    bits.push(text);
   };
   add("Last name", contact.lastName);
   add("Has phone", contact.phone ? "yes" : "no");
   add("Has email", contact.email ? "yes" : "no");
+  add("City", contact.city);
+  add("Company", contact.companyName);
   add("Source", contact.source);
+  const att = (contact.attributionSource ?? contact.lastAttributionSource ?? {}) as Record<string, unknown>;
+  add("Came from", [att.sessionSource, att.medium, att.utmSource].filter(Boolean).join(" / "));
+  add("Ad or campaign", [att.campaign, att.utmCampaign, att.adName].filter(Boolean).join(" / "));
+  add("Page they were on", att.url);
+  add("Added", contact.dateAdded ? String(contact.dateAdded).slice(0, 10) : "");
   add("Tags", contact.tags);
-  // Form answers come through as custom fields.
-  for (const f of ((contact.customFields ?? contact.customField ?? []) as { id?: string; key?: string; name?: string; value?: unknown; field_value?: unknown }[]).slice(0, 15)) {
-    add(`Form answer ${f.name ?? f.key ?? f.id ?? ""}`.trim(), f.value ?? f.field_value);
+  // Form answers come through as custom fields; use the field's real name when we know it.
+  const names = extra.fieldNames ?? {};
+  for (const f of ((contact.customFields ?? contact.customField ?? []) as { id?: string; key?: string; name?: string; value?: unknown; field_value?: unknown }[]).slice(0, 25)) {
+    const label = f.name ?? names[f.id ?? ""] ?? f.key ?? f.id ?? "";
+    add(label ? `Answer: ${label}` : "Answer", f.value ?? f.field_value);
   }
-  return { firstName: first, details: bits.join("\n") };
+  // Their latest form submission, if GHL has one.
+  if (extra.form) {
+    const answers = (extra.form.others ?? extra.form) as Record<string, unknown>;
+    add("Latest form", extra.form.name ?? (extra.form as { formName?: string }).formName);
+    for (const [k, v] of Object.entries(answers).slice(0, 25)) {
+      if (/^(id|formId|contactId|locationId|createdAt|eventData|__|fieldsOriSequance|ip|timezone|signatureHash|disqualified|spam|full_name|first_name|last_name|email|phone)$/i.test(k)) continue;
+      if (typeof v === "string" || typeof v === "number" || Array.isArray(v)) add(`Form: ${k.replace(/_/g, " ")}`, v);
+    }
+  }
+  // Extra details saved in Scalency.
+  if (extra.scalency) {
+    const sc = extra.scalency;
+    add("In Scalency since", sc.created_at ? String(sc.created_at).slice(0, 10) : "");
+    for (const [k, v] of Object.entries((sc.custom ?? {}) as Record<string, unknown>).slice(0, 20)) {
+      if (k === "ghl_id") continue;
+      if (typeof v === "string" || typeof v === "number" || typeof v === "boolean" || Array.isArray(v)) add(`Detail: ${k.replace(/_/g, " ")}`, v);
+    }
+  }
+  return { firstName: first, details: bits.slice(0, 45).join("\n") };
 }
 
 async function logTurn(db: Db, t: { agent: Agent; thread?: Thread | null; role: "lead" | "ai" | "event"; body: string; channel?: string; meta?: Record<string, unknown>; test?: boolean }) {
@@ -1011,16 +1103,33 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
     if (mode.kind === "opener") await logTurn(db, { agent, thread, role: "event", body: "Not sent: test mode needs the ai-test tag" });
     return { skipped: "test mode: contact isn't tagged ai-test" };
   }
+  const blocked = tagRuleBlocks(tags, rules);
+  if (blocked) {
+    await update(db, thread, { next_action: null, next_action_at: null, note: blocked });
+    if (mode.kind === "opener") await logTurn(db, { agent, thread, role: "event", body: blocked });
+    return { skipped: blocked };
+  }
   if (contact.dnd === true) {
     await update(db, thread, { state: "stopped", next_action_at: null, next_action: null, note: "Do not disturb is on in GHL" });
     return { skipped: "do not disturb" };
   }
-  const lead = leadOf(contact);
+  const [fieldNames, form, scalency] = await Promise.all([
+    ghl.fieldNames().catch(() => ({})),
+    ghl.latestForm(String(contact.email ?? "")).catch(() => null),
+    db
+      .from("contacts")
+      .select("custom, created_at")
+      .eq("account_id", agent.account_id)
+      .eq("custom->>ghl_id", contactId)
+      .maybeSingle()
+      .then((r) => r.data as Record<string, unknown> | null, () => null),
+  ]);
+  const lead = leadOf(contact, { fieldNames, form, scalency });
   const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || String(contact.name ?? "") || "Lead";
 
   const convId = await ghl.conversationId(contactId);
   const history = convId ? toTurns(await ghl.messagesWithEmails(convId, 40), thread.sent_ids ?? []) : [];
-  if (teamTookOver(history, now)) {
+  if (teamTookOver(history, now, rules.teamPauseHours)) {
     await update(db, thread, { state: "paused", next_action_at: null, next_action: null, note: "A team member replied, so the AI stepped back" });
     await logTurn(db, { agent, thread, role: "event", body: "A team member replied to this lead, so the AI stepped back." });
     return { skipped: "team took over" };
@@ -1240,9 +1349,16 @@ async function webhook(event: string, url: URL, req: Request) {
   const db = admin();
   const id = url.searchParams.get("a") ?? "";
   const key = url.searchParams.get("k") ?? "";
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "unknown setter" }, 404);
-  const { data } = await db.from("setter_agents").select(AGENT_COLS).eq("id", id).maybeSingle();
-  const agent = data as Agent | null;
+  // The address carries the setter's ID, in full or its first 8 characters (shorter addresses).
+  let agent: Agent | null = null;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    const { data } = await db.from("setter_agents").select(AGENT_COLS).eq("id", id).maybeSingle();
+    agent = data as Agent | null;
+  } else if (/^[0-9a-f]{8}$/i.test(id)) {
+    const p = id.toLowerCase();
+    const { data } = await db.from("setter_agents").select(AGENT_COLS).gte("id", `${p}-0000-0000-0000-000000000000`).lte("id", `${p}-ffff-ffff-ffff-ffffffffffff`).limit(2);
+    agent = data?.length === 1 ? (data[0] as Agent) : null;
+  }
   if (!agent || !equal(agent.webhook_key, key)) return json({ error: "unknown setter" }, 404);
   if (agent.status === "off") return json({ ok: true, skipped: "the AI setter is off" });
 
@@ -1262,6 +1378,11 @@ async function webhook(event: string, url: URL, req: Request) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY isn't set" }, 500);
 
+  if (event === "inbound" && rules.joinReplies === "own") {
+    // Only people the AI has already messaged: don't start a conversation from someone else's reply.
+    const { data: had } = await db.from("setter_threads").select("id, last_outbound_at").eq("agent_id", agent.id).eq("ghl_contact_id", contactId).maybeSingle();
+    if (!had?.last_outbound_at) return json({ ok: true, skipped: "the AI only answers people it has messaged (When the AI joins)" });
+  }
   const thread = await threadFor(db, agent, contactId, name);
 
   if (event === "booked") {
@@ -1284,6 +1405,7 @@ async function webhook(event: string, url: URL, req: Request) {
         })(),
       );
     }
+    if (!rules.joinNewLeads) return json({ ok: true, skipped: "the AI doesn't message new leads (When the AI joins)" });
     if (thread.state !== "active" || thread.last_outbound_at) return json({ ok: true, skipped: "already contacted" });
     const now = new Date();
     const at = withinHours(now, rules, tz) ? now : nextOpening(now, rules, tz);
@@ -1323,6 +1445,9 @@ async function webhook(event: string, url: URL, req: Request) {
       );
       return json({ ok: true, stopped: true });
     }
+    // Stepped back for a team member: with a time limit set, the AI may join again (it checks the
+    // team's last message again before answering).
+    if (thread.state === "paused" && rules.teamPauseHours > 0) await update(db, thread, { state: "active", note: null });
     if (!["active", "booked"].includes(thread.state)) return json({ ok: true, skipped: `this lead is ${thread.state}` });
     // Several texts in a row: wait a little, and only the newest one replies.
     const token = crypto.randomUUID();
@@ -1526,7 +1651,7 @@ async function app(req: Request) {
   const action = String(body.action ?? "");
   if (action === "webhooks") {
     const base = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-setter`;
-    const q = (e: string) => `${base}?event=${e}&a=${agent.id}&k=${agent.webhook_key}`;
+    const q = (e: string) => `${base}?event=${e}&a=${agent.id.slice(0, 8)}&k=${agent.webhook_key}`;
     return json({ new_lead: q("new_lead"), inbound: q("inbound"), booked: q("booked") });
   }
 
@@ -1642,7 +1767,7 @@ async function app(req: Request) {
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v8 (23 Nov): any business type, your instructions, GHL contacts copied into Scalency";
+export const VERSION = "v9 (24 Nov): reads the lead first, booking link, when the AI joins, 10-second wait";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {

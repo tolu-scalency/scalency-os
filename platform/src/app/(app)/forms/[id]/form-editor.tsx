@@ -5,6 +5,7 @@
 // phone and desktop views, a real preview, multi-step forms, rules and scoring.
 // Everything saves automatically.
 
+import { shortId } from "@/lib/short-id-shared";
 import { notify } from "@/components/toast";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -1142,7 +1143,7 @@ function Submissions({ submissions, name, qualify, views }: { submissions: Submi
                 {shown.map((s) => (
                   <tr key={s.id} className="align-top">
                     <td className="px-4 py-3">
-                      <Link href={`/contacts/${s.contactId}`} className="font-semibold text-brand hover:underline">{s.name}</Link>
+                      <Link href={`/contacts/${shortId(s.contactId)}`} className="font-semibold text-brand hover:underline">{s.name}</Link>
                       <div className="text-[12.5px] text-muted">{[s.email, s.phone].filter(Boolean).join(" · ")}</div>
                     </td>
                     <td className="px-4 py-3">

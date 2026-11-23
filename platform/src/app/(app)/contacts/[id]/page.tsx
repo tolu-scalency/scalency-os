@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { fullId } from "@/lib/short-id";
 import { FieldInput } from "@/components/field-input";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -45,8 +46,8 @@ function labelFor(key: string) {
 }
 
 async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const { id: raw } = await params;
+  const id = await fullId("contacts", raw);
   const ws = await getWorkspace();
   const [c, workflows, names, allTags, customFields] = await Promise.all([
     getContactDetail(id, ws.account.id),

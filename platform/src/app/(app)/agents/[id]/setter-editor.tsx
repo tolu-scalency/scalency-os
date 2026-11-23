@@ -291,8 +291,27 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
         <label className={label}>
           Booking link (optional)
           <input {...t("bookingLink")} maxLength={500} placeholder="https://" className={field} />
-          <span className={hint}>Only sent if someone asks for a link. Otherwise the AI books them in itself.</span>
+          <span className={hint}>Your GHL or other booking page. Choose below when the AI sends it.</span>
         </label>
+        <fieldset className="flex flex-col gap-2" disabled={ro}>
+          <legend className="mb-1.5 text-[12.5px] font-semibold text-navy">How the AI gets them booked</legend>
+          {(
+            [
+              ["times", "Offer 2 times and book it", "The AI checks the GHL calendar, offers two times and books the one they pick. The link is only sent if they ask."],
+              ["link", "Send the booking link", "They pick a time themselves. If they'd rather, the AI can still offer times."],
+              ["both", "Offer 2 times and the link", "Two times, plus the link in case neither suits."],
+            ] as const
+          ).map(([v, title, text]) => (
+            <label key={v} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-[13.5px] ${b.bookingMode === v ? "border-brand bg-chip" : "border-line"}`}>
+              <input type="radio" name="booking-mode" checked={b.bookingMode === v} onChange={() => set({ bookingMode: v })} className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]" />
+              <span>
+                <span className="font-semibold">{title}</span>
+                <span className="block text-[12px] text-muted">{text}</span>
+              </span>
+            </label>
+          ))}
+          {b.bookingMode !== "times" && !b.bookingLink && <span className="text-[12px] font-medium text-warn">Add the booking link above, or the AI will offer times instead.</span>}
+        </fieldset>
       </Section>
       <Section title="Services, prices and offer">
         <label className={label}>
@@ -353,6 +372,24 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
 
 // ---------------------------------------------------------------- rules
 
+/** Tags typed as "a, b, c". Kept as text while typing, so commas and spaces aren't eaten. */
+function TagListInput({ value, onChange, disabled, placeholder }: { value: string[]; onChange: (v: string[]) => void; disabled?: boolean; placeholder?: string }) {
+  const [text, setText] = useState(value.join(", "));
+  return (
+    <input
+      value={text}
+      disabled={disabled}
+      placeholder={placeholder}
+      maxLength={600}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange([...new Set(e.target.value.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 20));
+      }}
+      className={field}
+    />
+  );
+}
+
 function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules>) => void; ro: boolean }) {
   const [days, setDays] = useState(r.followUpDays.join(", "));
   return (
@@ -410,6 +447,45 @@ function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules
           </span>
         </label>
       </Section>
+      <Section title="When the AI joins" text="Which conversations the AI takes part in. Your 3 GHL workflows decide what it hears about; these decide what it does with it.">
+        <label className="flex items-start gap-2 text-[13.5px]">
+          <input type="checkbox" checked={r.joinNewLeads} disabled={ro} onChange={(e) => set({ joinNewLeads: e.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]" />
+          <span>
+            Message new leads first
+            <span className="block text-[12px] text-muted">When the &quot;new lead&quot; workflow fires, the AI sends the first message within your hours.</span>
+          </span>
+        </label>
+        <label className={label}>
+          Who it answers when they message in
+          <select value={r.joinReplies} disabled={ro} onChange={(e) => set({ joinReplies: e.target.value === "own" ? "own" : "all" })} className={field}>
+            <option value="all">Anyone who messages the business</option>
+            <option value="own">Only people the AI has already messaged</option>
+          </select>
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={label}>
+            Only contacts with these tags (optional)
+            <TagListInput value={r.onlyTags} disabled={ro} onChange={(v) => set({ onlyTags: v })} placeholder="new lead, facebook" />
+            <span className={hint}>Leave empty for everyone. Separate tags with commas.</span>
+          </label>
+          <label className={label}>
+            Never contacts with these tags
+            <TagListInput value={r.skipTags} disabled={ro} onChange={(v) => set({ skipTags: v })} placeholder="customer, do not contact" />
+            <span className={hint}>For example existing customers, or people your team is handling.</span>
+          </label>
+        </div>
+        <label className={label}>
+          If a team member replies, the AI steps back
+          <select value={String(r.teamPauseHours)} disabled={ro} onChange={(e) => set({ teamPauseHours: Number(e.target.value) })} className={field}>
+            <option value="0">Until someone hands the lead back</option>
+            <option value="4">For 4 hours</option>
+            <option value="24">For 1 day</option>
+            <option value="72">For 3 days</option>
+            <option value="168">For a week</option>
+          </select>
+          <span className={hint}>After that, if the lead messages again and nobody from the team has replied, the AI answers.</span>
+        </label>
+      </Section>
       <Section title="Contacts">
         <label className="flex items-start gap-2 text-[13.5px]">
           <input type="checkbox" checked={r.syncContacts} disabled={ro} onChange={(e) => set({ syncContacts: e.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]" />
@@ -427,7 +503,7 @@ function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules
           </label>
           <label className={label}>
             Wait before replying (seconds)
-            <input type="number" min={0} max={60} value={r.replyDelaySeconds} disabled={ro} onChange={(e) => set({ replyDelaySeconds: Number(e.target.value) })} className={field} />
+            <input type="number" min={10} max={60} value={r.replyDelaySeconds} disabled={ro} onChange={(e) => set({ replyDelaySeconds: Number(e.target.value) })} className={field} />
             <span className={hint}>So several texts in a row get one answer, and it doesn&apos;t feel instant and robotic.</span>
           </label>
         </div>
@@ -789,19 +865,41 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
       if ("error" in res && res.error) return void notify(String(res.error), "bad");
       const now = new Date().toISOString();
       const add: ChatTurn[] = [];
-      for (const e of (res.events as string[]) ?? []) add.push({ who: "event", text: e, at: now });
+      // The test chat books into a pretend calendar: say so, so nobody thinks it's real.
+      for (const e of (res.events as string[]) ?? []) add.push({ who: "event", text: /^booked/i.test(e) ? `Test booking only (pretend calendar, nothing was booked): ${e.replace(/^booked:?\s*/i, "")}` : e, at: now });
       if (res.message) add.push({ who: "ai", text: String(res.message), at: now });
       else add.push({ who: "event", text: "Nothing sent.", at: now });
       setTurns([...history, ...add]);
       if (mode === "followup") setTouch((x) => x + 1);
     });
+  // Like the real thing: it waits before answering, so several messages in a row get one reply.
+  const delay = Math.min(60, Math.max(10, r.replyDelaySeconds || 20));
+  const [waitLeft, setWaitLeft] = useState(0);
+  const waiting = useRef<{ timer: ReturnType<typeof setInterval> | null; history: ChatTurn[] }>({ timer: null, history: [] });
+  useEffect(() => () => {
+    if (waiting.current.timer) clearInterval(waiting.current.timer);
+  }, []);
+  const answerNow = () => {
+    if (waiting.current.timer) clearInterval(waiting.current.timer);
+    waiting.current.timer = null;
+    setWaitLeft(0);
+    ask("reply", waiting.current.history);
+  };
   const send = () => {
     const t = text.trim();
     if (!t || pending) return;
     const history = [...turns, { who: "lead" as const, text: t, at: new Date().toISOString() }];
     setTurns(history);
     setText("");
-    ask("reply", history);
+    waiting.current.history = history;
+    if (waiting.current.timer) clearInterval(waiting.current.timer);
+    setWaitLeft(delay);
+    let left = delay;
+    waiting.current.timer = setInterval(() => {
+      left -= 1;
+      setWaitLeft(left);
+      if (left <= 0) answerNow();
+    }, 1000);
   };
 
   return (
@@ -811,11 +909,14 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
           <Icon name="mail" size={16} />
           <div className="min-w-0 flex-1">
             <div className="text-[14px] font-semibold">Test chat</div>
-            <div className="text-[12px] text-muted">You&apos;re the lead. It uses a pretend calendar and sends nothing. Unsaved changes are used too.</div>
+            <div className="text-[12px] text-muted">You&apos;re the lead. Bookings here go into a pretend calendar and nothing is sent. Unsaved changes are used too.</div>
           </div>
           <button
             type="button"
             onClick={() => {
+              if (waiting.current.timer) clearInterval(waiting.current.timer);
+              waiting.current.timer = null;
+              setWaitLeft(0);
               setTurns([]);
               setTouch(0);
             }}
@@ -840,6 +941,14 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
                 {t.text}
               </div>
             ),
+          )}
+          {waitLeft > 0 && !pending && (
+            <div className="flex items-center gap-2 self-start rounded-2xl bg-white px-3.5 py-2 text-[12.5px] text-muted ring-1 ring-line">
+              Replies in {waitLeft}s, like it will for real (your reply wait).
+              <button type="button" onClick={answerNow} className="font-semibold text-brand hover:underline">
+                Answer now
+              </button>
+            </div>
           )}
           {pending && <div className="self-start rounded-2xl bg-white px-3.5 py-2.5 text-[13px] text-muted ring-1 ring-line">{b.assistantName || "The AI"} is typing…</div>}
           <div ref={end} />

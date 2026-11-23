@@ -1,5 +1,6 @@
 "use client";
 
+import { shortId } from "@/lib/short-id-shared";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Icon } from "@/components/icon";
@@ -100,7 +101,7 @@ export function Board({ columns: initial, children, onOpen, fields }: { columns:
                 {col.cards.map((card) => (
                   <Link
                     key={card.opportunityId}
-                    href={`/contacts/${card.contactId}`}
+                    href={`/contacts/${shortId(card.contactId)}`}
                     onClick={(e) => {
                       if (onOpen && !e.metaKey && !e.ctrlKey) {
                         e.preventDefault();

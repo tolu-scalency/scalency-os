@@ -1,5 +1,6 @@
 "use client";
 
+import { shortId } from "@/lib/short-id-shared";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -69,7 +70,7 @@ export function CommandBar({ open, onClose, permissions = [] }: { open: boolean;
       : []),
     ...(q.trim().length >= 2 ? people : []).map((p) => ({
       key: p.id,
-      run: () => go(`/contacts/${p.id}`),
+      run: () => go(`/contacts/${shortId(p.id)}`),
       node: (
         <>
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(135deg,#55e3ec,#0a5fe3)] text-[11px] font-semibold text-white">

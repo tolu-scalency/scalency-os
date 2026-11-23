@@ -26,7 +26,6 @@ export const SOON_PAGES: SoonPage[] = [
   { slug: "smart-lists", group: "contacts", icon: "filter", title: "Smart lists", tagline: "Saved filters that update themselves.", bullets: ["Filter by tags, fields and activity", "Bulk email, text or tag", "Share lists with the team"] },
   { slug: "import", group: "contacts", icon: "upload", title: "Import contacts", tagline: "Bring contacts in from a spreadsheet.", bullets: ["Map columns to fields", "Skip duplicates", "Tag everyone you import"] },
   // Opportunities
-  { slug: "opportunity-list", group: "opportunities", icon: "sort", title: "Opportunity list", tagline: "Every deal as a sortable list.", bullets: ["Filter by stage, owner and value", "Bulk move deals", "Export"] },
   // Payments
   { slug: "invoices", group: "payments", icon: "card", title: "Invoices", tagline: "Send invoices and get paid online.", bullets: ["Card and bank payments", "Automatic reminders", "Recurring invoices"] },
   { slug: "products", group: "payments", icon: "tag", title: "Products", tagline: "Your services and prices in one place.", bullets: ["One-off and recurring prices", "Use in invoices and funnels", "Tax settings"] },
@@ -47,13 +46,10 @@ export const SOON_PAGES: SoonPage[] = [
   { slug: "creative-studio", group: "ai", icon: "video", title: "AI creative studio", tagline: "Make images and videos for ads and social posts.", bullets: ["Connect leading image and video models", "Brand colours and logos", "Save straight to the social planner"] },
   { slug: "knowledge-base", group: "ai", icon: "book", title: "Knowledge base", tagline: "What the AI knows about your business.", bullets: ["Upload documents and FAQs", "Add your website", "Used by every AI feature"] },
   // Sites
-  { slug: "websites", group: "sites", icon: "globe", title: "Websites", tagline: "Build a full website on your own domain.", bullets: ["Templates for every industry", "Forms connect to contacts", "Hosting included"] },
   { slug: "surveys", group: "sites", icon: "form", title: "Surveys and quizzes", tagline: "Multi-step forms that qualify leads.", bullets: ["Logic based on answers", "Scores and results pages", "Answers saved to fields"] },
   { slug: "chat-widget", group: "sites", icon: "inbox", title: "Chat widget", tagline: "A chat bubble for your website.", bullets: ["Chats land in the inbox", "Collects name and phone", "AI replies out of hours"] },
   { slug: "blogs", group: "sites", icon: "edit", title: "Blogs", tagline: "Write and publish posts for SEO.", bullets: ["AI writing help", "Categories and authors", "Your own domain"] },
   { slug: "webinars", group: "sites", icon: "video", title: "Webinars", tagline: "Registration pages and reminders for live events.", bullets: ["Sign-up pages", "Reminder sequences", "Replay follow-ups"] },
-  { slug: "qr-codes", group: "sites", icon: "link", title: "QR codes", tagline: "Codes for print that track every scan.", bullets: ["Point to any page", "Change the link later", "Scan stats"] },
-  { slug: "domains", group: "sites", icon: "globe", title: "Domains", tagline: "Connect your own domain to pages and email.", bullets: ["Guided DNS setup", "Free SSL", "Sending domains for email"] },
   // Memberships
   { slug: "courses", group: "memberships", icon: "book", title: "Courses", tagline: "Sell and host online courses.", bullets: ["Lessons, videos and quizzes", "Drip content", "Paid or free access"] },
   { slug: "communities", group: "memberships", icon: "team", title: "Communities", tagline: "A members' community for your customers.", bullets: ["Groups and channels", "Events", "Paid memberships"] },
@@ -101,6 +97,7 @@ export const NAV: NavGroup[] = [
     href: "/pipeline",
     links: [
       { label: "Pipeline board", href: "/pipeline" },
+      { label: "Opportunity list", href: "/pipeline?view=list" },
       ...soonLinks("opportunities"),
       { label: "Proposals", href: "/contracts", soon: true },
       { label: "Client onboarding", href: "/onboarding", soon: true },
@@ -122,7 +119,14 @@ export const NAV: NavGroup[] = [
     label: "Sites",
     icon: "globe",
     href: "/funnels",
-    links: [{ label: "Funnels and pages", href: "/funnels" }, { label: "Forms", href: "/forms" }, ...soonLinks("sites")],
+    links: [
+      { label: "Funnels and pages", href: "/funnels" },
+      { label: "Websites", href: "/funnels?kind=website" },
+      { label: "Forms", href: "/forms" },
+      { label: "Domains", href: "/domains" },
+      { label: "QR codes", href: "/qr-codes" },
+      ...soonLinks("sites"),
+    ],
   },
   { key: "memberships", label: "Memberships", icon: "book", href: S("courses"), soon: true, links: soonLinks("memberships") },
   { key: "reputation", label: "Reputation", icon: "star", href: S("reviews"), soon: true, links: soonLinks("reputation") },
@@ -203,6 +207,8 @@ export const PAGE_PERM: Record<string, Permission> = {
   "/ai-builder": "settings.manage",
   "/forms": "sites.manage",
   "/funnels": "sites.manage",
+  "/domains": "sites.manage",
+  "/qr-codes": "sites.manage",
   "/campaigns": "marketing.manage",
   "/agents": "ai.manage",
   "/reports": "reporting.view",
@@ -220,7 +226,8 @@ export const PAGE_PERM: Record<string, Permission> = {
 };
 
 /** The access needed for a path, if any (the longest matching page wins). */
-export function permForPath(pathname: string): Permission | undefined {
+export function permForPath(path: string): Permission | undefined {
+  const pathname = path.split("?")[0];
   const match = Object.keys(PAGE_PERM)
     .filter((h) => pathname === h || pathname.startsWith(h + "/"))
     .sort((a, b) => b.length - a.length)[0];

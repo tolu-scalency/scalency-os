@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { can, getWorkspace } from "@/lib/data";
@@ -73,7 +74,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
             const s = STATUS[(a.status as keyof typeof STATUS) ?? "off"] ?? STATUS.off;
             const b = (a.business ?? {}) as { clinicName?: string };
             return (
-              <Link key={a.id} href={`/agents/${a.id}`} className="flex flex-wrap items-center gap-4 px-5 py-4 hover:bg-surface">
+              <Link key={a.id} href={`/agents/${shortId(a.id)}`} className="flex flex-wrap items-center gap-4 px-5 py-4 hover:bg-surface">
                 <Tile icon="spark" tone={a.status === "live" ? "green" : "grey"} size={40} />
                 <div className="min-w-0 flex-[1_1_240px]">
                   <div className="truncate text-[15px] font-semibold">{a.name}</div>

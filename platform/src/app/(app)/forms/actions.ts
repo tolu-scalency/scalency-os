@@ -1,5 +1,6 @@
 "use server";
 
+import { shortId } from "@/lib/short-id-shared";
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -48,7 +49,7 @@ export async function duplicateForm(id: string) {
     .select("id")
     .single();
   if (error || !data) redirect("/forms?error=1");
-  redirect(`/forms/${data.id}`);
+  redirect(`/forms/${shortId(data.id)}`);
 }
 
 /** Archive (hide) or restore a form from the list. */
@@ -94,7 +95,7 @@ export async function createForm(fd: FormData) {
   const tags = tpl?.key === "ai-audit" ? ["AI audit"] : [];
   const { data, error } = await supabase.from("forms").insert({ account_id: ws.account.id, name, slug, status: "draft", definition: cleanDefinition(definition), tags }).select("id").single();
   if (error || !data) redirect("/forms?error=1");
-  redirect(`/forms/${data.id}`);
+  redirect(`/forms/${shortId(data.id)}`);
 }
 
 type SaveInput = { name: string; definition: unknown; tags: string[]; stageId: string | null; redirectUrl: string; slug?: string };

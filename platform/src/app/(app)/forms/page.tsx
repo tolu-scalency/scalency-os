@@ -1,3 +1,4 @@
+import { shortId } from "@/lib/short-id-shared";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Page, PageHeader, Pill, Tile } from "@/components/ui";
@@ -106,7 +107,7 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
             const sent = recent.get(f.id as string) ?? 0;
             return (
               <div key={f.id} className="flex flex-wrap items-center gap-4 px-5 py-4 transition-colors hover:bg-surface">
-                <Link href={`/forms/${f.id}`} className="flex min-w-0 flex-[1_1_260px] items-center gap-4">
+                <Link href={`/forms/${shortId(f.id)}`} className="flex min-w-0 flex-[1_1_260px] items-center gap-4">
                   <Tile icon="file" tone={f.status === "live" ? "blue" : "grey"} size={38} />
                   <div className="min-w-0">
                     <div className="truncate text-[14.5px] font-semibold">{f.name}</div>
