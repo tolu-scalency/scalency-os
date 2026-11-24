@@ -25,6 +25,10 @@ export type SetterBusiness = {
   businessType: BusinessType;
   /** The business's own extra rules for the AI, in plain words. */
   instructions: string;
+  /** Example replies or scripts in the business's own words; the AI copies the style. */
+  scripts: string;
+  /** What the reactivation message offers old leads (blank: the current offer). */
+  reactivationOffer: string;
 };
 
 export type BusinessType = "med_spa" | "dental" | "home_services" | "coaching" | "real_estate" | "fitness" | "other";
@@ -142,6 +146,8 @@ export type SetterRules = {
   minNoticeHours: number;
   replyDelaySeconds: number;
   /** When the AI joins. */
+  /** Speed to lead: the first message goes straight away, any time. */
+  instantFirstMessage: boolean;
   joinNewLeads: boolean;
   joinReplies: "all" | "own";
   onlyTags: string[];
@@ -171,6 +177,7 @@ export const DEFAULT_RULES: SetterRules = {
   syncContacts: true,
   minNoticeHours: 2,
   replyDelaySeconds: 20,
+  instantFirstMessage: true,
   joinNewLeads: true,
   joinReplies: "all",
   onlyTags: [],
@@ -215,6 +222,8 @@ export const DEMO_BUSINESS: SetterBusiness = {
   spelling: "US",
   businessType: "med_spa",
   instructions: "",
+  scripts: "",
+  reactivationOffer: "",
 };
 
 // The med spa example is the demo itself.
@@ -257,6 +266,8 @@ export function cleanBusiness(v: unknown): SetterBusiness {
     spelling: o.spelling === "UK" ? "UK" : "US",
     businessType: BUSINESS_TYPES.some((t) => t.id === o.businessType) ? (o.businessType as BusinessType) : "med_spa",
     instructions: str(o.instructions, 3000),
+    scripts: str(o.scripts, 6000),
+    reactivationOffer: str(o.reactivationOffer, 500),
   };
 }
 
@@ -280,6 +291,7 @@ export function cleanRules(v: unknown): SetterRules {
     minNoticeHours: Math.min(72, Math.max(0, Math.round(Number(o.minNoticeHours ?? DEFAULT_RULES.minNoticeHours)) || 0)),
     // At least 10 seconds, so it never answers the instant someone hits send.
     replyDelaySeconds: Math.min(60, Math.max(10, Math.round(Number(o.replyDelaySeconds ?? DEFAULT_RULES.replyDelaySeconds)) || DEFAULT_RULES.replyDelaySeconds)),
+    instantFirstMessage: o.instantFirstMessage !== false,
     joinNewLeads: o.joinNewLeads !== false,
     joinReplies: o.joinReplies === "own" ? "own" : "all",
     onlyTags: cleanTags(o.onlyTags),

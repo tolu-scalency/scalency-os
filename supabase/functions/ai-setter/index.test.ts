@@ -559,3 +559,30 @@ Deno.test("GHL contacts: new ones are added with source GHL, existing ones are l
   assertEquals(ins.email_consent_at, undefined);
   assert(writes.some((w) => w.table === "contact_tags"));
 });
+
+Deno.test("first message: never sent twice, and reactivation skips people in touch recently", async () => {
+  const c = scripted([() => ({ content: [tool("send_message", { text: "hi" })] })]);
+  const now = new Date("2026-11-24T15:00:00Z");
+  const { ghl } = fakeGhl({ messages: [{ id: "m1", direction: "outbound", body: "Hi Jess, it's Sophie", messageType: "TYPE_SMS", dateAdded: "2026-11-24T14:50:00Z" }] });
+  const r = await work(fakeDb().db, agent, newThread(), { kind: "opener" }, { claude: c.claude, ghl, now });
+  assertEquals(r.skipped, "already messaged");
+  const old = fakeGhl({ messages: [{ id: "in1", direction: "inbound", body: "maybe next week", messageType: "TYPE_SMS", dateAdded: "2026-11-20T10:00:00Z" }] });
+  const r2 = await work(fakeDb().db, agent, { ...newThread(), origin: "reactivation" }, { kind: "reactivate" }, { claude: c.claude, ghl: old.ghl, now });
+  assertEquals(r2.skipped, "recently in touch");
+});
+
+Deno.test("reactivation: a quiet old lead gets one friendly message, and the prompt has the scripts and comeback offer", async () => {
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Hi Jess, Sophie from Glow here." })] })]);
+  const { ghl } = fakeGhl({ messages: [{ id: "in1", direction: "inbound", body: "how much is botox", messageType: "TYPE_SMS", dateAdded: "2026-08-01T10:00:00Z" }] });
+  const r = await work(fakeDb().db, { ...agent, business: { ...business, scripts: "Hey {name}! Lovely to hear from you.", reactivationOffer: "20% off your first treatment this month" } }, { ...newThread(), origin: "reactivation" }, { kind: "reactivate" }, { claude: c.claude, ghl, now: new Date("2026-11-24T15:00:00Z") });
+  assertEquals(r.sent, "Hi Jess, Sophie from Glow here.");
+  const all = JSON.stringify(c.seen[0]);
+  assertStringIncludes(all, "never booked");
+  assertStringIncludes(all, "Lovely to hear from you");
+  assertStringIncludes(all, "20% off your first treatment");
+});
+
+Deno.test("speed to lead: the first message can go any time, follow-ups keep to the hours", () => {
+  assertEquals(rulesOf({}).instantFirstMessage, true);
+  assertEquals(rulesOf({ instantFirstMessage: false }).instantFirstMessage, false);
+});

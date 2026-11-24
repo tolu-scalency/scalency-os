@@ -21,13 +21,23 @@ export default async function SetterRoute({ params }: { params: Promise<{ id: st
       .maybeSingle(),
     supabase
       .from("setter_threads")
-      .select("id, ghl_contact_id, contact_name, state, channel, total_touches, next_action, next_action_at, last_outbound_at, appointment_at, note, updated_at, setter_turns(role, body, channel, created_at)")
+      .select("id, ghl_contact_id, contact_name, state, channel, origin, total_touches, next_action, next_action_at, last_outbound_at, appointment_at, note, updated_at, setter_turns(role, body, channel, created_at)")
       .eq("agent_id", id)
       .eq("account_id", ws.account.id)
       .order("updated_at", { ascending: false })
       .limit(40),
   ]);
   if (!a) notFound();
+  // Lead reactivation numbers, across every old lead it has queued (not just the 40 shown).
+  const count = async (q: (b: ReturnType<typeof base>) => ReturnType<typeof base>) => (await q(base())).count ?? 0;
+  const base = () => supabase.from("setter_threads").select("id", { count: "exact", head: true }).eq("agent_id", id).eq("account_id", ws.account.id).eq("origin", "reactivation");
+  const [rqueued, rmessaged, rreplied, rbooked] = await Promise.all([
+    count((b) => b.eq("next_action", "reactivate")),
+    count((b) => b.not("last_outbound_at", "is", null)),
+    count((b) => b.not("last_inbound_at", "is", null)),
+    count((b) => b.eq("state", "booked")),
+  ]);
+  const reactivation = { queued: rqueued, messaged: rmessaged, replied: rreplied, booked: rbooked };
   const views: ThreadView[] = (threads ?? []).map((t) => ({
     id: t.id as string,
     contactId: t.ghl_contact_id as string,
@@ -37,6 +47,7 @@ export default async function SetterRoute({ params }: { params: Promise<{ id: st
     touches: (t.total_touches as number) ?? 0,
     nextAt: (t.next_action_at as string) ?? null,
     nextIsOpener: t.next_action === "opener",
+    origin: ((t.origin as string) ?? "lead") as ThreadView["origin"],
     contacted: Boolean(t.last_outbound_at),
     appointmentAt: (t.appointment_at as string) ?? null,
     note: (t.note as string) ?? null,
@@ -48,6 +59,7 @@ export default async function SetterRoute({ params }: { params: Promise<{ id: st
   }));
   return (
     <SetterEditor
+      reactivation={reactivation}
       setter={{
         id: a.id as string,
         name: a.name as string,
