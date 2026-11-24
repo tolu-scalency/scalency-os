@@ -7,7 +7,7 @@ import { can, getWorkspace } from "@/lib/data";
 import { randomUUID } from "node:crypto";
 import { adminClient } from "@/lib/admin";
 import { createClient } from "@/lib/supabase/server";
-import { cleanBusiness, cleanRules, DEFAULT_RULES, DEMO_BUSINESS, type SetterStatus } from "@/lib/setter";
+import { cleanBusiness, cleanRules, DEFAULT_RULES, DEMO_BUSINESS, STAGE_KEYS, type SetterStatus } from "@/lib/setter";
 
 // The AI setter's settings. Saving the GHL key and the test chat go straight to the
 // ai-setter function from the page (it encrypts the key); everything else is here.
@@ -36,8 +36,15 @@ export async function saveSetter(id: string, input: { name: string; business: un
   const business = cleanBusiness(input.business);
   if (!business.clinicName) return { error: "Add the business name first." };
   const supabase = await createClient();
-  const { error } = await supabase.from("setter_agents").update({ name, business, rules: cleanRules(input.rules) }).eq("id", id).eq("account_id", ws.account.id);
+  const rules = cleanRules(input.rules);
+  const { error } = await supabase.from("setter_agents").update({ name, business, rules }).eq("id", id).eq("account_id", ws.account.id);
   if (error) return { error: "We couldn't save that. Try again." };
+  // Version history: keep every save (the 40 newest), so a change can be undone.
+  const { error: vErr } = await supabase.from("setter_versions").insert({ account_id: ws.account.id, agent_id: id, name, business, rules });
+  if (!vErr) {
+    const { data: old } = await supabase.from("setter_versions").select("id").eq("agent_id", id).order("created_at", { ascending: false }).range(40, 200);
+    if (old?.length) await supabase.from("setter_versions").delete().in("id", old.map((o) => o.id as string));
+  }
   return { ok: "Saved" };
 }
 
@@ -62,12 +69,12 @@ export async function setSetterStatus(id: string, status: SetterStatus): Promise
 /** The calendar to book into and the pipeline stages to move deals to. */
 export async function saveGhlChoices(
   id: string,
-  input: { calendarId: string; calendarName: string; pipelineId: string; stages: { contacted?: string; booked?: string; not_interested?: string } },
+  input: { calendarId: string; calendarName: string; pipelineId: string; stages: Record<string, string | undefined> },
 ): Promise<Result> {
   const ws = await getWorkspace();
   if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
   const idOk = (v: unknown) => typeof v === "string" && /^[A-Za-z0-9-]{1,60}$/.test(v);
-  const stages = Object.fromEntries(Object.entries(input.stages ?? {}).filter(([k, v]) => ["contacted", "booked", "not_interested"].includes(k) && idOk(v)));
+  const stages = Object.fromEntries(Object.entries(input.stages ?? {}).filter(([k, v]) => STAGE_KEYS.some((s) => s.key === k) && idOk(v)));
   const supabase = await createClient();
   const { error } = await supabase
     .from("setter_agents")

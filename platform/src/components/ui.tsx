@@ -124,7 +124,7 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: st
 
 /** The padded column every page sits in. */
 export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-  return <main className={`fade-in mx-auto flex w-full flex-col gap-6 px-4 pb-14 pt-6 sm:px-7 sm:pt-8 ${wide ? "" : "max-w-[1240px]"}`}>{children}</main>;
+  return <main className={`fade-in mx-auto flex w-full flex-col gap-6 px-4 pb-14 pt-6 sm:px-7 sm:pt-8 ${wide ? "" : "max-w-[1600px]"}`}>{children}</main>;
 }
 
 /** Segmented control. Visual only for now. */

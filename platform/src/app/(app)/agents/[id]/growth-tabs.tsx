@@ -320,6 +320,23 @@ function QaRow({ item, ro }: { item: KnowledgeItem; ro: boolean }) {
 // ---------------------------------------------------------------- Journey
 
 const PRESETS: { name: string; text: string; steps: JourneyStep[] }[] = [
+  {
+    name: "Tolu's spec",
+    text: "5 min, 30 min, 4 hours, next morning, then days 2, 3, 5, 7, 10, 14, 21.",
+    steps: [
+      { day: 0, minutes: 5, action: "message" },
+      { day: 0, minutes: 30, action: "message" },
+      { day: 0, minutes: 240, action: "message" },
+      { day: 1, action: "message" },
+      { day: 2, action: "message" },
+      { day: 3, action: "call_task" },
+      { day: 5, action: "message" },
+      { day: 7, action: "setter" },
+      { day: 10, action: "email" },
+      { day: 14, action: "message" },
+      { day: 21, action: "message" },
+    ],
+  },
   { name: "AI only", text: "Six AI messages over 16 days.", steps: [1, 3, 5, 8, 12, 16].map((day) => ({ day, action: "message" as JourneyAction })) },
   {
     name: "Speed to lead",
@@ -343,13 +360,19 @@ const PRESETS: { name: string; text: string; steps: JourneyStep[] }[] = [
     ],
   },
 ];
-const ACTION_ICON: Record<JourneyAction, IconName> = { message: "spark", sms: "phone", email: "mail", whatsapp: "inbox", call_task: "phone", setter: "users" };
+const ACTION_ICON: Record<JourneyAction, IconName> = { message: "spark", sms: "phone", email: "mail", whatsapp: "inbox", call_task: "phone", setter: "users", ai_call: "mic" };
+const MINUTES = [5, 15, 30, 60, 120, 240, 480];
+const when = (s: JourneyStep) => (s.day === 0 ? ((s.minutes ?? 5) < 60 ? `${s.minutes ?? 5} min` : `${(s.minutes ?? 60) / 60} h`) : `Day ${s.day}`);
 
 export function JourneyTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules>) => void; ro: boolean }) {
   const steps: JourneyStep[] = r.journey.length ? r.journey : r.followUpDays.map((day) => ({ day, action: "message" as JourneyAction }));
   const put = (next: JourneyStep[]) => {
-    const sorted = [...next].filter((s) => s.day > 0 && s.day <= 60).sort((a, b) => a.day - b.day).slice(0, 12);
-    set({ journey: sorted, followUpDays: sorted.map((s) => s.day) });
+    const sorted = [...next]
+      .filter((s) => (s.day === 0 && (s.minutes ?? 0) > 0) || (s.day > 0 && s.day <= 60))
+      .sort((a, b) => a.day - b.day || (a.minutes ?? 0) - (b.minutes ?? 0))
+      .slice(0, 20);
+    const days = [...new Set(sorted.filter((s) => s.day > 0).map((s) => s.day))];
+    set({ journey: sorted, followUpDays: days.length ? days : [1] });
   };
   return (
     <div className="flex flex-col gap-4">
@@ -377,16 +400,27 @@ export function JourneyTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Se
               <span className="absolute left-[17px] top-[-12px] h-3 w-px bg-line-strong" />
               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-white font-mono text-[12px] font-semibold text-brand ring-1 ring-line-strong">{i + 1}</span>
               <div className="flex flex-1 flex-wrap items-center gap-2 rounded-2xl bg-white px-3 py-2.5 ring-1 ring-line">
-                <span className="text-[12.5px] text-muted">Day</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={60}
-                  value={s.day}
+                <select
+                  value={s.day === 0 ? `m${s.minutes ?? 5}` : `d${s.day}`}
                   disabled={ro}
-                  onChange={(e) => put(steps.map((x, j) => (j === i ? { ...x, day: Math.max(1, Math.min(60, Number(e.target.value) || 1)) } : x)))}
-                  className="field h-9 w-[70px] text-center font-mono text-[13px]"
-                />
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    put(steps.map((x, j) => (j === i ? (v.startsWith("m") ? { day: 0, minutes: Number(v.slice(1)), action: x.action } : { day: Number(v.slice(1)), action: x.action }) : x)));
+                  }}
+                  className="field h-9 w-[150px] font-mono text-[13px]"
+                  aria-label="When"
+                >
+                  {MINUTES.map((m) => (
+                    <option key={m} value={`m${m}`}>
+                      {when({ day: 0, minutes: m, action: "message" })} after
+                    </option>
+                  ))}
+                  {Array.from({ length: 60 }, (_, d) => d + 1).map((d) => (
+                    <option key={d} value={`d${d}`}>
+                      Day {d}
+                    </option>
+                  ))}
+                </select>
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface text-brand">
                   <Icon name={ACTION_ICON[s.action]} size={14} />
                 </span>
@@ -412,7 +446,7 @@ export function JourneyTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Se
             <div className="flex-1 text-[12.5px] text-muted">After the last step the conversation is marked &quot;No reply after follow-ups&quot;. Old leads can come back through Reactivation.</div>
           </li>
         </ol>
-        {!ro && steps.length < 12 && (
+        {!ro && steps.length < 20 && (
           <button type="button" onClick={() => put([...steps, { day: Math.min(60, (steps.at(-1)?.day ?? 0) + 3), action: "message" }])} className="btn-ghost inline-flex min-h-10 w-fit items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold">
             <Icon name="plus" size={14} /> Add a step
           </button>
@@ -526,7 +560,19 @@ export function RetentionTab({ r, set, b, setBiz, ro }: { r: SetterRules; set: (
 
 // ---------------------------------------------------------------- Voice AI
 
-export function VoiceTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules>) => void; ro: boolean }) {
+export type CallItem = { id: string; direction: string; purpose: string | null; duration_seconds: number | null; summary: string | null; created_at: string; recording_url: string | null };
+
+export function VoiceTab({ r, set, ro, setterId, calls = [] }: { r: SetterRules; set: (p: Partial<SetterRules>) => void; ro: boolean; setterId?: string; calls?: CallItem[] }) {
+  const [status, setStatus] = useState<{ ready: boolean } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const check = async () => {
+    if (!setterId) return;
+    setChecking(true);
+    const res = await callSetter({ agent_id: setterId, action: "voice_status" });
+    setChecking(false);
+    if ("error" in res && res.error) return void notify(String(res.error), "bad");
+    setStatus({ ready: Boolean(res.ready) });
+  };
   const modes: [SetterRules["voiceMode"], string, string][] = [
     ["off", "Off", "Calls ring the clinic as normal."],
     ["missed", "Missed calls only", "The AI answers when nobody picks up."],
@@ -535,11 +581,22 @@ export function VoiceTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Sett
   ];
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start gap-3 rounded-2xl bg-warn-bg px-4 py-3 text-[13px] text-warn">
-        <Icon name="warning" size={16} />
-        <span>
-          <strong>Not live yet.</strong> Voice needs a provider (Retell or Vapi, a paid service that needs Tolu&apos;s approval) and a UK phone number, which takes 1 to 3 working days to register. These settings are saved now and used as soon as it&apos;s connected.
+      <div className={`flex flex-wrap items-start gap-3 rounded-2xl px-4 py-3 text-[13px] ${status?.ready ? "bg-ok-bg text-ok" : "bg-warn-bg text-warn"}`}>
+        <Icon name={status?.ready ? "checkCircle" : "warning"} size={16} />
+        <span className="min-w-0 flex-1">
+          {status?.ready ? (
+            <strong>Connected: the AI can make and take calls.</strong>
+          ) : (
+            <>
+              <strong>Not live yet.</strong> Choose Vapi or Retell below and add its keys in Supabase (Edge Functions, Secrets). Vapi: VAPI_API_KEY, VAPI_PHONE_NUMBER_ID, VAPI_ASSISTANT_ID. Retell: RETELL_API_KEY, RETELL_AGENT_ID, RETELL_FROM_NUMBER. In the provider, set the webhook to the &quot;voice calls&quot; address from Connect GHL.
+            </>
+          )}
         </span>
+        {setterId && (
+          <button type="button" disabled={checking} onClick={check} className="btn-ghost min-h-8 rounded-lg bg-white px-3 text-[12px] font-semibold text-navy">
+            {checking ? "Checking…" : "Check connection"}
+          </button>
+        )}
       </div>
       <Block eyebrow="Voice AI" title="Answering calls" text="The same AI brain as the setter, on the phone: it answers questions from the Knowledge bank, books into the GHL calendar, and passes the call to a person when it should.">
         <div className="grid gap-2 sm:grid-cols-2">
@@ -570,7 +627,113 @@ export function VoiceTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Sett
             </select>
           </label>
         </div>
+        <p className={hint}>
+          In the provider&apos;s assistant, use these variables in the prompt: {"{{clinic_name}}, {{assistant_name}}, {{lead_first_name}}, {{purpose}}, {{appointment}}, {{what_we_know}}, {{services}}, {{transfer_number}}"}. Use a British voice, say it&apos;s the clinic&apos;s AI assistant and that calls are recorded.
+        </p>
+      </Block>
+      <Block eyebrow="Calls" title="Recent AI calls" text="Every call's summary also goes on the conversation and as a note in GHL.">
+        {calls.length === 0 ? (
+          <p className="rounded-2xl bg-surface p-4 text-[13px] text-muted">No calls yet.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-line rounded-2xl ring-1 ring-line">
+            {calls.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-start gap-3 px-4 py-3 text-[13px]">
+                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-xl bg-chip text-brand">
+                  <Icon name="phone" size={14} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="font-semibold text-navy">
+                    {c.direction === "inbound" ? "Answered a call" : "Called"} {c.purpose && c.purpose !== "inbound" && c.purpose !== "outbound" ? `(${c.purpose.replace("_", " ")})` : ""}
+                  </span>
+                  <span className="block text-muted">{c.summary || "No summary yet."}</span>
+                </span>
+                <span className="font-mono text-[12px] text-muted">{c.duration_seconds != null ? `${Math.floor(c.duration_seconds / 60)}m ${c.duration_seconds % 60}s` : "…"}</span>
+                {c.recording_url && (
+                  <a href={c.recording_url} target="_blank" rel="noreferrer" className="text-[12px] font-semibold text-brand hover:underline">
+                    Recording
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </Block>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- Show-up and consent
+
+const REMINDER_ROWS: [string, string][] = [
+  ["3 days before", "A friendly heads-up, with anything they need to know (cancellation notice)."],
+  ["48 hours before", "Asks them to reply YES to confirm. A YES marks it confirmed in Scalency and GHL."],
+  ["24 hours before", "Only if they haven't confirmed. With Voice AI connected, the AI also calls them."],
+  ["2 hours before", "See you soon, with where to come."],
+];
+
+export function ShowUpTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules>) => void; ro: boolean }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <Block eyebrow="Show-up" title="Appointment reminders" text="Every booking the AI makes (or GHL tells us about) gets these, in your opening hours. Replies go straight to the AI, so moving or cancelling is handled too.">
+        <Toggle on={r.remindersOn} disabled={ro} onChange={(v) => set({ remindersOn: v })} title="Send reminders before each appointment" text="Turn off GHL's own reminder workflow for these calendars, so people don't get both." />
+        <ol className="grid gap-2 sm:grid-cols-2">
+          {REMINDER_ROWS.map(([t, d], i) => (
+            <li key={t} className="flex items-start gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-line">
+              <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-chip font-mono text-[12px] font-semibold text-brand">{i + 1}</span>
+              <span className="text-[13px]">
+                <span className="font-semibold text-navy">{t}</span>
+                <span className="block text-muted">{d}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </Block>
+      <Block eyebrow="No-shows" title="No-show recovery" text="When an appointment is marked No-show in GHL: a kind text 15 minutes after, then 2 more over 14 days. With Voice AI connected, the AI also calls after the first text.">
+        <Toggle on={r.noShowOn} disabled={ro} onChange={(v) => set({ noShowOn: v })} title="Win back no-shows" text="The team is alerted too (Hours and alerts)." />
+      </Block>
+      <Block eyebrow="Waitlist" title="Fill cancellations" text="When none of the times suit, the AI offers to put them on the waitlist (GHL tag waitlist). When someone cancels, the slot is offered to up to 3 of them; first to reply gets it.">
+        <Toggle on={r.waitlistOn} disabled={ro} onChange={(v) => set({ waitlistOn: v })} title="Offer cancelled slots to the waitlist" text="Only slots at least 2 hours away." />
+      </Block>
+      <Block eyebrow="Behaviour" title="Messages when leads show interest" text="A GHL workflow tells the AI when a lead does something (clicks a link, opens an email, visits the prices page). The AI sends a timely, helpful message, without ever saying it saw what they did.">
+        <Toggle on={r.behaviourOn} disabled={ro} onChange={(v) => set({ behaviourOn: v })} title="Send behaviour-triggered messages" text="Only in opening hours, and never within 4 hours of another message." />
+      </Block>
+      <Block eyebrow="Guardrails" title="Marketing consent" text="UK GDPR and PECR: reactivation, rebooking, waitlist and behaviour messages are marketing. With this on they only go to contacts with your consent tag in GHL. Replies to people who enquired are always allowed.">
+        <Toggle on={r.consentRequired} disabled={ro} onChange={(v) => set({ consentRequired: v })} title="Only send marketing messages to people who opted in" />
+        <label className={`${label} max-w-[320px]`}>
+          Consent tag in GHL
+          <input value={r.consentTag} disabled={ro} onChange={(e) => set({ consentTag: e.target.value.toLowerCase().slice(0, 60) })} className={field} />
+          <span className={hint}>Add this tag from your forms when someone ticks the marketing box.</span>
+        </label>
+      </Block>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Version history
+
+export type VersionItem = { id: string; name: string | null; created_at: string; business: unknown; rules: unknown };
+
+export function VersionsPanel({ versions, onRestore, ro }: { versions: VersionItem[]; onRestore: (v: VersionItem) => void; ro: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!versions.length) return null;
+  const fmt = (iso: string) => new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+  return (
+    <Block eyebrow="Version history" title="Every save is kept" text="Changed something and the AI got worse? Restore an earlier version, check it in the Test chat, then Save." aside={<button type="button" onClick={() => setOpen(!open)} className="btn-ghost min-h-9 rounded-xl px-3 text-[12.5px] font-semibold">{open ? "Hide" : `Show ${versions.length}`}</button>}>
+      {open && (
+        <ul className="flex flex-col divide-y divide-line rounded-2xl ring-1 ring-line">
+          {versions.map((v, i) => (
+            <li key={v.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
+              <span className="font-mono text-[12px] text-muted">{fmt(v.created_at)}</span>
+              <span className="min-w-0 flex-1 truncate">{i === 0 ? "Current" : v.name || "AI setter"}</span>
+              {!ro && i > 0 && (
+                <button type="button" onClick={() => onRestore(v)} className="inline-flex min-h-8 items-center gap-1 rounded-lg px-2.5 text-[12px] font-semibold text-brand hover:bg-chip">
+                  <Icon name="undo" size={13} /> Restore
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Block>
   );
 }

@@ -8,6 +8,15 @@ const assertEquals = (a: unknown, b: unknown) => deepStrictEqual(a, b);
 const assertMatch = (s: string, re: RegExp) => match(s, re);
 const assertStringIncludes = (s: string, part: string) => ok(s.includes(part), `expected to find ${JSON.stringify(part)}`);
 import {
+  nextReminder,
+  isConfirmation,
+  checkCreative,
+  capacityOf,
+  labChecks,
+  voiceRequest,
+  voiceReady,
+  parseCallReport,
+  LAB,
   keywordHit,
   rebookDaysFor,
   readSite,
@@ -747,4 +756,119 @@ Deno.test("website scan: reads the home page and useful pages on the same site, 
   const found = await scanSite(c.claude as never, read);
   assertEquals(found.business.clinicName, "Glow Aesthetics");
   assertEquals(found.knowledge, [{ question: "Is there downtime?", answer: "Usually none." }]);
+});
+
+Deno.test("show-up: reminders at 3 days, 48 and 24 hours (24h only if not confirmed) and 2 hours", () => {
+  const appt = "2026-11-30T14:00:00Z";
+  const at = (iso: string) => new Date(iso);
+  assertEquals(nextReminder(appt, at("2026-11-24T10:00:00Z"), -1, false), { step: 0, at: at("2026-11-27T14:00:00Z") });
+  assertEquals(nextReminder(appt, at("2026-11-27T14:00:00Z"), 0, false)?.step, 1);
+  assertEquals(nextReminder(appt, at("2026-11-28T14:00:00Z"), 1, false)?.step, 2);
+  // Confirmed: no 24-hour chaser, straight to the 2-hour reminder.
+  assertEquals(nextReminder(appt, at("2026-11-28T14:00:00Z"), 1, true)?.step, 3);
+  // Booked the day before: the 3-day and 48-hour reminders are skipped.
+  assertEquals(nextReminder(appt, at("2026-11-29T10:00:00Z"), -1, false)?.step, 2);
+  assertEquals(nextReminder(appt, at("2026-11-30T13:00:00Z"), 3, false), null);
+  assertEquals(nextReminder("2026-11-20T10:00:00Z", at("2026-11-24T10:00:00Z"), -1, false), null);
+  assert(isConfirmation("YES"));
+  assert(isConfirmation("yes see you then"));
+  assert(isConfirmation("Yep"));
+  assert(!isConfirmation("yesterday was busy"));
+  assert(!isConfirmation("can I move it?"));
+});
+
+Deno.test("journeys: day-0 steps go minutes apart (spec speed to lead), then whole days", () => {
+  const r = rulesOf({ journey: [{ day: 0, minutes: 5, action: "message" }, { day: 0, minutes: 30, action: "message" }, { day: 0, minutes: 240, action: "message" }, { day: 1, action: "message" }, { day: 2, action: "message" }] });
+  const from = new Date("2026-11-24T10:00:00-05:00");
+  assertEquals(followUpAt(from, 0, r, NY)?.toISOString(), "2026-11-24T15:05:00.000Z");
+  assertEquals(followUpAt(from, 1, r, NY)?.toISOString(), "2026-11-24T15:25:00.000Z");
+  assertEquals(followUpAt(from, 2, r, NY)?.toISOString(), "2026-11-24T18:30:00.000Z");
+  // Day 1 lands the next day, within hours.
+  const d1 = followUpAt(from, 3, r, NY)!;
+  assert(d1.getTime() > from.getTime() + 18 * 3_600_000);
+  assertEquals(followUpAt(from, 5, r, NY), null);
+});
+
+Deno.test("creative studio: UK ad rules for aesthetics", () => {
+  assertEquals(checkCreative("Smooth forehead lines with Botox this summer").status, "block");
+  assertEquals(checkCreative("Anti-wrinkle injections from £150").status, "block");
+  assertEquals(checkCreative("Perfect for your prom!").status, "block");
+  const w = checkCreative("Guaranteed results, today only!");
+  assertEquals(w.status, "warn");
+  assertEquals(w.issues.map((i) => i.match).sort(), ["guaranteed", "today only"]);
+  assertEquals(checkCreative("Book a free consultation with our nurse prescriber in Cardiff").status, "ok");
+});
+
+Deno.test("diary capacity: how full the next days are, with advice", () => {
+  const r = rulesOf({ start: "09:00", end: "11:00", days: [0, 1, 2, 3, 4, 5, 6] });
+  const now = new Date("2026-11-24T00:00:00Z");
+  const free = ["2026-11-24T09:00:00Z", "2026-11-24T09:30:00Z", "2026-11-25T10:00:00Z"];
+  const c = capacityOf(free, r, "UTC", now, 2);
+  assertEquals(c.total, 8);
+  assertEquals(c.free, 3);
+  assertEquals(c.full, 63);
+  assertStringIncludes(c.advice, "healthy");
+});
+
+Deno.test("test lab: 50 scenarios, and the pass checks", () => {
+  assertEquals(LAB.length, 50);
+  assertEquals(new Set(LAB.map((s) => s.id)).size, 50);
+  const checks = labChecks(["no_price_first", "urgent", "no_book"], { ai: ["Hi, how can I help?"], handover: "complication", stopped: false, booked: false, ageGate: false });
+  assert(checks.every((c) => c.ok));
+  const bad = labChecks(["no_price_first"], { ai: ["Lips are £180. What would you like?"], handover: null, stopped: false, booked: false, ageGate: false });
+  assert(!bad[0].ok);
+});
+
+Deno.test("voice: needs the provider's keys; builds the call; reads both providers' reports", () => {
+  const env = (m: Record<string, string>) => (k: string) => m[k];
+  assertEquals(voiceReady(rulesOf({ voiceProvider: "vapi" }), env({})), false);
+  assertEquals(voiceReady(rulesOf({ voiceProvider: "vapi" }), env({ VAPI_API_KEY: "k", VAPI_PHONE_NUMBER_ID: "p", VAPI_ASSISTANT_ID: "a" })), true);
+  assertEquals(voiceReady(rulesOf({}), env({ VAPI_API_KEY: "k", VAPI_PHONE_NUMBER_ID: "p", VAPI_ASSISTANT_ID: "a" })), false);
+  const v = voiceRequest("vapi", env({ VAPI_API_KEY: "k", VAPI_PHONE_NUMBER_ID: "p", VAPI_ASSISTANT_ID: "a" }), "+447700900123", "Jess", { thread_id: "t" });
+  assertEquals(v.url, "https://api.vapi.ai/call");
+  assertEquals((v.body as { customer: { number: string } }).customer.number, "+447700900123");
+  const r = voiceRequest("retell", env({ RETELL_API_KEY: "k", RETELL_AGENT_ID: "ag", RETELL_FROM_NUMBER: "+442000000000" }), "+447700900123", "Jess", { thread_id: "t" });
+  assertEquals((r.body as { override_agent_id: string }).override_agent_id, "ag");
+  const vapi = parseCallReport({ message: { type: "end-of-call-report", durationSeconds: 125, call: { id: "c1", type: "outboundPhoneCall", customer: { number: "+447700900123" }, assistantOverrides: { variableValues: { thread_id: "t1" } } }, artifact: { transcript: "AI: hi" }, analysis: { summary: "Booked Thursday." } } });
+  assertEquals([vapi?.id, vapi?.direction, vapi?.threadId, vapi?.seconds, vapi?.summary], ["c1", "outbound", "t1", 125, "Booked Thursday."]);
+  const retell = parseCallReport({ event: "call_analyzed", call: { call_id: "r1", direction: "inbound", from_number: "+447700900999", start_timestamp: 1000, end_timestamp: 61000, transcript: "x", call_analysis: { call_summary: "Asked about prices." } } });
+  assertEquals([retell?.id, retell?.direction, retell?.phone, retell?.seconds], ["r1", "inbound", "+447700900999", 60]);
+  assertEquals(parseCallReport({ message: { type: "status-update" } }), null);
+});
+
+Deno.test("consent check: marketing messages need the consent tag; first replies to new leads don't", async () => {
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Hi again" })] })]);
+  const a2 = { ...agent, rules: { consentRequired: true } };
+  const { ghl } = fakeGhl({ messages: [] });
+  const r = await work(fakeDb().db, a2, { ...newThread(), origin: "reactivation" }, { kind: "reactivate" }, { claude: c.claude, ghl, now: new Date("2026-11-24T15:00:00Z") });
+  assertStringIncludes(String(r.skipped), "marketing consent");
+  const ok = fakeGhl({ tags: ["marketing-consent"], messages: [] });
+  const r2 = await work(fakeDb().db, a2, { ...newThread(), origin: "reactivation" }, { kind: "reactivate" }, { claude: c.claude, ghl: ok.ghl, now: new Date("2026-11-24T15:00:00Z") });
+  assertEquals(r2.sent, "Hi again");
+});
+
+Deno.test("show-up: booking schedules the first reminder; a reminder schedules the next", async () => {
+  const now = new Date("2026-11-24T15:00:00Z");
+  const c = scripted([
+    () => ({ content: [tool("get_free_times", { day: "2026-11-25", part_of_day: "afternoon" })] }),
+    (req) => {
+      const iso = String(JSON.stringify(req.messages).match(/2026-11-25T\d\d:\d\d:\d\d[^ "\\]*/)?.[0]);
+      return { content: [tool("book_consultation", { start_time: iso }), tool("send_message", { text: "You're booked!" })] };
+    },
+  ]);
+  const { ghl } = fakeGhl({ messages: [{ id: "in1", direction: "inbound", body: "Wednesday please", messageType: "TYPE_SMS", dateAdded: "2026-11-24T14:59:00Z" }] });
+  const thread = { ...newThread(), next_action: null, last_outbound_at: "2026-11-24T14:00:00Z", last_inbound_at: "2026-11-24T14:59:00Z" };
+  await work(fakeDb().db, { ...agent, rules: { remindersOn: true } }, thread, { kind: "reply" }, { claude: c.claude, ghl, now });
+  assertEquals(thread.state, "booked");
+  assertEquals(thread.next_action, "reminder");
+  assert(thread.next_action_at! > now.toISOString());
+  // The reminder itself: sent, then the next one is planned.
+  const c2 = scripted([() => ({ content: [tool("send_message", { text: "See you Wednesday! Reply YES to confirm." })] })]);
+  const booked = { ...newThread(), state: "booked" as const, appointment_at: "2026-11-30T14:00:00Z", next_action: "reminder" as const, last_outbound_at: "2026-11-24T10:00:00Z" };
+  await work(fakeDb().db, { ...agent, rules: { remindersOn: true } }, booked, { kind: "reminder", step: 1 }, { claude: c2.claude, ghl: fakeGhl({}).ghl, now: new Date("2026-11-28T14:00:00Z") });
+  assertEquals(booked.reminder_step, 1);
+  assertEquals(booked.next_action, "reminder");
+  assertEquals(booked.next_action_at, "2026-11-29T14:00:00.000Z");
+  assertEquals(booked.state, "booked");
+  assertStringIncludes(JSON.stringify(c2.seen[0]), "reply YES");
 });

@@ -4,6 +4,7 @@ import { Page, PageHeader } from "@/components/ui";
 import { getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { cleanBusiness } from "@/lib/setter";
+import { SpendForm } from "./spend-form";
 
 export const metadata: Metadata = { title: "Revenue" };
 
@@ -26,10 +27,18 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
   const now = nowMs();
   const since = new Date(now - days * 86_400_000).toISOString();
   const supabase = await createClient();
-  const [{ data }, { data: agents }] = await Promise.all([
+  const [{ data }, { data: agents }, { data: spendRows }] = await Promise.all([
     supabase.from("setter_threads").select("account_id, agent_id, origin, lead_source, created_at, last_outbound_at, booked_at, showed_at, appointment_status, revenue").in("account_id", accounts).gte("created_at", since).limit(10000),
     supabase.from("setter_agents").select("id, account_id, business").in("account_id", accounts),
+    supabase.from("ad_spend").select("id, account_id, month, source, amount").in("account_id", accounts).gte("month", since.slice(0, 8) + "01").order("month", { ascending: false }).limit(500),
   ]);
+  const spend = (spendRows ?? []) as { id: string; account_id: string; month: string; source: string; amount: number }[];
+  const spendBy = new Map<string, number>();
+  for (const r of spend) {
+    const k = r.source.trim().toLowerCase();
+    spendBy.set(k, (spendBy.get(k) ?? 0) + Number(r.amount));
+  }
+  const totalSpend = [...spendBy.values()].reduce((a, b) => a + b, 0);
   const rows = (data ?? []) as Row[];
   const biz = new Map(((agents ?? []) as { id: string; business: unknown }[]).map((a) => [a.id, cleanBusiness(a.business)]));
   const uk = [...biz.values()].some((b) => b.spelling === "UK" || b.timezone.startsWith("Europe/London"));
@@ -103,7 +112,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {(
           [
             ["Revenue from shows", money(total.revenue, cur), `${total.showed} showed`],
@@ -111,6 +120,13 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
             ["Bookings", String(total.booked), `${pct(total.booked, total.messaged)} of everyone messaged`],
             ["Show rate", pct(total.showed, total.booked), `${total.showed} of ${total.booked} booked`],
             ["Revenue per lead", total.leads ? money(total.revenue / total.leads, cur) : "–", `${total.leads} leads`],
+            ...(totalSpend
+              ? ([
+                  ["Ad spend", money(totalSpend, cur), `${money(total.leads ? totalSpend / total.leads : 0, cur)} a lead`],
+                  ["Cost per shown consult", total.showed ? money(totalSpend / total.showed, cur) : "–", `${total.booked ? money(totalSpend / total.booked, cur) : "–"} per booking`],
+                  ["Return on ad spend", totalSpend ? `${(total.revenue / totalSpend).toFixed(1)}x` : "–", "Revenue from shows ÷ spend"],
+                ] as const)
+              : []),
           ] as const
         ).map(([k, v, s], i) => (
           <div key={k} className={`card p-5 ${i === 0 ? "col-span-2 bg-[linear-gradient(135deg,#0a3fa6_0%,#0a5fe3_100%)] text-white lg:col-span-1" : ""}`}>
@@ -132,13 +148,15 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
             <div className="p-8 text-center text-[13px] text-muted">No leads in this period yet.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-[13px]">
+              <table className="w-full min-w-[820px] text-[13px]">
                 <thead>
                   <tr className="text-left text-[11.5px] uppercase tracking-[0.08em] text-faint">
                     <th className="px-5 py-2.5 font-semibold">Source</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Leads</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Booked</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Showed</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Spend</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Per shown</th>
                     <th className="px-5 py-2.5 font-semibold">Revenue</th>
                   </tr>
                 </thead>
@@ -151,6 +169,8 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
                         {a.booked} <span className="text-faint">{pct(a.booked, a.leads)}</span>
                       </td>
                       <td className="px-3 py-3 text-right font-mono">{a.showed}</td>
+                      <td className="px-3 py-3 text-right font-mono">{spendBy.get(src.toLowerCase()) ? money(spendBy.get(src.toLowerCase())!, cur) : "–"}</td>
+                      <td className="px-3 py-3 text-right font-mono">{spendBy.get(src.toLowerCase()) && a.showed ? money(spendBy.get(src.toLowerCase())! / a.showed, cur) : "–"}</td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface">
@@ -165,6 +185,15 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
               </table>
             </div>
           )}
+        </section>
+
+        <section className="card flex flex-col gap-4 p-5">
+          <div>
+            <div className="eyebrow mb-1">Ad spend</div>
+            <h2 className="text-[16px] font-semibold">What you spent, by source and month</h2>
+            <p className="text-[12.5px] text-muted">Gives cost per lead, per booking and per shown consult. Use the same source names GHL uses.</p>
+          </div>
+          <SpendForm sources={sources.map(([s]) => s).filter((s) => s !== "Unknown")} rows={spend.filter((r) => r.account_id === ws.account.id)} symbol={cur === "GBP" ? "£" : "$"} />
         </section>
 
         <section className="card p-5">

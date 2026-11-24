@@ -104,7 +104,7 @@ export function SiteOverview({
   const totalSignups = pages.reduce((n, p) => n + (stats[p.id]?.submissions ?? 0), 0);
 
   return (
-    <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-5 px-4 py-5 sm:px-7 sm:py-7">
+    <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5 px-4 py-5 sm:px-8 sm:py-7">
       {/* Top bar */}
       <div className="flex flex-wrap items-center gap-2">
         <Link href="/funnels" className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted hover:bg-white" aria-label="Back to funnels and pages">

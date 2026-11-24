@@ -5,9 +5,9 @@ import { can, getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 import { cleanBusiness, cleanRules, type SetterStatus, type ThreadState } from "@/lib/setter";
 import { SetterEditor, type Tab, type ThreadView } from "./setter-editor";
-import type { KnowledgeItem } from "./growth-tabs";
+import type { CallItem, KnowledgeItem, VersionItem } from "./growth-tabs";
 
-const TABS: Tab[] = ["clinic", "knowledge", "rules", "journey", "retention", "voice", "ghl", "test", "reactivate", "conversations"];
+const TABS: Tab[] = ["clinic", "knowledge", "rules", "journey", "showup", "retention", "voice", "ghl", "test", "reactivate", "conversations"];
 
 export const metadata: Metadata = { title: "AI setter" };
 
@@ -15,7 +15,7 @@ export default async function SetterRoute({ params, searchParams }: { params: Pr
   const [{ id: raw }, ws, sp] = await Promise.all([params, getWorkspace(), searchParams]);
   const id = await fullId("setter_agents", raw);
   const supabase = await createClient();
-  const [{ data: a }, { data: threads }, { data: knowledge }] = await Promise.all([
+  const [{ data: a }, { data: threads }, { data: knowledge }, { data: versions }, { data: calls }] = await Promise.all([
     supabase
       .from("setter_agents")
       .select("id, name, status, business, rules, ghl_location_id, ghl_location_name, ghl_calendar_id, ghl_calendar_name, ghl_pipeline_id, ghl_stages, ghl_checked_at, ghl_error")
@@ -30,6 +30,8 @@ export default async function SetterRoute({ params, searchParams }: { params: Pr
       .order("updated_at", { ascending: false })
       .limit(40),
     supabase.from("setter_knowledge").select("id, question, answer, source, approved").eq("agent_id", id).eq("account_id", ws.account.id).order("created_at").limit(300),
+    supabase.from("setter_versions").select("id, name, created_at, business, rules").eq("agent_id", id).eq("account_id", ws.account.id).order("created_at", { ascending: false }).limit(40),
+    supabase.from("setter_calls").select("id, direction, purpose, duration_seconds, summary, created_at, recording_url").eq("agent_id", id).eq("account_id", ws.account.id).order("created_at", { ascending: false }).limit(20),
   ]);
   if (!a) notFound();
   // Lead reactivation numbers, across every old lead it has queued (not just the 40 shown).
@@ -85,6 +87,8 @@ export default async function SetterRoute({ params, searchParams }: { params: Pr
       accountId={ws.account.id}
       canEdit={can(ws, "ai.manage")}
       knowledge={(knowledge ?? []) as KnowledgeItem[]}
+      versions={(versions ?? []) as VersionItem[]}
+      calls={(calls ?? []) as CallItem[]}
       initialTab={TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : undefined}
     />
   );

@@ -42,8 +42,9 @@ export type SetterBusiness = {
   guaranteeStart: string;
 };
 
-export type JourneyAction = "message" | "sms" | "email" | "whatsapp" | "call_task" | "setter";
-export type JourneyStep = { day: number; action: JourneyAction };
+export type JourneyAction = "message" | "sms" | "email" | "whatsapp" | "call_task" | "setter" | "ai_call";
+/** A journey step: on day N, or (day 0) N minutes after the first message. */
+export type JourneyStep = { day: number; minutes?: number; action: JourneyAction };
 export const JOURNEY_ACTIONS: { id: JourneyAction; label: string; hint: string }[] = [
   { id: "message", label: "AI message", hint: "On the channel they used" },
   { id: "sms", label: "AI text", hint: "Text message" },
@@ -51,6 +52,22 @@ export const JOURNEY_ACTIONS: { id: JourneyAction; label: string; hint: string }
   { id: "whatsapp", label: "AI WhatsApp", hint: "WhatsApp (if connected in GHL)" },
   { id: "call_task", label: "Call task", hint: "A GHL task for the team to call" },
   { id: "setter", label: "Setter", hint: "Into the setter console" },
+  { id: "ai_call", label: "AI call", hint: "Voice AI calls them (once voice is connected)" },
+];
+
+/** The spec pipeline stages the AI moves leads through in GHL. */
+export const STAGE_KEYS: { key: string; label: string; hint: string }[] = [
+  { key: "contacted", label: "Contacted", hint: "The AI sent the first message" },
+  { key: "engaged", label: "Engaged", hint: "They replied" },
+  { key: "qualified", label: "Qualified", hint: "Lead score reached 60" },
+  { key: "booked", label: "Booked", hint: "Consultation booked" },
+  { key: "confirmed", label: "Confirmed", hint: "Replied YES, or confirmed in GHL" },
+  { key: "attended", label: "Attended", hint: "Marked showed in GHL" },
+  { key: "rebooked", label: "Rebooked", hint: "Booked again from a rebooking reminder" },
+  { key: "no_show", label: "No-show", hint: "Marked no-show in GHL" },
+  { key: "cancelled", label: "Cancelled", hint: "Appointment cancelled" },
+  { key: "not_interested", label: "Lost", hint: "Said they're not interested" },
+  { key: "opted_out", label: "Opted out", hint: "Texted STOP" },
 ];
 export type RebookItem = { treatment: string; days: number };
 export type VoiceMode = "off" | "missed" | "after_hours" | "all_day";
@@ -198,6 +215,15 @@ export type SetterRules = {
   voiceMode: VoiceMode;
   voiceCallNewLeads: boolean;
   voiceTransfer: string;
+  /** Show-up (spec I): reminders before the appointment, no-show recovery after, waitlist backfill. */
+  remindersOn: boolean;
+  noShowOn: boolean;
+  waitlistOn: boolean;
+  /** Messages when a lead does something (GHL behaviour workflow). */
+  behaviourOn: boolean;
+  /** Marketing messages only to contacts with the consent tag. */
+  consentRequired: boolean;
+  consentTag: string;
 };
 
 export type SetterStatus = "off" | "test" | "live";
@@ -243,6 +269,12 @@ export const DEFAULT_RULES: SetterRules = {
   voiceMode: "off",
   voiceCallNewLeads: false,
   voiceTransfer: "",
+  remindersOn: false,
+  noShowOn: false,
+  waitlistOn: false,
+  behaviourOn: false,
+  consentRequired: false,
+  consentTag: "marketing-consent",
 };
 
 /** The pilot demo: a med spa built from the niche playbook's typical US prices. Replace with the real clinic's details. */
@@ -399,16 +431,27 @@ export function cleanRules(v: unknown): SetterRules {
     voiceMode: (["off", "missed", "after_hours", "all_day"] as const).includes(o.voiceMode as never) ? (o.voiceMode as VoiceMode) : "off",
     voiceCallNewLeads: o.voiceCallNewLeads === true,
     voiceTransfer: /^\+?[0-9 ]{7,20}$/.test(String(o.voiceTransfer ?? "").trim()) ? String(o.voiceTransfer).trim() : "",
+    remindersOn: o.remindersOn === true,
+    noShowOn: o.noShowOn === true,
+    waitlistOn: o.waitlistOn === true,
+    behaviourOn: o.behaviourOn === true,
+    consentRequired: o.consentRequired === true,
+    consentTag: String(o.consentTag ?? "").trim().toLowerCase().slice(0, 60) || "marketing-consent",
   };
 }
 
 export function cleanJourney(v: unknown): JourneyStep[] {
   const ids = JOURNEY_ACTIONS.map((a) => a.id) as string[];
   return (Array.isArray(v) ? v : [])
-    .map((j) => ({ day: Math.round(Number((j as JourneyStep)?.day)), action: (ids.includes((j as JourneyStep)?.action) ? (j as JourneyStep).action : "message") as JourneyAction }))
-    .filter((j) => Number.isInteger(j.day) && j.day > 0 && j.day <= 60)
-    .sort((a, b) => a.day - b.day)
-    .slice(0, 12);
+    .map((j) => {
+      const day = Math.round(Number((j as JourneyStep)?.day));
+      const minutes = Math.round(Number((j as JourneyStep)?.minutes));
+      const action = (ids.includes((j as JourneyStep)?.action) ? (j as JourneyStep).action : "message") as JourneyAction;
+      return day === 0 && minutes > 0 && minutes <= 1440 ? { day: 0, minutes, action } : { day, action };
+    })
+    .filter((j) => Number.isInteger(j.day) && ((j.day === 0 && (j as JourneyStep).minutes) || (j.day > 0 && j.day <= 60)))
+    .sort((a, b) => a.day - b.day || ((a as JourneyStep).minutes ?? 0) - ((b as JourneyStep).minutes ?? 0))
+    .slice(0, 20);
 }
 
 export const TIMEZONES = [
