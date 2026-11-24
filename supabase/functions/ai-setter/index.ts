@@ -73,6 +73,10 @@ export type Business = {
   /** A deposit to secure a treatment booking: the payment link (Stripe, GHL) and the amount. */
   depositLink?: string;
   depositAmount?: string;
+  /** Number for urgent problems after a treatment (on-call practitioner). */
+  urgentPhone?: string;
+  /** The clinic's own words for urgent problems after a treatment. */
+  urgentAdvice?: string;
   /** The Google review link sent after a visit. */
   reviewLink?: string;
   /** Average value of a treatment or job, used for revenue when GHL doesn't send one. */
@@ -463,7 +467,7 @@ const INDUSTRIES: Record<BusinessType, Industry> = {
     safety: `- Never give medical advice, diagnose, or say a treatment is right or safe for them. Questions about medical conditions, medications, allergies, pregnancy or breastfeeding are for the practitioner: say so kindly and offer to book the consultation.
 - Never promise results ("erase wrinkles", "permanent"). Say what's typical.
 - Treatments are 18 and over. If someone says they're under 18, don't book them: call hand_over.
-- If they describe a problem after a treatment (pain, swelling, infection, a reaction): call hand_over straight away; if it sounds serious, tell them to contact their provider or emergency services now.`,
+- If they describe a problem after a treatment (pain, swelling, infection, a reaction): call hand_over straight away; if it sounds serious, ask them to call the clinic now, and 999 or A&E only for severe signs. Never mention NHS 111 and don't repeat the emergency advice in later messages.`,
   },
   dental: {
     role: "patient coordinator",
@@ -849,12 +853,20 @@ export function stripPom(message: string): string {
     .trim();
 }
 
-/** The safe, fixed reply for a possible complication: no AI, no advice, straight to the clinic. */
-export function complicationReply(b: Business, who: string) {
-  const phone = b.phone ? ` If you can, please also call us on ${b.phone}.` : "";
-  return `I'm sorry to hear that. I've passed this to our clinical team straight away and someone will contact you as soon as possible.${phone} If it's severe or getting worse quickly, especially any change in your vision or skin turning white or grey, please call 999 or NHS 111 now. ${who}`.trim();
+/** The safe, fixed reply for a possible complication: no AI, no advice, straight to the clinic.
+ *  Clinic first. 999 or A&E only for severe signs. No NHS 111: it isn't a general service in
+ *  Northern Ireland and private clinics want the patient back with them. The clinic can replace
+ *  the advice with its own words. A second message in the same thread gets a short reply instead
+ *  of the whole safety message again. */
+export const COMPLICATION_OPENER = "I'm sorry to hear that. I've passed this to our clinical team straight away";
+export function complicationReply(b: Business, who: string, again = false) {
+  const num = (b.urgentPhone || b.phone || "").trim();
+  if (again) return `Thank you, I've added that for our clinical team and they'll be in touch as soon as possible.${num ? ` If you need us sooner, please call ${num}.` : ""}`;
+  const call = num ? ` If you'd like to speak to someone now, please call us on ${num}.` : "";
+  const emergency = b.spelling === "US" ? "call 911 or go to the ER" : "call 999 or go to A&E";
+  const advice = (b.urgentAdvice ?? "").trim() || `If it's severe or getting worse quickly, for example a change in your vision, skin turning white or grey, or any trouble breathing, please ${emergency} now.`;
+  return `${COMPLICATION_OPENER} and someone will contact you as soon as possible.${call} ${advice} ${who}`.replace(/\s{2,}/g, " ").trim();
 }
-
 
 /** One AI turn inside the guardrails: a possible complication gets a fixed, safe reply and goes
  *  straight to the clinic (no AI); an under-18 lead is flagged so injectables aren't booked; and a
@@ -874,7 +886,7 @@ export async function guardedBrain(
     guard.push(`Guardrail: possible complication ("${flag.match}"), passed to the clinic as urgent`);
     return {
       brain: {
-        message: complicationReply(b, ""),
+        message: complicationReply(b, "", input.turns.some((t) => (t.who === "ai" || t.who === "auto") && t.text.startsWith(COMPLICATION_OPENER))),
         handover: { category: "complication", reason: `Possible complication: "${flag.match}"`, summary: newest!.text.slice(0, 500) },
         events: [`Handed over: possible complication`],
       },
@@ -1556,17 +1568,38 @@ export async function alertTeam(agent: Agent, a: { event: string; priority: stri
     jobs.push(fetch(rules.alertWebhook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(8000) }));
   const key = Deno.env.get("RESEND_API_KEY");
   const from = Deno.env.get("ALERT_FROM_EMAIL");
-  if (key && from && rules.alertEmail && /@/.test(rules.alertEmail))
+  // No alert email set: the workspace's owners and admins get it, so an urgent handoff never
+  // sits unseen in the console.
+  let to = (rules.alertEmail ?? "").split(",").map((x) => x.trim()).filter((x) => /@/.test(x));
+  if (key && from && !to.length && agent.account_id) to = await workspaceEmails(agent.account_id);
+  if (key && from && to.length)
     jobs.push(
       fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-        body: JSON.stringify({ from, to: rules.alertEmail.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 5), subject: `${a.priority === "urgent" ? "URGENT: " : ""}AI setter: ${a.name}`, text: `${a.text}\n\n${ghlLink}` }),
+        body: JSON.stringify({ from, to: to.slice(0, 5), subject: `${a.priority === "urgent" ? "URGENT: " : ""}AI setter: ${a.name}`, text: `${a.text}\n\n${ghlLink}` }),
         signal: AbortSignal.timeout(8000),
       }),
     );
   const done = await Promise.allSettled(jobs);
   for (const d of done) if (d.status === "rejected") console.error("Alert failed", String(d.reason).slice(0, 200));
+}
+
+/** Emails of a workspace's owners and admins, for alerts when no alert email is set. */
+export async function workspaceEmails(accountId: string): Promise<string[]> {
+  try {
+    const db = admin();
+    const { data } = await db.from("account_members").select("user_id, role").eq("account_id", accountId).in("role", ["owner", "admin"]).limit(5);
+    const out: string[] = [];
+    for (const m of data ?? []) {
+      const { data: u } = await db.auth.admin.getUserById(m.user_id as string);
+      if (u?.user?.email) out.push(u.user.email);
+    }
+    return out;
+  } catch (e) {
+    console.error("Workspace emails failed", String(e).slice(0, 200));
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2917,7 +2950,12 @@ async function app(req: Request) {
     const newestLead = [...turns].reverse().find((t) => t.who === "lead");
     const said = newestLead && mode.kind === "reply" ? keywordHit(newestLead.text, rules.alertKeywords) : null;
     const r0 = draft.rules as Rules & { alertOn?: string; alertWebhook?: string; alertEmail?: string };
-    const alertWays = [r0.alertWebhook ? "WhatsApp/SMS webhook" : "", r0.alertEmail ? "email" : ""].filter(Boolean).join(" and ") || "the setter console";
+    const mailOn = Boolean(Deno.env.get("RESEND_API_KEY") && Deno.env.get("ALERT_FROM_EMAIL"));
+    const alertWays = [
+      "a GHL task and tag",
+      r0.alertWebhook ? "your WhatsApp/SMS webhook" : "",
+      mailOn ? (r0.alertEmail ? `email to ${r0.alertEmail}` : "email to the workspace owners") : "",
+    ].filter(Boolean).join(", ") + ", plus the bell and command centre" + (mailOn || r0.alertWebhook ? "" : " (no email or WhatsApp yet: email needs the Resend secrets)");
     if (said && rules.keywordAction === "handoff")
       return json({ message: "", events: [`Said "${said}": handed to the team, alerted by ${alertWays}. The AI doesn't reply.`], booked: null, rescheduled: null, cancelled: false, handover: { reason: `Said "${said}"`, summary: newestLead!.text, category: "person", priority: "high" }, stop: null, qualification: null });
     try {
@@ -3622,7 +3660,7 @@ export async function opportunityAudit(claude: BrainDeps["claude"], answers: Rec
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v15 (25 Nov): team replies and AI drafts in the command centre, health monitor, AI opportunity audit; v14: show-up reminders and no-shows, spec journeys, consent check, pipeline stages, waitlist, behaviour triggers, voice calls (Vapi or Retell), QA scoring, test lab, creative studio, diary capacity";
+export const VERSION = "v16: safer urgent reply (clinic first, no NHS 111, no repeats), alerts email workspace owners when no alert email is set; v15: team replies and AI drafts in the command centre, health monitor, AI opportunity audit; v14: show-up reminders and no-shows, spec journeys, consent check, pipeline stages, waitlist, behaviour triggers, voice calls (Vapi or Retell), QA scoring, test lab, creative studio, diary capacity";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {

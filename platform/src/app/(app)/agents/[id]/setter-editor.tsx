@@ -307,6 +307,18 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
           </label>
         </div>
       </Section>
+      <Section title="Urgent problems after a treatment" text="If a patient describes a reaction or complication, the AI stops, sends one fixed safe message and alerts your team as urgent. It never gives medical advice.">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className={label}>
+            On-call number
+            <input {...t("urgentPhone")} maxLength={40} placeholder="Blank: uses the main phone" className={field} />
+          </label>
+          <label className={`${label} sm:col-span-2`}>
+            What to tell them (optional)
+            <textarea {...t("urgentAdvice")} maxLength={600} rows={3} placeholder="Blank: asks them to call the clinic, and 999 or A&E only for severe signs such as vision changes, skin turning white or grey, or trouble breathing." className={field} />
+          </label>
+        </div>
+      </Section>
       <Section title="The first step it books" text="A consultation, discovery call, quote visit, valuation or trial. The AI books this; it doesn't sell the service itself.">
         <div className="grid gap-4 sm:grid-cols-3">
           <label className={label}>
@@ -1274,6 +1286,25 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
     return (iso: string) => f.format(new Date(iso));
   }, [timezone]);
   const counts = threads.reduce<Record<string, number>>((m, t) => ((m[t.state] = (m[t.state] ?? 0) + 1), m), {});
+  const [state, setState] = useState<ThreadState | "all">("all");
+  const [origin, setOrigin] = useState<string>("all");
+  const [channel, setChannel] = useState<string>("all");
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<"new" | "old" | "next">("new");
+  const channels = useMemo(() => [...new Set(threads.map((t) => t.channel).filter(Boolean))].sort(), [threads]);
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const list = threads.filter(
+      (t) =>
+        (state === "all" || t.state === state) &&
+        (origin === "all" || t.origin === origin) &&
+        (channel === "all" || t.channel === channel) &&
+        (!needle || t.name.toLowerCase().includes(needle) || t.turns.some((x) => x.body.toLowerCase().includes(needle))),
+    );
+    const key = (t: ThreadView) => (sort === "next" ? (t.nextAt ?? t.appointmentAt ?? "9999") : t.updatedAt);
+    return list.sort((a, b) => (sort === "new" ? key(b).localeCompare(key(a)) : key(a).localeCompare(key(b))));
+  }, [threads, state, origin, channel, q, sort]);
+  const filtered = state !== "all" || origin !== "all" || channel !== "all" || q.trim() !== "";
   if (!threads.length)
     return (
       <div className="card p-10 text-center text-[14px] text-muted">
@@ -1282,17 +1313,67 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
     );
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(THREAD_LOOK) as ThreadState[])
-          .filter((s) => counts[s])
-          .map((s) => (
-            <Pill key={s} tone={THREAD_LOOK[s].tone}>
-              {THREAD_LOOK[s].label}: {counts[s]}
-            </Pill>
+      <div className="card flex flex-col gap-3 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {(["all", ...(Object.keys(THREAD_LOOK) as ThreadState[]).filter((s) => counts[s])] as (ThreadState | "all")[]).map((s) => (
+            <button key={s} type="button" onClick={() => setState(s)} aria-pressed={state === s} className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 transition ${state === s ? "bg-brand text-white ring-brand" : "bg-white text-navy ring-line hover:bg-surface"}`}>
+              {s === "all" ? `All: ${threads.length}` : `${THREAD_LOOK[s].label}: ${counts[s]}`}
+            </button>
           ))}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+          <label className="relative">
+            <span className="sr-only">Search conversations</span>
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint">
+              <Icon name="search" size={14} />
+            </span>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a name or anything said" className={`${field} pl-9`} />
+          </label>
+          <select value={origin} onChange={(e) => setOrigin(e.target.value)} aria-label="Where the lead came from" className={field}>
+            <option value="all">All sources</option>
+            <option value="lead">New leads</option>
+            <option value="reply">Messaged in</option>
+            <option value="missed_call">Missed calls</option>
+            <option value="reactivation">Reactivation</option>
+            <option value="rebooking">Rebooking</option>
+          </select>
+          <select value={channel} onChange={(e) => setChannel(e.target.value)} aria-label="Channel" className={field}>
+            <option value="all">All channels</option>
+            {channels.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value as "new" | "old" | "next")} aria-label="Sort" className={field}>
+            <option value="new">Newest first</option>
+            <option value="old">Oldest first</option>
+            <option value="next">Next action first</option>
+          </select>
+        </div>
+        {filtered && (
+          <div className="flex items-center justify-between text-[12.5px] text-muted">
+            <span>
+              Showing {shown.length} of {threads.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setState("all");
+                setOrigin("all");
+                setChannel("all");
+                setQ("");
+              }}
+              className="font-semibold text-brand hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
       </div>
-      <div className="card divide-y divide-line overflow-hidden">
-        {threads.map((t) => {
+      {!shown.length && <div className="card p-8 text-center text-[13.5px] text-muted">No conversations match these filters.</div>}
+      <div className={`card divide-y divide-line overflow-hidden ${shown.length ? "" : "hidden"}`}>
+        {shown.map((t) => {
           const look = THREAD_LOOK[t.state];
           const isOpen = open === t.id;
           return (
