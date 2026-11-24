@@ -66,6 +66,10 @@ export type Business = {
   businessType?: string;
   /** The business's own extra rules for the AI, in plain words. */
   instructions?: string;
+  /** Example replies or scripts in the business's own words, for the AI to copy the style of. */
+  scripts?: string;
+  /** What the reactivation message offers old leads (falls back to the current offer). */
+  reactivationOffer?: string;
 };
 
 export type Rules = {
@@ -78,6 +82,8 @@ export type Rules = {
   replyDelaySeconds?: number;
   /** Copy each new GHL lead into Scalency's contacts. On unless switched off. */
   syncContacts?: boolean;
+  /** Speed to lead: the first message to a new lead goes straight away, any time of day. Follow-ups still wait for the hours. */
+  instantFirstMessage?: boolean;
   /** When the AI joins: message new leads (the new-lead webhook). */
   joinNewLeads?: boolean;
   /** Replies: "all" answers anyone who messages in; "own" only people the AI has already messaged. */
@@ -116,12 +122,13 @@ export type Thread = {
   touches: number;
   total_touches: number;
   next_action_at: string | null;
-  next_action: "opener" | "followup" | null;
+  next_action: "opener" | "followup" | "reactivate" | null;
   reply_token: string | null;
   last_inbound_at: string | null;
   last_outbound_at: string | null;
   sent_ids: string[];
   note?: string | null;
+  origin?: "lead" | "reply" | "reactivation";
 };
 
 export type Turn = { who: "lead" | "ai" | "team" | "auto"; text: string; at: string; channel?: string; id?: string; subject?: string; emailIds?: string[]; threadId?: string };
@@ -142,7 +149,7 @@ export type BrainResult = {
   events: string[];
 };
 
-export type Mode = { kind: "opener" } | { kind: "reply" } | { kind: "followup"; touch: number };
+export type Mode = { kind: "opener" } | { kind: "reactivate" } | { kind: "reply" } | { kind: "followup"; touch: number };
 
 export const DEFAULT_RULES: Required<Rules> = {
   start: "08:00",
@@ -153,6 +160,7 @@ export const DEFAULT_RULES: Required<Rules> = {
   minNoticeHours: 2,
   replyDelaySeconds: 20,
   syncContacts: true,
+  instantFirstMessage: true,
   joinNewLeads: true,
   joinReplies: "all",
   onlyTags: [],
@@ -170,6 +178,7 @@ export const rulesOf = (r: Rules | null | undefined): Required<Rules> => {
     followUpDays: (Array.isArray(o.followUpDays) ? o.followUpDays : DEFAULT_RULES.followUpDays).map(Number).filter((d) => d > 0 && d <= 60).slice(0, 10),
     teamTasks: o.teamTasks !== false,
     syncContacts: o.syncContacts !== false,
+    instantFirstMessage: o.instantFirstMessage !== false,
     joinNewLeads: o.joinNewLeads !== false,
     joinReplies: o.joinReplies === "own" ? "own" : "all",
     onlyTags: ((v: unknown) => (Array.isArray(v) ? v : []).map((t) => String(t).trim().toLowerCase()).filter(Boolean).slice(0, 20))(o.onlyTags),
@@ -403,7 +412,7 @@ export function systemPrompt(agent: Pick<Agent, "business" | "rules">, now: Date
 1. First message: say who you are, give one useful thing (the offer, a starting price, or what the ${call} gets them), then ask ONE easy question about them, for example what they'd most like help with or what made them reach out. Never ask permission ("mind if I explain…?").
 2. When they answer: reply to exactly what they said, using their words. Give the one or two facts that matter to them (price, what's involved, what's typical). Then move one step closer to booking.
 3. As soon as they show any interest (a yes, a "sounds good", a question about price or timing, "when can I come?"): explain the ${call} in one short sentence AND, in the same message, ${bookingStep}. Don't ask "shall I send you some times?" first.
-4. If neither time works, ask what day or part of the day is better and check again.
+4. Choose the times for them, don't make them work it out: if their form, tags or messages say when suits (for example "evenings", "after work", "Saturdays", "as soon as possible", a date or an event), call get_free_times with that day or part_of_day and offer the two soonest times that fit. If nothing says, offer the soonest time and one on a different day. If neither works, ask what day or part of the day is better and check again.
 5. Only call book_consultation once they've clearly picked a time, using a time from get_free_times exactly. Then confirm the day and time, what happens, and anything in the policies they need to know (such as cancellation notice). Keep it short. Never say they're booked unless book_consultation said it worked.
 6. ${b.bookingLink ? `If they'd rather book themselves or ask for a link, send this: ${b.bookingLink}` : "If they ask for a booking link, say you can book them in right here and offer times"}.
 7. If they messaged first (for example "hey" or a question), answer what they said before anything else.
@@ -428,12 +437,12 @@ export function systemPrompt(agent: Pick<Agent, "business" | "rules">, now: Date
 - ${uk ? "UK" : "US"} spelling. Prices exactly as written in the business details.
 ${b.tone ? `- The business's tone notes: ${b.tone}\n` : ""}
 ## The business (only state facts from here; if something isn't here, say you'll check with the team or that ${ind.expert} will cover it on the ${call})
-${line("Business", biz)}${line("Where", b.location)}${line("Phone", b.phone)}${line("Website", b.website)}${line(`First step (${call})`, [call, b.consultLength, b.consultPrice].filter(Boolean).join(", "))}${line("Services and prices", b.services)}${line("Current offer", b.offer)}${line("Payment options", b.financing)}${line("Who does the work", b.whoTreats)}${line("Policies", b.policies)}${line("Proof (results and reviews you may mention)", b.proof)}${line("Other answers", b.faqs)}- Opening hours for messages: ${r.start} to ${r.end} (${tz})
+${line("Business", biz)}${line("Where", b.location)}${line("Phone", b.phone)}${line("Website", b.website)}${line(`First step (${call})`, [call, b.consultLength, b.consultPrice].filter(Boolean).join(", "))}${line("Services and prices", b.services)}${line("Current offer", b.offer)}${line("Offer for old leads coming back", b.reactivationOffer)}${line("Payment options", b.financing)}${line("Who does the work", b.whoTreats)}${line("Policies", b.policies)}${line("Proof (results and reviews you may mention)", b.proof)}${line("Other answers", b.faqs)}- Opening hours for messages: ${r.start} to ${r.end} (${tz})
 
 ## Common questions (answer honestly, in your own words, and keep it short)
 ${ind.questions}
 - Never invent prices, discounts or facts.
-${b.instructions ? `\n## The business's own instructions (follow these, unless they clash with the safety or security rules below)\n${b.instructions}\n` : ""}
+${b.scripts ? `\n## Example replies in the business's own words (copy the tone, length and phrasing style; never copy them word for word, and never state facts from them that aren't in the business details)\n${b.scripts}\n` : ""}${b.instructions ? `\n## The business's own instructions (follow these, unless they clash with the safety or security rules below)\n${b.instructions}\n` : ""}
 ## Safety rules (always)
 ${ind.safety}
 - You're a virtual assistant. Never say or imply you're a person. If asked, say you're ${biz}'s virtual assistant and a team member can jump in any time.
@@ -467,6 +476,8 @@ export function transcript(turns: Turn[], tz: string) {
 export function taskText(mode: Mode, lead: Lead) {
   if (mode.kind === "opener")
     return `This lead has just come in. Write your first message to ${lead.firstName || "them"}: introduce yourself and the business, mention what they asked about if you know it, give one useful thing (the offer, a starting price, or what the first step gets them), and end with ONE easy question about them (what they'd most like help with, or what made them reach out). Don't ask permission to explain anything, and don't offer times yet.`;
+  if (mode.kind === "reactivate")
+    return `${lead.firstName || "This person"} asked about the business a while ago (see <lead> for when and what) and never booked. Write ONE short, friendly message to bring them back: say who you are and that you're following up on their enquiry, mention what they asked about if you know it, give one fresh reason to book now (the reactivation offer or current offer from the business details), and end with ONE easy yes/no question. No guilt, no "just checking in", and don't offer times yet.`;
   if (mode.kind === "followup") {
     const [name, how] = followUpStyle(mode.touch);
     return `They haven't replied since your last message. Write follow-up number ${mode.touch + 1}, in the "${name}" style: ${how} Make it different from everything already said. If they've already picked a time but it isn't booked, check the time is still free and book it instead.`;
@@ -485,7 +496,7 @@ export type ClaudeResponse = { content: ClaudeBlock[]; stop_reason?: string };
 export const TOOLS = [
   {
     name: "get_free_times",
-    description: "Free times for the first call or visit, from the business's calendar. Returns up to 9 times over the next few days with space. Call it again with a day or part of day if they ask for something specific.",
+    description: "Free times for the first call or visit, from the business's calendar. Returns up to 9 times over the next few days with space. Use day or part_of_day to match what the lead has said suits them (from their form or messages), so the times you offer fit their life.",
     input_schema: {
       type: "object",
       properties: {
@@ -738,8 +749,9 @@ export class Ghl {
     return r.submissions?.[0] ?? null;
   }
   /** A page of the sub-account's contacts, oldest first. Pass the last page's cursor for the next. */
-  async contactsPage(after?: unknown[], page = 1) {
+  async contactsPage(after?: unknown[], page = 1, tag?: string) {
     const body: Record<string, unknown> = { locationId: this.locationId, pageLimit: 100, sort: [{ field: "dateAdded", direction: "asc" }] };
+    if (tag) body.filters = [{ field: "tags", operator: "eq", value: tag }];
     if (after?.length) body.searchAfter = after;
     else body.page = page;
     const r = await this.req<{ contacts?: Record<string, unknown>[]; total?: number }>("POST", "/contacts/search", "2021-07-28", body);
@@ -1058,12 +1070,12 @@ async function logTurn(db: Db, t: { agent: Agent; thread?: Thread | null; role: 
   });
 }
 
-async function threadFor(db: Db, agent: Agent, contactId: string, name: string, channel?: string): Promise<Thread> {
+async function threadFor(db: Db, agent: Agent, contactId: string, name: string, channel?: string, origin: "lead" | "reply" = "lead"): Promise<Thread> {
   const { data } = await db.from("setter_threads").select("*").eq("agent_id", agent.id).eq("ghl_contact_id", contactId).maybeSingle();
   if (data) return data as Thread;
   const { data: made, error } = await db
     .from("setter_threads")
-    .insert({ agent_id: agent.id, account_id: agent.account_id, ghl_contact_id: contactId, contact_name: name || null, channel: channel ?? "SMS" })
+    .insert({ agent_id: agent.id, account_id: agent.account_id, ghl_contact_id: contactId, contact_name: name || null, channel: channel ?? "SMS", origin })
     .select("*")
     .single();
   if (error) {
@@ -1129,6 +1141,19 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
 
   const convId = await ghl.conversationId(contactId);
   const history = convId ? toTurns(await ghl.messagesWithEmails(convId, 40), thread.sent_ids ?? []) : [];
+  // Never send the first message twice (a retry after a slow send, or the button clicked twice):
+  // if the business already messaged them in the last half hour, stop here.
+  const since = (mins: number) => now.getTime() - mins * 60_000;
+  const recentOut = history.some((t) => (t.who === "ai" || t.who === "auto") && new Date(t.at).getTime() > since(30));
+  if (mode.kind === "opener" && (thread.last_outbound_at || recentOut)) {
+    await update(db, thread, { next_action: null, next_action_at: null, last_outbound_at: thread.last_outbound_at ?? now.toISOString() });
+    return { skipped: "already messaged" };
+  }
+  // Reactivation is for people who've gone quiet: skip anyone in a conversation in the last 14 days.
+  if (mode.kind === "reactivate" && history.some((t) => new Date(t.at).getTime() > since(14 * 24 * 60))) {
+    await update(db, thread, { next_action: null, next_action_at: null, note: "Skipped reactivation: they've been in touch in the last 14 days" });
+    return { skipped: "recently in touch" };
+  }
   if (teamTookOver(history, now, rules.teamPauseHours)) {
     await update(db, thread, { state: "paused", next_action_at: null, next_action: null, note: "A team member replied, so the AI stepped back" });
     await logTurn(db, { agent, thread, role: "event", body: "A team member replied to this lead, so the AI stepped back." });
@@ -1267,9 +1292,11 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
     const next = followUpAt(now, touch, rules, tz);
     patch.touches = touch;
     patch.total_touches = (thread.total_touches ?? 0) + (mode.kind === "followup" ? 1 : 0);
-    patch.next_action = next ? "followup" : null;
-    patch.next_action_at = next ? next.toISOString() : null;
-    if (!next) patch.state = "finished";
+    // Old leads being reactivated get 2 follow-ups at most, not the full new-lead sequence.
+    const enough = thread.origin === "reactivation" && touch >= 2;
+    patch.next_action = next && !enough ? "followup" : null;
+    patch.next_action_at = next && !enough ? next.toISOString() : null;
+    if (!next || enough) patch.state = "finished";
   } else {
     patch.next_action = null;
     patch.next_action_at = null;
@@ -1277,6 +1304,7 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
   await update(db, thread, patch);
 
   // The first time: tag them, move the deal, and give the team their part of the SOP.
+  if (mode.kind === "reactivate") await safe(ghl.tags(contactId, ["ai-setter", "ai-reactivated"]));
   if (mode.kind === "opener") {
     await safe(ghl.tags(contactId, ["ai-setter"]));
     if (pipeline && stages.contacted && !brain.booked) await safe(ghl.moveStage(contactId, pipeline, stages.contacted, name));
@@ -1383,7 +1411,7 @@ async function webhook(event: string, url: URL, req: Request) {
     const { data: had } = await db.from("setter_threads").select("id, last_outbound_at").eq("agent_id", agent.id).eq("ghl_contact_id", contactId).maybeSingle();
     if (!had?.last_outbound_at) return json({ ok: true, skipped: "the AI only answers people it has messaged (When the AI joins)" });
   }
-  const thread = await threadFor(db, agent, contactId, name);
+  const thread = await threadFor(db, agent, contactId, name, undefined, event === "inbound" ? "reply" : "lead");
 
   if (event === "booked") {
     await update(db, thread, { state: "booked", next_action: null, next_action_at: null, booked_at: new Date().toISOString() });
@@ -1408,7 +1436,7 @@ async function webhook(event: string, url: URL, req: Request) {
     if (!rules.joinNewLeads) return json({ ok: true, skipped: "the AI doesn't message new leads (When the AI joins)" });
     if (thread.state !== "active" || thread.last_outbound_at) return json({ ok: true, skipped: "already contacted" });
     const now = new Date();
-    const at = withinHours(now, rules, tz) ? now : nextOpening(now, rules, tz);
+    const at = rules.instantFirstMessage || withinHours(now, rules, tz) ? now : nextOpening(now, rules, tz);
     await update(db, thread, { next_action: "opener", next_action_at: at.toISOString() });
     if (at.getTime() <= now.getTime()) {
       background(
@@ -1512,11 +1540,13 @@ async function runDue(db: Db, apiKey: string) {
     // Claim it, so two clocks never send the same follow-up.
     const { data: fresh } = await db.from("setter_threads").update({ next_action_at: null }).eq("id", t.id).eq("next_action_at", t.next_action_at!).select("*").maybeSingle();
     if (!fresh) continue;
-    const mode: Mode = t.next_action === "opener" ? { kind: "opener" } : { kind: "followup", touch: t.touches ?? 0 };
+    const mode: Mode = t.next_action === "opener" ? { kind: "opener" } : t.next_action === "reactivate" ? { kind: "reactivate" } : { kind: "followup", touch: t.touches ?? 0 };
     try {
       const tz = tzOf(agent.business ?? {});
       const rules = rulesOf(agent.rules);
-      if (!withinHours(new Date(), rules, tz)) {
+      // New leads can be answered any time (speed to lead); follow-ups and reactivation wait for the hours.
+      const anyTime = mode.kind === "opener" && rules.instantFirstMessage;
+      if (!anyTime && !withinHours(new Date(), rules, tz)) {
         await update(db, fresh as Thread, { next_action_at: nextOpening(new Date(), rules, tz).toISOString() });
         continue;
       }
@@ -1655,6 +1685,86 @@ async function app(req: Request) {
     return json({ new_lead: q("new_lead"), inbound: q("inbound"), booked: q("booked") });
   }
 
+  if (action === "reactivate_preview" || action === "reactivate_start") {
+    // Lead reactivation: old GHL leads with a tag get one friendly message (and up to 2 follow-ups),
+    // spread out over the opening hours so the business isn't flooded with replies at once.
+    if (!agent.ghl_token || !agent.ghl_location_id) return json({ error: "Connect GHL first." }, 400);
+    const tag = String(body.tag ?? "").trim().toLowerCase().slice(0, 60);
+    if (!tag) return json({ error: "Choose the tag of the leads to bring back." }, 400);
+    const perHour = [10, 20, 30, 50].includes(Number(body.per_hour)) ? Number(body.per_hour) : 20;
+    const start = action === "reactivate_start";
+    if (start && agent.status === "off") return json({ error: "Switch the AI setter to Test mode or Live first." }, 400);
+    const ghl = await ghlFor(agent);
+    const found: Record<string, unknown>[] = [];
+    let after: unknown[] | undefined;
+    let page = 1;
+    for (let i = 0; i < 20 && found.length < 2000; i++) {
+      let res;
+      try {
+        res = await ghl.contactsPage(after, page, tag);
+      } catch (e) {
+        return json({ error: `GHL didn't send the contacts: ${(e as Error).message}`.slice(0, 300) }, 502);
+      }
+      // Double-check the tag here too, so only the chosen leads are ever messaged.
+      for (const c of res.contacts) if ((Array.isArray(c.tags) ? c.tags : []).some((t) => String(t).toLowerCase() === tag)) found.push(c);
+      if (res.contacts.length < 100) break;
+      if (res.after) after = res.after;
+      else page++;
+    }
+    const reachable = found.filter((c) => c.dnd !== true && (c.phone || c.email));
+    const ids = reachable.map((c) => String(c.id));
+    const existing = new Map<string, { id: string; state: string; last_outbound_at: string | null; last_inbound_at: string | null; next_action: string | null }>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data } = await db.from("setter_threads").select("id, ghl_contact_id, state, last_outbound_at, last_inbound_at, next_action").eq("agent_id", agent.id).in("ghl_contact_id", ids.slice(i, i + 200));
+      for (const t of data ?? []) existing.set(t.ghl_contact_id as string, t as never);
+    }
+    const twoWeeks = Date.now() - 14 * 86_400_000;
+    const fresh: Record<string, unknown>[] = [];
+    const again: string[] = [];
+    let busy = 0;
+    for (const c of reachable) {
+      const t = existing.get(String(c.id));
+      if (!t) {
+        fresh.push(c);
+        continue;
+      }
+      // Leave alone anyone booked, stopped, with the team, mid-conversation or messaged recently.
+      const recent = [t.last_outbound_at, t.last_inbound_at].some((d) => d && new Date(d).getTime() > twoWeeks);
+      if (t.state === "finished" && !recent && !t.next_action) again.push(t.id);
+      else busy++;
+    }
+    const queued = fresh.length + again.length;
+    const summary = { found: found.length, queued, skipped: { no_way_to_reach: found.length - reachable.length, already_in_a_conversation: busy }, per_hour: perHour };
+    if (!start || !queued) return json({ ...summary, started: false });
+
+    // Space them out: perHour an hour, starting now (the clock holds any outside the hours).
+    const gap = Math.floor(3_600_000 / perHour);
+    const now = Date.now();
+    let n = 0;
+    const when = () => new Date(now + gap * n++).toISOString();
+    const rows = fresh.map((c) => ({
+      account_id: agent.account_id,
+      agent_id: agent.id,
+      ghl_contact_id: String(c.id),
+      contact_name: [c.firstName, c.lastName].filter(Boolean).join(" ").slice(0, 120) || null,
+      channel: c.phone ? "SMS" : "Email",
+      origin: "reactivation",
+      next_action: "reactivate",
+      next_action_at: when(),
+    }));
+    for (let i = 0; i < rows.length; i += 200) {
+      const { error } = await db.from("setter_threads").upsert(rows.slice(i, i + 200), { onConflict: "agent_id,ghl_contact_id", ignoreDuplicates: true });
+      if (error) return json({ error: `Couldn't queue the leads: ${error.message}` }, 500);
+    }
+    for (const id of again) await db.from("setter_threads").update({ state: "active", origin: "reactivation", touches: 0, next_action: "reactivate", next_action_at: when(), note: null }).eq("id", id);
+    return json({ ...summary, started: true, finishes_at: new Date(now + gap * n).toISOString() });
+  }
+
+  if (action === "reactivate_stop") {
+    const { data } = await db.from("setter_threads").update({ next_action: null, next_action_at: null, note: "Reactivation stopped before this lead was messaged" }).eq("agent_id", agent.id).eq("next_action", "reactivate").select("id");
+    return json({ stopped: data?.length ?? 0 });
+  }
+
   if (action === "import_contacts") {
     // One batch of up to 500 contacts per call; the page calls again with the cursor until done.
     if (!agent.ghl_token || !agent.ghl_location_id) return json({ error: "Connect GHL first." }, 400);
@@ -1767,7 +1877,7 @@ async function app(req: Request) {
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v9 (24 Nov): reads the lead first, booking link, when the AI joins, 10-second wait";
+export const VERSION = "v11 (24 Nov): picks the best times for the lead";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {

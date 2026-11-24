@@ -26,6 +26,7 @@ export type ThreadView = {
   nextAt: string | null;
   nextIsOpener: boolean;
   contacted: boolean;
+  origin: "lead" | "reply" | "reactivation";
   appointmentAt: string | null;
   note: string | null;
   updatedAt: string;
@@ -34,7 +35,7 @@ export type ThreadView = {
 
 type Ghl = { locationId: string; locationName: string; calendarId: string; calendarName: string; pipelineId: string; stages: Record<string, string>; checkedAt: string | null; error: string | null };
 type Setter = { id: string; name: string; status: SetterStatus; business: SetterBusiness; rules: SetterRules; ghl: Ghl };
-type Tab = "clinic" | "rules" | "ghl" | "test" | "conversations";
+type Tab = "clinic" | "rules" | "ghl" | "test" | "reactivate" | "conversations";
 type Options = { calendars: { id: string; name: string }[]; pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[] };
 
 const field = "field h-10 w-full text-[13.5px]";
@@ -56,7 +57,20 @@ async function callSetter(body: Record<string, unknown>) {
   return data as Record<string, unknown>;
 }
 
-export function SetterEditor({ setter, threads, canEdit }: { setter: Setter; threads: ThreadView[]; accountId: string; canEdit: boolean }) {
+const NO_STATS = { queued: 0, messaged: 0, replied: 0, booked: 0 };
+
+export function SetterEditor({
+  setter,
+  threads,
+  canEdit,
+  reactivation = NO_STATS,
+}: {
+  setter: Setter;
+  threads: ThreadView[];
+  accountId: string;
+  canEdit: boolean;
+  reactivation?: { queued: number; messaged: number; replied: number; booked: number };
+}) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(setter.ghl.checkedAt ? "test" : "clinic");
   const [name, setName] = useState(setter.name);
@@ -104,6 +118,7 @@ export function SetterEditor({ setter, threads, canEdit }: { setter: Setter; thr
     ["rules", "Hours and follow-up", "clock"],
     ["ghl", "Connect GHL", "link"],
     ["test", "Test chat", "mail"],
+    ["reactivate", "Reactivation", "refresh"],
     ["conversations", `Conversations ${threads.length ? `(${threads.length})` : ""}`, "inbox"],
   ];
 
@@ -163,6 +178,7 @@ export function SetterEditor({ setter, threads, canEdit }: { setter: Setter; thr
       {tab === "rules" && <RulesTab r={r} set={setRules} ro={ro} />}
       {tab === "ghl" && <GhlTab setter={setter} ro={ro} />}
       {tab === "test" && <TestTab setterId={setter.id} b={b} r={r} />}
+      {tab === "reactivate" && <ReactivateTab setterId={setter.id} b={b} set={setBiz} ro={ro} connected={Boolean(setter.ghl.locationId)} live={setter.status !== "off"} stats={reactivation} />}
       {tab === "conversations" && <ConversationsTab threads={threads} ro={ro} timezone={b.timezone} />}
 
       {canEdit && tab === "clinic" && (
@@ -325,6 +341,11 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
             <textarea {...t("offer")} rows={3} className={area} />
           </label>
           <label className={label}>
+            Offer for old leads coming back (optional)
+            <textarea {...t("reactivationOffer")} rows={2} placeholder="20% off your first treatment if you book this month" className={area} />
+            <span className={hint}>Used by Reactivation. Blank: it uses the current offer.</span>
+          </label>
+          <label className={label}>
             Payment options
             <textarea {...t("financing")} rows={3} className={area} />
           </label>
@@ -351,6 +372,18 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
         <label className={label}>
           Tone notes
           <textarea {...t("tone")} rows={2} className={area} />
+        </label>
+      </Section>
+      <Section title="Example replies (your scripts)" text="Paste a few real replies or your setter scripts. The AI copies the tone, length and style, never word for word, and only states facts from the details above.">
+        <label className={label}>
+          Scripts and example replies
+          <textarea
+            {...t("scripts")}
+            rows={8}
+            maxLength={6000}
+            placeholder={"Lead: How much is Botox?\nUs: Great question! Botox is £9 a unit and most people need 20 to 40. Is it your forehead or around the eyes you'd like to soften?\n\nLead: I'm a bit nervous\nUs: Totally normal, most of our clients said the same! It's a quick pinch and you're in and out in 20 minutes."}
+            className={area}
+          />
         </label>
       </Section>
       <Section title="Your instructions" text="Anything else the AI should always or never do, in plain words. It follows these on top of its standard rules (its safety rules always come first).">
@@ -394,7 +427,14 @@ function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules
   const [days, setDays] = useState(r.followUpDays.join(", "));
   return (
     <div className="flex flex-col gap-4">
-      <Section title="When it may message first" text="First texts and follow-ups wait for these hours. Replies to people who message in go out straight away.">
+      <Section title="When it may message first" text="Follow-ups and reactivation wait for these hours. Replies to people who message in always go out straight away.">
+        <label className="flex items-start gap-2 rounded-xl bg-chip px-3 py-2.5 text-[13.5px]">
+          <input type="checkbox" checked={r.instantFirstMessage} disabled={ro} onChange={(e) => set({ instantFirstMessage: e.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--color-brand)]" />
+          <span>
+            <span className="font-semibold">Message new leads straight away, any time (recommended)</span>
+            <span className="block text-[12px] text-muted">Speed to lead: someone who fills in a form at 10pm hears back in a minute, not tomorrow morning. Untick to make new leads wait for the hours below too.</span>
+          </span>
+        </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className={label}>
             From
@@ -833,6 +873,140 @@ function GhlContactsImport({ setterId, connected, ro }: { setterId: string; conn
   );
 }
 
+// ---------------------------------------------------------------- reactivation
+
+/** Lead reactivation: message old GHL leads (by tag) to bring them back, spread out over the hours. */
+function ReactivateTab({
+  setterId,
+  b,
+  set,
+  ro,
+  connected,
+  live,
+  stats,
+}: {
+  setterId: string;
+  b: SetterBusiness;
+  set: (p: Partial<SetterBusiness>) => void;
+  ro: boolean;
+  connected: boolean;
+  live: boolean;
+  stats: { queued: number; messaged: number; replied: number; booked: number };
+}) {
+  const [tag, setTag] = useState("");
+  const [perHour, setPerHour] = useState(20);
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<{ found: number; queued: number; skipped: { no_way_to_reach: number; already_in_a_conversation: number } } | null>(null);
+  const run = async (action: "reactivate_preview" | "reactivate_start" | "reactivate_stop") => {
+    setBusy(true);
+    try {
+      const res = await callSetter({ action, agent_id: setterId, tag, per_hour: perHour });
+      if ("error" in res && res.error) return void notify(String(res.error), "bad");
+      if (action === "reactivate_stop") return void notify(`Stopped. ${Number(res.stopped) || 0} leads won't be messaged.`, "ok");
+      setPreview(res as never);
+      if (action === "reactivate_start") notify(res.started ? `Started: ${res.queued} leads, about ${perHour} an hour within your hours.` : "Nobody to message with that tag.", res.started ? "ok" : "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const start = () =>
+    void ask({
+      title: `Message ${preview?.queued ?? "these"} old leads?`,
+      text: `Each gets one friendly message from ${b.assistantName || "the AI"}, then up to 2 follow-ups if they don't reply. About ${perHour} go out an hour, only within your hours. Anyone who replies gets answered and booked like a new lead. You can stop it any time.`,
+      confirm: "Start reactivation",
+      danger: false,
+    }).then((ok) => ok && run("reactivate_start"));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="rounded-xl bg-chip px-4 py-3 text-[13px] text-brand">
+        Bring back leads who asked about the business but never booked. Tag them in GHL (for example <strong>reactivate-nov</strong>), then start here. Leads booked, stopped, with the team or messaged in the last 14 days are left alone.
+      </p>
+      <Section title="The offer" text="Give old leads a reason to come back now.">
+        <label className={label}>
+          Offer for old leads (optional)
+          <textarea value={b.reactivationOffer} disabled={ro} onChange={(e) => set({ reactivationOffer: e.target.value })} rows={2} placeholder="20% off your first treatment if you book this month" className={area} />
+          <span className={hint}>Blank: it uses the current offer. Click Save at the top after changing it.</span>
+        </label>
+      </Section>
+      <Section title="Who to message">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={label}>
+            GHL tag
+            <input
+              value={tag}
+              disabled={ro}
+              onChange={(e) => {
+                setTag(e.target.value);
+                setPreview(null);
+              }}
+              placeholder="reactivate-nov"
+              maxLength={60}
+              className={field}
+            />
+          </label>
+          <label className={label}>
+            How many an hour
+            <select value={perHour} disabled={ro} onChange={(e) => setPerHour(Number(e.target.value))} className={field}>
+              {[10, 20, 30, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n} an hour
+                </option>
+              ))}
+            </select>
+            <span className={hint}>Slower is safer for your number and easier for the team to keep up with replies.</span>
+          </label>
+        </div>
+        {!connected && <p className="text-[12.5px] font-medium text-warn">Connect GHL first.</p>}
+        {!live && <p className="text-[12.5px] font-medium text-warn">Switch the AI setter to Test mode or Live first. In Test mode only contacts tagged ai-test are messaged.</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={ro || busy || !tag.trim() || !connected} onClick={() => void run("reactivate_preview")} className="btn-ghost inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold disabled:opacity-50">
+            <Icon name="search" size={14} /> {busy && !preview ? "Checking…" : "Check who it would message"}
+          </button>
+          <button type="button" disabled={ro || busy || !preview?.queued || !live} onClick={start} className="btn-primary inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold disabled:opacity-50">
+            <Icon name="send" size={14} /> Start reactivation
+          </button>
+        </div>
+        {preview && (
+          <p className="text-[13px] text-muted" aria-live="polite">
+            <strong className="text-navy">{preview.queued}</strong> to message out of {preview.found} with that tag
+            {preview.skipped.already_in_a_conversation ? ` · ${preview.skipped.already_in_a_conversation} left alone (booked, with the team or recent)` : ""}
+            {preview.skipped.no_way_to_reach ? ` · ${preview.skipped.no_way_to_reach} with no phone or email, or Do Not Disturb on` : ""}
+          </p>
+        )}
+      </Section>
+      <Section title="How it's going">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {(
+            [
+              ["Waiting to send", stats.queued],
+              ["Messaged", stats.messaged],
+              ["Replied", stats.replied],
+              ["Booked", stats.booked],
+            ] as const
+          ).map(([k, v]) => (
+            <div key={k} className="rounded-xl bg-surface p-3">
+              <div className="text-[22px] font-bold tracking-tight">{v}</div>
+              <div className="text-[12px] text-muted">{k}</div>
+            </div>
+          ))}
+        </div>
+        {stats.queued > 0 && !ro && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void ask({ title: "Stop reactivation?", text: `The ${stats.queued} leads still waiting won't be messaged. Conversations already started carry on.`, confirm: "Stop" }).then((ok) => ok && run("reactivate_stop"))}
+            className="btn-ghost inline-flex min-h-9 items-center gap-1.5 self-start rounded-xl px-3 text-[13px] font-semibold text-bad"
+          >
+            <Icon name="x" size={13} /> Stop sending to the rest
+          </button>
+        )}
+        <span className={hint}>Numbers update when you reload the page. Every conversation is in Conversations and the Inbox.</span>
+      </Section>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- test chat
 
 type ChatTurn = { who: "lead" | "ai" | "event"; text: string; at: string };
@@ -845,8 +1019,32 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
   const [touch, setTouch] = useState(0);
   const [pending, start] = useTransition();
   const end = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  // On a laptop or desktop the test chat fills exactly the rest of the screen, so the page never
+  // scrolls: only the chat does (like GHL's conversations).
+  const box = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<number | null>(null);
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const measure = () => {
+      const el = box.current;
+      if (!el || window.innerWidth < 1024) return setFit(null);
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const first = Math.max(460, window.innerHeight - top - 16);
+      setFit(first);
+      // Then take off whatever the page's own bottom spacing adds, so nothing scrolls.
+      requestAnimationFrame(() => {
+        const extra = document.documentElement.scrollHeight - window.innerHeight;
+        if (extra > 0) setFit(Math.max(460, first - extra));
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  // Keep the newest message in view by scrolling the chat itself, never the page.
+  useEffect(() => {
+    const el = list.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [turns, pending]);
 
   const ask = (mode: "opener" | "reply" | "followup", history: ChatTurn[]) =>
@@ -872,17 +1070,15 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
       setTurns([...history, ...add]);
       if (mode === "followup") setTouch((x) => x + 1);
     });
-  // Like the real thing: it waits before answering, so several messages in a row get one reply.
-  const delay = Math.min(60, Math.max(10, r.replyDelaySeconds || 20));
-  const [waitLeft, setWaitLeft] = useState(0);
-  const waiting = useRef<{ timer: ReturnType<typeof setInterval> | null; history: ChatTurn[] }>({ timer: null, history: [] });
+  // Like the real thing, it pauses before answering (so several texts in a row get one reply),
+  // then shows "typing". In the test chat the pause is 5 seconds; for real it's your reply wait.
+  const waiting = useRef<{ timer: ReturnType<typeof setTimeout> | null; history: ChatTurn[] }>({ timer: null, history: [] });
   useEffect(() => () => {
-    if (waiting.current.timer) clearInterval(waiting.current.timer);
+    if (waiting.current.timer) clearTimeout(waiting.current.timer);
   }, []);
   const answerNow = () => {
-    if (waiting.current.timer) clearInterval(waiting.current.timer);
+    if (waiting.current.timer) clearTimeout(waiting.current.timer);
     waiting.current.timer = null;
-    setWaitLeft(0);
     ask("reply", waiting.current.history);
   };
   const send = () => {
@@ -892,19 +1088,14 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
     setTurns(history);
     setText("");
     waiting.current.history = history;
-    if (waiting.current.timer) clearInterval(waiting.current.timer);
-    setWaitLeft(delay);
-    let left = delay;
-    waiting.current.timer = setInterval(() => {
-      left -= 1;
-      setWaitLeft(left);
-      if (left <= 0) answerNow();
-    }, 1000);
+    if (waiting.current.timer) clearTimeout(waiting.current.timer);
+    waiting.current.timer = setTimeout(answerNow, 5000);
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <section className="card flex min-h-[520px] flex-col overflow-hidden">
+    // Fits the screen like GHL's conversations: the chat scrolls inside itself, not the page.
+    <div ref={box} style={fit ? { height: fit } : undefined} className="grid gap-4 lg:grid-cols-[1fr_300px]">
+      <section className="card flex h-[70dvh] min-h-0 flex-col overflow-hidden lg:h-full">
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
           <Icon name="mail" size={16} />
           <div className="min-w-0 flex-1">
@@ -914,10 +1105,9 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
           <button
             type="button"
             onClick={() => {
-              if (waiting.current.timer) clearInterval(waiting.current.timer);
+              if (waiting.current.timer) clearTimeout(waiting.current.timer);
               waiting.current.timer = null;
-              setWaitLeft(0);
-              setTurns([]);
+                        setTurns([]);
               setTouch(0);
             }}
             className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold"
@@ -925,7 +1115,7 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
             <Icon name="refresh" size={13} /> Start again
           </button>
         </div>
-        <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto bg-surface/60 p-4">
+        <div ref={list} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain bg-surface/60 p-4">
           {!turns.length && (
             <div className="m-auto max-w-sm text-center text-[13px] text-muted">
               Click <strong>New lead comes in</strong> to see the first text, then reply as the lead. Try price questions, &quot;does it hurt?&quot;, a medical question, &quot;are you a bot?&quot;, booking a time, or &quot;not interested&quot;.
@@ -941,14 +1131,6 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
                 {t.text}
               </div>
             ),
-          )}
-          {waitLeft > 0 && !pending && (
-            <div className="flex items-center gap-2 self-start rounded-2xl bg-white px-3.5 py-2 text-[12.5px] text-muted ring-1 ring-line">
-              Replies in {waitLeft}s, like it will for real (your reply wait).
-              <button type="button" onClick={answerNow} className="font-semibold text-brand hover:underline">
-                Answer now
-              </button>
-            </div>
           )}
           {pending && <div className="self-start rounded-2xl bg-white px-3.5 py-2.5 text-[13px] text-muted ring-1 ring-line">{b.assistantName || "The AI"} is typing…</div>}
           <div ref={end} />
@@ -966,7 +1148,7 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
           </button>
         </form>
       </section>
-      <aside className="flex flex-col gap-3">
+      <aside className="flex min-h-0 flex-col gap-3 lg:overflow-y-auto">
         <div className="card flex flex-col gap-3 p-4">
           <div className="text-[13.5px] font-semibold">The lead</div>
           <label className={label}>
@@ -1030,6 +1212,7 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
                 <div className="min-w-0 flex-[1_1_200px]">
                   <div className="truncate text-[14.5px] font-semibold">{t.name}</div>
                   <div className="truncate text-[12px] text-muted">
+                    {t.origin === "reactivation" ? "Reactivation · " : t.origin === "reply" ? "Messaged in · " : ""}
                     {t.channel} · {t.touches} follow-up{t.touches === 1 ? "" : "s"} · updated {fmt(t.updatedAt)}
                     {t.appointmentAt ? ` · consult ${fmt(t.appointmentAt)}` : ""}
                     {t.state === "active" && t.nextAt ? ` · ${t.nextIsOpener ? "first message" : "next follow-up"} ${fmt(t.nextAt)}` : ""}
