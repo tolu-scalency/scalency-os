@@ -70,6 +70,9 @@ export type Business = {
   scripts?: string;
   /** What the reactivation message offers old leads (falls back to the current offer). */
   reactivationOffer?: string;
+  /** A deposit to secure a treatment booking: the payment link (Stripe, GHL) and the amount. */
+  depositLink?: string;
+  depositAmount?: string;
 };
 
 export type Rules = {
@@ -129,6 +132,13 @@ export type Thread = {
   sent_ids: string[];
   note?: string | null;
   origin?: "lead" | "reply" | "reactivation";
+  lead_score?: number | null;
+  qualification?: Qualification;
+  first_reply_at?: string | null;
+  appointment_id?: string | null;
+  guardrail_flags?: number;
+  booked_at?: string | null;
+  appointment_status?: string | null;
 };
 
 export type Turn = { who: "lead" | "ai" | "team" | "auto"; text: string; at: string; channel?: string; id?: string; subject?: string; emailIds?: string[]; threadId?: string };
@@ -139,13 +149,36 @@ export type BrainDeps = {
   claude: (req: ClaudeRequest) => Promise<ClaudeResponse>;
   freeSlots: (opts: { day?: string; part?: string }) => Promise<Slot[]>;
   book: (iso: string) => Promise<{ ok: true; label: string; id?: string } | { ok: false; error: string }>;
+  /** Moves the appointment the AI already booked. Missing: there's nothing to move. */
+  reschedule?: (iso: string) => Promise<{ ok: true; label: string } | { ok: false; error: string }>;
+  cancel?: () => Promise<{ ok: true } | { ok: false; error: string }>;
 };
+
+/** What the AI has learned about the lead (Platform Spec E: concern, treatment, timeline, budget,
+ *  previous treatments, preferred times, age check), with a 0 to 100 score. */
+export type Qualification = {
+  score?: number;
+  concern?: string;
+  treatment?: string;
+  timeline?: string;
+  budget?: string;
+  previous_treatments?: string;
+  preferred_times?: string;
+  age_confirmed?: boolean | null;
+  high_value?: boolean;
+};
+
+export const HANDOFF_CATEGORIES = ["person", "medical", "complication", "complaint", "price", "appointment", "question", "other"] as const;
+export type HandoffCategory = (typeof HANDOFF_CATEGORIES)[number] | "high_value" | "stalled";
 
 export type BrainResult = {
   message: string;
   booked?: { iso: string; label: string; id?: string };
-  handover?: { reason: string; summary: string };
+  rescheduled?: { iso: string; label: string };
+  cancelled?: boolean;
+  handover?: { reason: string; summary: string; category: HandoffCategory };
   stop?: { reason: string; silent: boolean };
+  qualification?: Qualification;
   events: string[];
 };
 
@@ -284,6 +317,8 @@ export function pickSlots(all: string[], tz: string, opts: { day?: string; part?
 export type BusinessType = "med_spa" | "dental" | "home_services" | "coaching" | "real_estate" | "fitness" | "other";
 
 type Industry = {
+  /** Injectables are 18+: the AI checks age before booking them. */
+  ageGate?: boolean;
   role: string; // what the AI is, e.g. "patient coordinator"
   people: string; // what leads are called, e.g. "patients"
   call: string; // the default name of the first call or visit
@@ -294,6 +329,7 @@ type Industry = {
 
 const INDUSTRIES: Record<BusinessType, Industry> = {
   med_spa: {
+    ageGate: true,
     role: "patient coordinator",
     people: "patients",
     call: "free consultation",
@@ -412,11 +448,19 @@ export function systemPrompt(agent: Pick<Agent, "business" | "rules">, now: Date
 1. First message: say who you are, give one useful thing (the offer, a starting price, or what the ${call} gets them), then ask ONE easy question about them, for example what they'd most like help with or what made them reach out. Never ask permission ("mind if I explain…?").
 2. When they answer: reply to exactly what they said, using their words. Give the one or two facts that matter to them (price, what's involved, what's typical). Then move one step closer to booking.
 3. As soon as they show any interest (a yes, a "sounds good", a question about price or timing, "when can I come?"): explain the ${call} in one short sentence AND, in the same message, ${bookingStep}. Don't ask "shall I send you some times?" first.
-4. If neither time works, ask what day or part of the day is better and check again.
+4. Choose the times for them, don't make them work it out: if their form, tags or messages say when suits (for example "evenings", "after work", "Saturdays", "as soon as possible", a date or an event), call get_free_times with that day or part_of_day and offer the two soonest times that fit. If nothing says, offer the soonest time and one on a different day. If neither works, ask what day or part of the day is better and check again.
 5. Only call book_consultation once they've clearly picked a time, using a time from get_free_times exactly. Then confirm the day and time, what happens, and anything in the policies they need to know (such as cancellation notice). Keep it short. Never say they're booked unless book_consultation said it worked.
 6. ${b.bookingLink ? `If they'd rather book themselves or ask for a link, send this: ${b.bookingLink}` : "If they ask for a booking link, say you can book them in right here and offer times"}.
 7. If they messaged first (for example "hey" or a question), answer what they said before anything else.
 
+## Qualifying (quietly, as you go, never as a list of questions)
+- Over the conversation find out: what they want to change (concern), the treatment they're thinking of, when they'd like it done (timeline), roughly what they want to spend if it comes up naturally, whether they've had it before, and when suits them.
+- Ask one of these at a time, only when it moves things forward. Never ask something the form or their messages already answered.
+- Each time you learn something new, call update_lead with it and a fresh score from 0 to 100.
+${ind.ageGate ? "- Injectable treatments are 18 and over. Before booking anything injectable, make sure they've confirmed they're 18 or over (ask once, lightly: \"Just to check, are you over 18?\"). If they say they're under 18, don't book: call update_lead with age_confirmed false and kindly say treatments are for over-18s.\n" : ""}
+## After booking
+- If they ask to move it, call get_free_times and then reschedule_appointment. If they ask to cancel, offer to move it first; cancel only if they still want to.
+${b.depositLink ? `- For treatment bookings, a ${b.depositAmount || "deposit"} secures the slot: send this link once, after confirming the booking, and say it comes off the final price: ${b.depositLink}\n` : ""}
 ## Reading the lead first
 - Before you write, read <lead>: where they came from (source, ad or campaign), their form answers, tags and notes. They tell you what they want, when, and anything they've already said. Use it.
 - Mention what they asked about specifically. Never ask something their form already answered.
@@ -496,7 +540,7 @@ export type ClaudeResponse = { content: ClaudeBlock[]; stop_reason?: string };
 export const TOOLS = [
   {
     name: "get_free_times",
-    description: "Free times for the first call or visit, from the business's calendar. Returns up to 9 times over the next few days with space. Call it again with a day or part of day if they ask for something specific.",
+    description: "Free times for the first call or visit, from the business's calendar. Returns up to 9 times over the next few days with space. Use day or part_of_day to match what the lead has said suits them (from their form or messages), so the times you offer fit their life.",
     input_schema: {
       type: "object",
       properties: {
@@ -511,12 +555,44 @@ export const TOOLS = [
     input_schema: { type: "object", properties: { start_time: { type: "string" } }, required: ["start_time"] },
   },
   {
-    name: "hand_over",
-    description: "Pass the conversation to a team member and stop replying yourself. Use for problems after a service, anything urgent, upset leads, requests for a person, appointment changes, or questions you can't answer.",
+    name: "reschedule_appointment",
+    description: "Move the appointment you already booked for them to a new time they've chosen. start_time must be one of the ISO times get_free_times returned.",
+    input_schema: { type: "object", properties: { start_time: { type: "string" } }, required: ["start_time"] },
+  },
+  {
+    name: "cancel_appointment",
+    description: "Cancel the appointment you booked for them, only when they clearly ask to cancel (offer to move it first).",
+    input_schema: { type: "object", properties: { reason: { type: "string" } } },
+  },
+  {
+    name: "update_lead",
+    description: "Save what you've learned about the lead, whenever you learn something new (no message needed). Include an updated score from 0 to 100: how likely and how soon they are to book (clear treatment + soon + engaged = high; vague, just browsing or price-shopping = low).",
     input_schema: {
       type: "object",
-      properties: { reason: { type: "string", description: "Why, in a few words." }, summary: { type: "string", description: "One or two sentences for the team: what they want and what's been said." } },
-      required: ["reason", "summary"],
+      properties: {
+        score: { type: "integer", minimum: 0, maximum: 100 },
+        concern: { type: "string", description: "What they want to change or fix, in their words." },
+        treatment: { type: "string" },
+        timeline: { type: "string", description: "When they want it done, e.g. before a wedding on 12 Dec." },
+        budget: { type: "string" },
+        previous_treatments: { type: "string" },
+        preferred_times: { type: "string" },
+        age_confirmed: { type: "boolean", description: "True once they confirm they're 18 or over; false if they say they're under 18." },
+        high_value: { type: "boolean", description: "True for a high-value treatment or package (for example over £1,000)." },
+      },
+    },
+  },
+  {
+    name: "hand_over",
+    description: "Pass the conversation to a team member and stop replying yourself. Use for problems after a service, anything urgent, upset leads, requests for a person, questions you can't answer, or price objections you've already answered twice.",
+    input_schema: {
+      type: "object",
+      properties: {
+        category: { type: "string", enum: [...HANDOFF_CATEGORIES], description: "person: asked for a person. medical: a medical question. complication: a problem after a treatment. complaint: unhappy. price: still stuck on price after two replies. appointment: a change you can't make. question: something not in the details." },
+        reason: { type: "string", description: "Why, in a few words." },
+        summary: { type: "string", description: "One or two sentences for the team: what they want and what's been said." },
+      },
+      required: ["category", "reason", "summary"],
     },
   },
   {
@@ -538,6 +614,105 @@ export const TOOLS = [
 const OPT_OUT = /^\s*(stop|stop all|stopall|unsubscribe|cancel|end|quit|opt[- ]?out)[\s.!]*$/i;
 export const isOptOut = (text: string) => OPT_OUT.test(text);
 
+// ---------------------------------------------------------------------------
+// Guardrails engine (Platform Spec O). Plain rules that run before and after the AI, so
+// safety never depends on the AI remembering its instructions.
+// ---------------------------------------------------------------------------
+
+/** Signs of a problem after a treatment: the clinic must know straight away. */
+const COMPLICATION =
+  /\b(swell(ing|ed|s)?|swollen|blanch(ing|ed)?|(white|grey|gray|blue|purple|dusky|mottled) (patch|skin|area|mark)|vision|blurr(y|ed)|can'?t see|lost (my )?sight|infect(ion|ed)|pus|oozing|abscess|hot to (the )?touch|fever|droop(y|ing)?|(really|very|extreme|severe|unbearable) pain|lump(s|y)? (after|from|since)|allergic reaction|rash (after|since)|can'?t breathe|difficulty (breathing|swallowing)|necrosis|blister(s|ing)? (after|since))\b/i;
+/** Only counts as a complication if it's about something that already happened to them. */
+const AFTER_TREATMENT = /\b(after|since|from) (my|the|your|her|his) |\b(had|got) (my|it|the|botox|filler|treatment|injections?)\b|\b(yesterday|last (week|night)|days? ago|this morning)\b|\bmy (lips?|face|cheeks?|forehead|eye|skin|nose|jaw)\b/i;
+const UNDER_18 = /\b(i'?m|i am|im|age(d)?|turning)\s*(1[0-7]|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen)\b(?!\s*(weeks?|days?|months?|units?|ml|%|:|am|pm|th))|\b(in )?year (9|10|11|12)\b|\bunder (18|eighteen)\b|\b(still )?at (secondary )?school\b/i;
+/** Prescription-only medicines and their brand names: never promoted in messages the business starts. */
+const POM = /\b(botox|botulinum|dysport|xeomin|bocouture|azzalure|letybo|relfydess|alluzience|vistabel|nuceiva|daxxify|jeuveau|toxins?|neuro ?toxins?|anti[- ]?wrinkle injections?)\b/gi;
+
+export type InboundFlag = { kind: "complication" | "under18"; match: string };
+
+/** Checks the lead's newest message before the AI sees it. */
+export function guardInbound(text: string): InboundFlag | null {
+  const t = text.slice(0, 2000);
+  const c = t.match(COMPLICATION);
+  if (c && AFTER_TREATMENT.test(t)) return { kind: "complication", match: c[0] };
+  const u = t.match(UNDER_18);
+  if (u) return { kind: "under18", match: u[0] };
+  return null;
+}
+
+/** Prescription-only medicine names in a message the business starts (first message, follow-up,
+ *  reactivation). One-to-one replies may use clinic-approved wording, so they aren't checked. */
+export function pomTerms(message: string): string[] {
+  return [...new Set((message.match(POM) ?? []).map((m) => m.toLowerCase()))];
+}
+
+/** Last resort if the AI still names one: swap the names for neutral wording. */
+export function stripPom(message: string): string {
+  return message
+    .replace(POM, "treatment")
+    .replace(/\btreatment(\s+(and|or|,)\s+treatment)+/gi, "treatment")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** The safe, fixed reply for a possible complication: no AI, no advice, straight to the clinic. */
+export function complicationReply(b: Business, who: string) {
+  const phone = b.phone ? ` If you can, please also call us on ${b.phone}.` : "";
+  return `I'm sorry to hear that. I've passed this to our clinical team straight away and someone will contact you as soon as possible.${phone} If it's severe or getting worse quickly, especially any change in your vision or skin turning white or grey, please call 999 or NHS 111 now. ${who}`.trim();
+}
+
+
+/** One AI turn inside the guardrails: a possible complication gets a fixed, safe reply and goes
+ *  straight to the clinic (no AI); an under-18 lead is flagged so injectables aren't booked; and a
+ *  message the business starts may not name prescription-only medicines (rewritten once, then
+ *  stripped). Returns what happened so it can be logged. */
+export async function guardedBrain(
+  agent: Pick<Agent, "business" | "rules">,
+  input: { mode: Mode; turns: Turn[]; lead: Lead; now?: Date },
+  deps: BrainDeps,
+): Promise<{ brain: BrainResult; guard: string[] }> {
+  const b = agent.business ?? {};
+  const guard: string[] = [];
+  const lastAiAt = [...input.turns].reverse().find((t) => t.who === "ai" || t.who === "auto")?.at ?? "";
+  const newest = input.mode.kind === "reply" ? [...input.turns].reverse().find((t) => t.who === "lead" && t.at >= lastAiAt) : undefined;
+  const flag = newest ? guardInbound(newest.text) : null;
+  if (flag?.kind === "complication") {
+    guard.push(`Guardrail: possible complication ("${flag.match}"), passed to the clinic as urgent`);
+    return {
+      brain: {
+        message: complicationReply(b, ""),
+        handover: { category: "complication", reason: `Possible complication: "${flag.match}"`, summary: newest!.text.slice(0, 500) },
+        events: [`Handed over: possible complication`],
+      },
+      guard,
+    };
+  }
+  let lead = input.lead;
+  if (flag?.kind === "under18") {
+    guard.push(`Guardrail: the lead may be under 18 ("${flag.match}"), injectables not booked`);
+    lead = { ...lead, details: `${lead.details}\nGUARDRAIL: in their last message they said something that suggests they're under 18 ("${flag.match}"). Do not book any injectable treatment. Kindly say those treatments are for over-18s; you may still talk about other treatments if suitable. Call update_lead with age_confirmed false.` };
+  }
+  let brain = await runBrain(agent, { ...input, lead }, deps);
+  if (flag?.kind === "under18") brain.qualification = { ...(brain.qualification ?? {}), age_confirmed: false };
+  if (input.mode.kind !== "reply" && brain.message) {
+    const named = pomTerms(brain.message);
+    if (named.length) {
+      guard.push(`Guardrail: a message the business starts named ${named.join(", ")}; rewritten without it`);
+      const again = await runBrain(agent, { ...input, lead: { ...lead, details: `${lead.details}\nGUARDRAIL: do not name any prescription-only medicine, toxin or brand (such as ${named.join(", ")}) in this message, and don't say "anti-wrinkle injections". Talk about their concern, the consultation and results instead.` } }, deps);
+      brain = again.message ? again : brain;
+      if (pomTerms(brain.message).length) brain = { ...brain, message: stripPom(brain.message) };
+    }
+  }
+  return { brain, guard };
+}
+
+/** Who should pick up a handoff, and how fast (Platform Spec G). */
+export function handoffPriority(category: HandoffCategory): "urgent" | "high" | "medium" {
+  if (category === "complication" || category === "medical" || category === "complaint") return "urgent";
+  if (category === "person" || category === "high_value") return "high";
+  return "medium";
+}
+
 /** Runs one go of the AI: reads the conversation, may look up times, book, hand over or stop, and returns the message to send. */
 export async function runBrain(
   agent: Pick<Agent, "business" | "rules">,
@@ -555,7 +730,7 @@ export async function runBrain(
   const messages: ClaudeRequest["messages"] = [{ role: "user", content: user }];
   const system = systemPrompt(agent, now);
 
-  for (let round = 0; round < 6; round++) {
+  for (let round = 0; round < 7; round++) {
     const res = await deps.claude({ system, messages, tools: TOOLS });
     messages.push({ role: "assistant", content: res.content });
     const calls = res.content.filter((c): c is Extract<ClaudeBlock, { type: "tool_use" }> => c.type === "tool_use");
@@ -598,8 +773,48 @@ export async function runBrain(
         } else {
           results.push({ type: "tool_result", tool_use_id: call.id, content: `Booking failed: ${b.error}. Offer other times.`, is_error: true });
         }
+      } else if (call.name === "reschedule_appointment") {
+        const iso = String(inp.start_time ?? "");
+        if (!deps.reschedule) {
+          results.push({ type: "tool_result", tool_use_id: call.id, content: "There's no appointment booked by you to move. Hand over with category appointment.", is_error: true });
+          continue;
+        }
+        if (!offered.has(iso)) {
+          results.push({ type: "tool_result", tool_use_id: call.id, content: "That time wasn't in the free times. Call get_free_times and use one of those exact times.", is_error: true });
+          continue;
+        }
+        const r = await deps.reschedule(iso);
+        if (r.ok) {
+          result.rescheduled = { iso, label: r.label };
+          result.events.push(`Moved to ${r.label}`);
+          results.push({ type: "tool_result", tool_use_id: call.id, content: `Moved to ${r.label}.` });
+        } else results.push({ type: "tool_result", tool_use_id: call.id, content: `Couldn't move it: ${r.error}. Hand over with category appointment.`, is_error: true });
+      } else if (call.name === "cancel_appointment") {
+        if (!deps.cancel) {
+          results.push({ type: "tool_result", tool_use_id: call.id, content: "There's no appointment booked by you to cancel. Hand over with category appointment.", is_error: true });
+          continue;
+        }
+        const r = await deps.cancel();
+        if (r.ok) {
+          result.cancelled = true;
+          result.events.push("Appointment cancelled");
+          results.push({ type: "tool_result", tool_use_id: call.id, content: "Cancelled. Confirm kindly and say they can rebook any time." });
+        } else results.push({ type: "tool_result", tool_use_id: call.id, content: `Couldn't cancel: ${r.error}. Hand over with category appointment.`, is_error: true });
+      } else if (call.name === "update_lead") {
+        const q: Qualification = { ...(result.qualification ?? {}) };
+        for (const k of ["concern", "treatment", "timeline", "budget", "previous_treatments", "preferred_times"] as const) if (typeof inp[k] === "string" && String(inp[k]).trim()) q[k] = String(inp[k]).trim().slice(0, 200);
+        if (typeof inp.score === "number") q.score = Math.max(0, Math.min(100, Math.round(inp.score)));
+        if (typeof inp.age_confirmed === "boolean") q.age_confirmed = inp.age_confirmed;
+        if (typeof inp.high_value === "boolean") q.high_value = inp.high_value;
+        result.qualification = q;
+        results.push({ type: "tool_result", tool_use_id: call.id, content: "Saved." });
       } else if (call.name === "hand_over") {
-        result.handover = { reason: String(inp.reason ?? "").slice(0, 200), summary: String(inp.summary ?? "").slice(0, 600) };
+        const cat = String(inp.category ?? "other");
+        result.handover = {
+          reason: String(inp.reason ?? "").slice(0, 200),
+          summary: String(inp.summary ?? "").slice(0, 600),
+          category: (HANDOFF_CATEGORIES as readonly string[]).includes(cat) ? (cat as HandoffCategory) : "other",
+        };
         result.events.push(`Handed over: ${result.handover.reason}`);
         results.push({ type: "tool_result", tool_use_id: call.id, content: "The team has been told. Send a short, kind message saying someone will be in touch." });
       } else if (call.name === "mark_not_interested") {
@@ -845,6 +1060,12 @@ export class Ghl {
       toNotify: true,
     });
     return r.id ?? r.event?.id ?? "";
+  }
+  reschedule(eventId: string, calendarId: string, startIso: string) {
+    return this.req("PUT", `/calendars/events/appointments/${eventId}`, "2021-04-15", { calendarId, startTime: startIso, appointmentStatus: "confirmed", toNotify: true });
+  }
+  cancelAppointment(eventId: string) {
+    return this.req("PUT", `/calendars/events/appointments/${eventId}`, "2021-04-15", { appointmentStatus: "cancelled", toNotify: true });
   }
   note(contactId: string, body: string) {
     return this.req("POST", `/contacts/${contactId}/notes`, "2021-07-28", { body: body.slice(0, 4000) });
@@ -1094,6 +1315,60 @@ async function update(db: Db, thread: Thread, patch: Partial<Thread> & Record<st
 export const WAITING_FOR_TAG = "Test mode: waiting for the ai-test tag in GHL before the first message.";
 export const NO_TAG = "Not sent. In test mode the AI only messages contacts tagged ai-test in GHL. Add the tag, then click Send first message now.";
 
+
+/** A short line of what the AI knows, for the setter. */
+export function summarise(q: Qualification) {
+  const bits = [
+    q.treatment && `Wants: ${q.treatment}`,
+    q.concern && `Concern: ${q.concern}`,
+    q.timeline && `When: ${q.timeline}`,
+    q.budget && `Budget: ${q.budget}`,
+    q.previous_treatments && `Before: ${q.previous_treatments}`,
+    q.preferred_times && `Best times: ${q.preferred_times}`,
+    typeof q.score === "number" && `Score ${q.score}/100`,
+  ].filter(Boolean);
+  return bits.join(" · ") || "See the conversation.";
+}
+
+/** Puts a lead in the setter console's queue (once per reason while it's open) and tells the team. */
+async function raiseHandoff(db: Db, agent: Agent, thread: Thread, h: { category: HandoffCategory; reason: string; summary: string }, name: string, contactId: string) {
+  const { data: open } = await db.from("setter_handoffs").select("id").eq("thread_id", thread.id).eq("category", h.category).neq("status", "done").limit(1);
+  if (open?.length) return;
+  const priority = handoffPriority(h.category);
+  const { error } = await db.from("setter_handoffs").insert({ account_id: agent.account_id, agent_id: agent.id, thread_id: thread.id, category: h.category, priority, reason: h.reason.slice(0, 300), summary: h.summary.slice(0, 1000) });
+  if (error) console.error("Couldn't add the handoff", error.message);
+  await alertTeam(agent, { event: "handoff", priority, name, contactId, text: `${priority === "urgent" ? "URGENT: " : ""}${name}: ${h.reason}. ${h.summary}` });
+}
+
+/** Tells the clinic's team: a webhook (for example a GHL workflow that posts to a WhatsApp group)
+ *  and, when the server is set up for it, an email. Never stops the conversation if it fails. */
+export async function alertTeam(agent: Agent, a: { event: string; priority: string; name: string; contactId: string; text: string }) {
+  const rules = (agent.rules ?? {}) as Rules & { alertWebhook?: string; alertEmail?: string; alertOn?: string };
+  const on = rules.alertOn ?? "handoffs";
+  if (on === "off") return;
+  if (on === "urgent" && a.priority !== "urgent") return;
+  // "handoffs" (the default): handoffs and no-shows, the things a person must act on.
+  if (on === "handoffs" && a.event !== "handoff" && a.event !== "noshow") return;
+  const ghlLink = agent.ghl_location_id ? `https://app.gohighlevel.com/v2/location/${agent.ghl_location_id}/contacts/detail/${a.contactId}` : "";
+  const payload = { event: a.event, priority: a.priority, business: agent.business?.clinicName ?? "", contact_name: a.name, ghl_contact_id: a.contactId, message: a.text, ghl_link: ghlLink, at: new Date().toISOString() };
+  const jobs: Promise<unknown>[] = [];
+  if (rules.alertWebhook && /^https:\/\//.test(rules.alertWebhook))
+    jobs.push(fetch(rules.alertWebhook, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(8000) }));
+  const key = Deno.env.get("RESEND_API_KEY");
+  const from = Deno.env.get("ALERT_FROM_EMAIL");
+  if (key && from && rules.alertEmail && /@/.test(rules.alertEmail))
+    jobs.push(
+      fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+        body: JSON.stringify({ from, to: rules.alertEmail.split(",").map((x) => x.trim()).filter(Boolean).slice(0, 5), subject: `${a.priority === "urgent" ? "URGENT: " : ""}AI setter: ${a.name}`, text: `${a.text}\n\n${ghlLink}` }),
+        signal: AbortSignal.timeout(8000),
+      }),
+    );
+  const done = await Promise.allSettled(jobs);
+  for (const d of done) if (d.status === "rejected") console.error("Alert failed", String(d.reason).slice(0, 200));
+}
+
 /** One go at a lead: the first text, a reply or a follow-up, with everything it leads to in GHL. */
 export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, deps: { claude: BrainDeps["claude"]; ghl: Ghl; now?: Date }) {
   const now = deps.now ?? new Date();
@@ -1189,7 +1464,7 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
   if (channel === "SMS" && !contact.phone && contact.email) channel = "Email";
   const calendarId = agent.ghl_calendar_id;
 
-  const brain = await runBrain(
+  const { brain, guard } = await guardedBrain(
     agent,
     { mode, turns: history, lead, now },
     {
@@ -1212,8 +1487,29 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
           return { ok: false, error: String((e as Error).message ?? e).slice(0, 200) };
         }
       },
+      ...(thread.appointment_id && calendarId
+        ? {
+            reschedule: async (iso: string) => {
+              try {
+                await ghl.reschedule(thread.appointment_id!, calendarId, iso);
+                return { ok: true as const, label: slotLabel(iso, tz) };
+              } catch (e) {
+                return { ok: false as const, error: String((e as Error).message ?? e).slice(0, 200) };
+              }
+            },
+            cancel: async () => {
+              try {
+                await ghl.cancelAppointment(thread.appointment_id!);
+                return { ok: true as const };
+              } catch (e) {
+                return { ok: false as const, error: String((e as Error).message ?? e).slice(0, 200) };
+              }
+            },
+          }
+        : {}),
     },
   );
+  for (const g of guard) await logTurn(db, { agent, thread, role: "event", body: g, meta: { guardrail: true } });
 
   // What it decided, in GHL and in the log.
   const stages = agent.ghl_stages ?? {};
@@ -1231,13 +1527,36 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
     await safe(ghl.tags(contactId, ["ai-booked"]));
     await safe(ghl.note(contactId, `AI setter booked a ${b.consultName || "consultation"} for ${brain.booked.label}.`));
     if (pipeline && stages.booked) await safe(ghl.moveStage(contactId, pipeline, stages.booked, name));
-    await update(db, thread, { booked_at: now.toISOString(), appointment_at: brain.booked.iso });
+    await update(db, thread, { booked_at: now.toISOString(), appointment_at: brain.booked.iso, appointment_id: brain.booked.id || null });
+    await alertTeam(agent, { event: "booked", priority: "info", name, contactId, text: `${name} booked a ${b.consultName || "consultation"} for ${brain.booked.label}.` });
+  }
+  if (brain.rescheduled) {
+    state = "booked";
+    await safe(ghl.note(contactId, `AI setter moved the appointment to ${brain.rescheduled.label}.`));
+    await update(db, thread, { appointment_at: brain.rescheduled.iso });
+    await alertTeam(agent, { event: "rescheduled", priority: "info", name, contactId, text: `${name} moved their appointment to ${brain.rescheduled.label}.` });
+  }
+  if (brain.cancelled) {
+    state = "active";
+    await safe(ghl.note(contactId, "AI setter cancelled the appointment at the lead's request."));
+    await update(db, thread, { appointment_at: null, appointment_id: null, booked_at: null });
+    await alertTeam(agent, { event: "cancelled", priority: "info", name, contactId, text: `${name} cancelled their appointment.` });
   }
   if (brain.handover) {
     state = "handed_over";
-    await safe(ghl.tags(contactId, ["ai-handover"]));
-    await safe(ghl.task(contactId, `AI setter handed over: ${brain.handover.reason}`, brain.handover.summary, now));
+    const priority = handoffPriority(brain.handover.category);
+    await safe(ghl.tags(contactId, priority === "urgent" ? ["ai-handover", "ai-urgent"] : ["ai-handover"]));
+    await safe(ghl.task(contactId, `${priority === "urgent" ? "URGENT: " : ""}AI setter handed over: ${brain.handover.reason}`, brain.handover.summary, now));
     await safe(ghl.note(contactId, `AI setter handed this lead to the team (${brain.handover.reason}). ${brain.handover.summary}`));
+    await raiseHandoff(db, agent, thread, { category: brain.handover.category, reason: brain.handover.reason, summary: brain.handover.summary }, name, contactId);
+  }
+  // Hot leads and stalled conversations go to a setter too, while the AI carries on.
+  const qual: Qualification = { ...((thread.qualification ?? {}) as Qualification), ...(brain.qualification ?? {}) };
+  if (!brain.handover && !brain.booked && state !== "booked") {
+    if ((qual.score ?? 0) >= 80 || qual.high_value)
+      await raiseHandoff(db, agent, thread, { category: "high_value", reason: qual.high_value ? `High-value enquiry${qual.treatment ? `: ${qual.treatment}` : ""}` : `Hot lead (score ${qual.score})`, summary: summarise(qual) }, name, contactId);
+    const aiSoFar = history.filter((t) => t.who === "ai").length + (brain.message ? 1 : 0);
+    if (aiSoFar >= 6 && !thread.booked_at) await raiseHandoff(db, agent, thread, { category: "stalled", reason: `${aiSoFar} messages and not booked yet`, summary: summarise(qual) }, name, contactId);
   }
   if (brain.stop) {
     state = "stopped";
@@ -1285,6 +1604,12 @@ export async function work(db: Db, agent: Agent, thread: Thread, mode: Mode, dep
 
   // What happens next.
   const patch: Partial<Thread> & Record<string, unknown> = { state, channel, contact_name: name, last_outbound_at: brain.message ? now.toISOString() : thread.last_outbound_at };
+  if (brain.qualification) {
+    patch.qualification = qual;
+    if (typeof qual.score === "number") patch.lead_score = qual.score;
+  }
+  if (brain.message && !thread.first_reply_at) patch.first_reply_at = now.toISOString();
+  if (guard.length) patch.guardrail_flags = (thread.guardrail_flags ?? 0) + guard.length;
   if (brain.message && (thread.note === WAITING_FOR_TAG || thread.note === NO_TAG || (thread.note?.startsWith("First message failed") || thread.note?.startsWith("Reply failed")))) patch.note = null;
   if (sentId) patch.sent_ids = [...(thread.sent_ids ?? []), ...sentId.split(",")].slice(-200);
   if (state === "active") {
@@ -1411,12 +1736,28 @@ async function webhook(event: string, url: URL, req: Request) {
     const { data: had } = await db.from("setter_threads").select("id, last_outbound_at").eq("agent_id", agent.id).eq("ghl_contact_id", contactId).maybeSingle();
     if (!had?.last_outbound_at) return json({ ok: true, skipped: "the AI only answers people it has messaged (When the AI joins)" });
   }
+  if (event === "appointment") {
+    // Only for leads the AI is working; other appointments in GHL are none of its business.
+    const { data: had } = await db.from("setter_threads").select("id").eq("agent_id", agent.id).eq("ghl_contact_id", contactId).maybeSingle();
+    if (!had) return json({ ok: true, skipped: "not an AI setter lead" });
+  }
   const thread = await threadFor(db, agent, contactId, name, undefined, event === "inbound" ? "reply" : "lead");
 
   if (event === "booked") {
-    await update(db, thread, { state: "booked", next_action: null, next_action_at: null, booked_at: new Date().toISOString() });
+    await update(db, thread, { state: "booked", next_action: null, next_action_at: null, booked_at: thread.booked_at ?? new Date().toISOString(), appointment_status: "confirmed" });
     await logTurn(db, { agent, thread, role: "event", body: "Booked (through GHL)." });
     return json({ ok: true });
+  }
+
+  if (event === "appointment") {
+    // GHL "Appointment Status" workflow: showed, no-show, cancelled or confirmed. Feeds show rates.
+    const raw = String((body.customData as Record<string, unknown> | undefined)?.status ?? body.status ?? (body.appointment as Record<string, unknown> | undefined)?.status ?? (body.calendar as Record<string, unknown> | undefined)?.status ?? "").toLowerCase().replace(/[^a-z]/g, "");
+    const status = raw.includes("noshow") ? "noshow" : raw.includes("show") ? "showed" : raw.includes("cancel") ? "cancelled" : raw.includes("confirm") || raw.includes("book") ? "confirmed" : "";
+    if (!status) return json({ ok: true, skipped: "unknown appointment status" });
+    await update(db, thread, { appointment_status: status, appointment_status_at: new Date().toISOString(), ...(status === "cancelled" ? { state: thread.state === "booked" ? "active" : thread.state } : {}) });
+    await logTurn(db, { agent, thread, role: "event", body: status === "showed" ? "Showed up for the appointment." : status === "noshow" ? "Didn't show up for the appointment." : status === "cancelled" ? "Appointment cancelled (in GHL)." : "Appointment confirmed." });
+    if (status === "noshow") await alertTeam(agent, { event: "noshow", priority: "high", name: thread.contact_name || "A lead", contactId, text: `${thread.contact_name || "A lead"} didn't show up. Call to rebook.` });
+    return json({ ok: true, status });
   }
 
   if (event === "new_lead") {
@@ -1682,7 +2023,7 @@ async function app(req: Request) {
   if (action === "webhooks") {
     const base = `${Deno.env.get("SUPABASE_URL")}/functions/v1/ai-setter`;
     const q = (e: string) => `${base}?event=${e}&a=${agent.id.slice(0, 8)}&k=${agent.webhook_key}`;
-    return json({ new_lead: q("new_lead"), inbound: q("inbound"), booked: q("booked") });
+    return json({ new_lead: q("new_lead"), inbound: q("inbound"), booked: q("booked"), appointment: q("appointment") });
   }
 
   if (action === "reactivate_preview" || action === "reactivate_start") {
@@ -1862,13 +2203,26 @@ async function app(req: Request) {
     const lead: Lead = { firstName: String(body.first_name ?? "Jess").slice(0, 40), details: String(body.lead_details ?? "Form answers: Botox/Fillers, first time, hoping to come in within 2 weeks").slice(0, 800) };
     const slots = pretendSlots(rules, tz, now);
     try {
-      const r = await runBrain(draft, { mode, turns, lead, now }, {
+      // The pretend calendar: once something's booked in this chat, it can be moved or cancelled too.
+      const booked = Boolean(body.has_booking);
+      const { brain: r, guard } = await guardedBrain(draft, { mode, turns, lead, now }, {
         claude: claudeClient(apiKey),
         freeSlots: async (o) => pickSlots(slots, tz, o, now, rules.minNoticeHours),
         book: async (iso) => ({ ok: true, label: slotLabel(iso, tz), id: "test" }),
+        ...(booked ? { reschedule: async (iso: string) => ({ ok: true as const, label: slotLabel(iso, tz) }), cancel: async () => ({ ok: true as const }) } : {}),
       });
       await db.from("setter_turns").insert([{ account_id: agent.account_id, agent_id: agent.id, role: "ai", body: r.message || "(nothing sent)", is_test: true, meta: { mode: mode.kind } }]);
-      return json({ message: r.message, events: r.events, booked: r.booked ?? null, handover: r.handover ?? null, stop: r.stop ?? null });
+      const handover = r.handover ? { ...r.handover, priority: handoffPriority(r.handover.category) } : null;
+      return json({
+        message: r.message,
+        events: [...guard, ...r.events],
+        booked: r.booked ?? null,
+        rescheduled: r.rescheduled ?? null,
+        cancelled: r.cancelled ?? false,
+        handover,
+        stop: r.stop ?? null,
+        qualification: r.qualification ?? null,
+      });
     } catch (e) {
       return json({ error: `The AI couldn't answer: ${String((e as Error).message ?? e).slice(0, 200)}` }, 502);
     }
@@ -1877,7 +2231,7 @@ async function app(req: Request) {
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v10 (24 Nov): instant first message, never sends twice, scripts, lead reactivation";
+export const VERSION = "v12 (24 Nov): qualification and lead score, guardrails engine, handoff queue, reschedule and cancel, alerts";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {

@@ -26,6 +26,12 @@ import {
   withinHours,
   work,
   copyContactsIn,
+  guardInbound,
+  guardedBrain,
+  pomTerms,
+  stripPom,
+  handoffPriority,
+  summarise,
   tagRuleBlocks,
   leadOf,
   WAITING_FOR_TAG,
@@ -270,6 +276,7 @@ function fakeDb(saved: unknown[] = []) {
       select: () => b,
       eq: () => b,
       gte: () => b,
+      neq: () => b,
       order: () => b,
       limit: () => b,
       maybeSingle: async () => ({ data: null }),
@@ -316,11 +323,11 @@ const newThread = (): Thread => ({
 Deno.test("end to end: first text tags, moves the deal, gives the team their call task and schedules day 1", async () => {
   const { ghl, calls } = fakeGhl({});
   const { db, rows } = fakeDb();
-  const c = scripted([() => ({ content: [tool("send_message", { text: "Hi Jess, it's Sophie from Glow Aesthetics. Want our new-patient Botox prices?" })] })]);
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Hi Jess, it's Sophie from Glow Aesthetics. Want our new-patient prices?" })] })]);
   const thread = newThread();
   const now = new Date("2026-11-24T15:00:00Z");
   const r = await work(db, agent, thread, { kind: "opener" }, { claude: c.claude, ghl, now });
-  assertEquals(r.sent, "Hi Jess, it's Sophie from Glow Aesthetics. Want our new-patient Botox prices?");
+  assertEquals(r.sent, "Hi Jess, it's Sophie from Glow Aesthetics. Want our new-patient prices?");
   const sent = calls.find((x) => x.path === "/conversations/messages")!;
   assertEquals(sent.body?.type, "SMS");
   assert(calls.some((x) => x.path === "/contacts/c1/tags" && JSON.stringify(x.body).includes("ai-setter")));
@@ -384,8 +391,11 @@ Deno.test("end to end: hand over creates a task for the team and stops the AI", 
   const thread = newThread();
   await work(fakeDb().db, agent, thread, { kind: "reply" }, { claude: c.claude, ghl, now: new Date("2026-11-24T15:06:00Z") });
   assertEquals(thread.state, "handed_over");
-  assert(calls.some((x) => x.path === "/contacts/c1/tasks" && String(x.body?.title).includes("possible reaction")));
-  assert(calls.some((x) => x.path === "/contacts/c1/tags" && JSON.stringify(x.body).includes("ai-handover")));
+  // The guardrail caught it first: urgent task and tags, a fixed safe reply, and the AI never ran.
+  assert(calls.some((x) => x.path === "/contacts/c1/tasks" && String(x.body?.title).startsWith("URGENT") && String(x.body?.title).includes("Possible complication")));
+  assert(calls.some((x) => x.path === "/contacts/c1/tags" && JSON.stringify(x.body).includes("ai-urgent")));
+  assert(calls.some((x) => x.path === "/conversations/messages" && String(x.body?.message).includes("NHS 111")));
+  assertEquals(c.seen.length, 0);
 });
 
 Deno.test("end to end: follow-up 2 gives the team the selfie video task; the last one finishes", async () => {
@@ -585,4 +595,67 @@ Deno.test("reactivation: a quiet old lead gets one friendly message, and the pro
 Deno.test("speed to lead: the first message can go any time, follow-ups keep to the hours", () => {
   assertEquals(rulesOf({}).instantFirstMessage, true);
   assertEquals(rulesOf({ instantFirstMessage: false }).instantFirstMessage, false);
+});
+
+Deno.test("guardrails: complications, under-18 and prescription medicine names", async () => {
+  assertEquals(guardInbound("my lips are really swollen and hot to the touch since the filler yesterday")?.kind, "complication");
+  assertEquals(guardInbound("my nose has a white patch since my filler")?.kind, "complication");
+  assertEquals(guardInbound("will I have swelling after lip filler?"), null); // a question, not a problem
+  assertEquals(guardInbound("I'm 16, can I get lip filler?")?.kind, "under18");
+  assertEquals(guardInbound("I'm 16 weeks pregnant"), null);
+  assertEquals(guardInbound("can I come at 16:30?"), null);
+  assertEquals(pomTerms("New clients get Botox at £9 a unit and Dysport too"), ["botox", "dysport"]);
+  assertEquals(stripPom("Book Botox or Dysport today"), "Book treatment today");
+
+  // A complication: fixed safe reply, urgent handover, no AI call at all.
+  const c = scripted([]);
+  const r = await guardedBrain(
+    { business, rules: {} },
+    { mode: { kind: "reply" }, turns: [{ who: "ai", text: "hi", at: "2026-11-24T10:00:00Z" }, { who: "lead", text: "my lips are so swollen and painful since the filler yesterday, really severe pain", at: "2026-11-24T10:05:00Z" }], lead: { firstName: "Jess", details: "" } },
+    { claude: c.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) },
+  );
+  assertEquals(c.seen.length, 0);
+  assertEquals(r.brain.handover?.category, "complication");
+  assertEquals(handoffPriority("complication"), "urgent");
+  assertStringIncludes(r.brain.message, "999 or NHS 111");
+
+  // A first message naming Botox is rewritten; if the AI insists, the names are stripped.
+  const stubborn = scripted([() => ({ content: [tool("send_message", { text: "Hi Jess, Botox is £9 a unit!" })] }), () => ({ content: [tool("send_message", { text: "Hi Jess, Botox is still £9!" })] })]);
+  const p = await guardedBrain({ business, rules: {} }, { mode: { kind: "opener" }, turns: [], lead: { firstName: "Jess", details: "" } }, { claude: stubborn.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) });
+  assertEquals(pomTerms(p.brain.message), []);
+  assertMatch(p.guard[0], /botox/);
+  // In a one-to-one reply the clinic's own wording is allowed.
+  const reply = scripted([() => ({ content: [tool("send_message", { text: "Botox is £9 a unit." })] })]);
+  const q = await guardedBrain({ business, rules: {} }, { mode: { kind: "reply" }, turns: [{ who: "lead", text: "how much is botox?", at: "2026-11-24T10:00:00Z" }], lead: { firstName: "Jess", details: "" } }, { claude: reply.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) });
+  assertEquals(q.brain.message, "Botox is £9 a unit.");
+});
+
+Deno.test("qualification: the AI saves what it learns and a score; handoffs get the right priority", async () => {
+  const c = scripted([() => ({ content: [tool("update_lead", { score: 85, treatment: "lip filler", timeline: "before a wedding on 12 Dec", age_confirmed: true }), tool("send_message", { text: "Lovely! When's the wedding?" })] })]);
+  const r = await runBrain({ business, rules: {} }, { mode: { kind: "reply" }, turns: [{ who: "lead", text: "lip filler before my wedding", at: "2026-11-24T10:00:00Z" }], lead: { firstName: "Jess", details: "" } }, { claude: c.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) });
+  assertEquals(r.qualification?.score, 85);
+  assertEquals(r.qualification?.treatment, "lip filler");
+  assertEquals(r.qualification?.age_confirmed, true);
+  assertStringIncludes(summarise(r.qualification!), "Wants: lip filler");
+  assertEquals(handoffPriority("person"), "high");
+  assertEquals(handoffPriority("stalled"), "medium");
+  // The prompt asks for the age check for injectables, only for med spas.
+  assertStringIncludes(systemPrompt({ business, rules: {} }, new Date()), "are you over 18");
+  assert(!systemPrompt({ business: { ...business, businessType: "home_services" }, rules: {} }, new Date()).includes("are you over 18"));
+});
+
+Deno.test("after booking: the AI can move or cancel the appointment it booked", async () => {
+  const slots = [{ iso: "2026-11-26T17:00:00.000Z", label: "Thu 26 Nov, 5pm" }];
+  const c = scripted([() => ({ content: [tool("get_free_times", {})] }), () => ({ content: [tool("reschedule_appointment", { start_time: slots[0].iso }), tool("send_message", { text: "Done, you're now Thursday at 5pm." })] })]);
+  const r = await runBrain({ business, rules: {} }, { mode: { kind: "reply" }, turns: [{ who: "lead", text: "can I move it to thursday?", at: "2026-11-24T10:00:00Z" }], lead: { firstName: "Jess", details: "" } }, {
+    claude: c.claude,
+    freeSlots: async () => slots,
+    book: async () => ({ ok: false, error: "x" }),
+    reschedule: async (iso) => ({ ok: true, label: iso === slots[0].iso ? slots[0].label : "?" }),
+  });
+  assertEquals(r.rescheduled?.label, "Thu 26 Nov, 5pm");
+  // Nothing booked by the AI: it can't cancel, and is told to hand over.
+  const d = scripted([() => ({ content: [tool("cancel_appointment", {})] }), () => ({ content: [tool("send_message", { text: "I'll pass that to the team." })] })]);
+  const r2 = await runBrain({ business, rules: {} }, { mode: { kind: "reply" }, turns: [], lead: { firstName: "Jess", details: "" } }, { claude: d.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) });
+  assertEquals(r2.cancelled, undefined);
 });
