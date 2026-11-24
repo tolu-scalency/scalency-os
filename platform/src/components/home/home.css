@@ -105,3 +105,36 @@
   .site .float1, .site .float2 { display: none !important; }
   .site footer [aria-hidden="true"] { font-size: 80px !important; }
 }
+
+/* ---- Motion (only when motion is allowed: SiteMotion adds .motion-on) ---- */
+.motion-on .rv{opacity:0;transform:translateY(32px) scale(.985);transition:opacity .9s cubic-bezier(.16,.84,.3,1) var(--rv-delay,0s),transform .9s cubic-bezier(.16,.84,.3,1) var(--rv-delay,0s)}
+.motion-on .rv.rv-in{opacity:1;transform:none}
+.site [data-type-words].typing::after,.ai-caret{content:"";display:inline-block;width:3px;height:.9em;margin-left:4px;vertical-align:-0.08em;border-radius:2px;background:#2FA8EB;animation:ai-blink 1s steps(1) infinite}
+.ai-caret{width:3px}
+@keyframes ai-blink{50%{opacity:0}}
+@keyframes ai-pop{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+.ai-pop{animation:ai-pop .45s cubic-bezier(.16,.84,.3,1) both}
+@keyframes ai-dot{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+.ai-dot{animation:ai-dot 1s ease-in-out infinite}
+@keyframes ai-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.ai-float{animation:ai-float 5s ease-in-out infinite}
+@keyframes ai-scan{0%{top:-30%}100%{top:110%}}
+.ai-scan{animation:ai-scan 2.6s ease-in-out infinite}
+@keyframes ai-step{0%,15%{background:#d3dfec;box-shadow:none}25%,85%{background:#2FA8EB;box-shadow:0 0 0 4px rgba(47,168,235,.2)}100%{background:#d3dfec}}
+.ai-step{animation:ai-step 3.6s ease-in-out infinite}
+@keyframes ai-slide{0%,8%{opacity:0;transform:translateX(-12px)}18%,80%{opacity:1;transform:none}100%{opacity:0}}
+.ai-slide{animation:ai-slide 3.6s ease-in-out infinite}
+@keyframes ai-wave{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+.ai-wave{animation:ai-wave 1.1s ease-in-out infinite;transform-origin:center}
+.ai-strike::after{content:"";position:absolute;left:0;top:52%;height:1.5px;background:#b42318;animation:ai-strike 3s ease-in-out infinite}
+@keyframes ai-strike{0%,20%{width:0}45%,100%{width:100%}}
+@keyframes ai-bar{0%{transform:scaleY(.15)}60%,100%{transform:scaleY(1)}}
+.ai-bar{transform-origin:bottom;animation:ai-bar 2.4s cubic-bezier(.16,.84,.3,1) infinite alternate}
+@keyframes ai-fill{0%,10%{background:#e1e9f3}25%,100%{background:#10b981}}
+.ai-fill{animation:ai-fill 6s ease-in-out infinite}
+@keyframes ai-ticker{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+.ai-ticker{animation:ai-ticker 12s linear infinite}
+@keyframes ai-feed{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+.ai-feed{animation:ai-feed 26s linear infinite}
+.ai-feed:hover{animation-play-state:paused}
+@media (prefers-reduced-motion: reduce){.ai-pop,.ai-dot,.ai-float,.ai-scan,.ai-step,.ai-slide,.ai-wave,.ai-bar,.ai-fill,.ai-ticker,.ai-feed,.ai-strike::after{animation:none!important}.ai-caret,.site [data-type-words].typing::after{display:none}}

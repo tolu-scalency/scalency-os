@@ -14,7 +14,7 @@ function weekAgo() {
 export default async function SetterConsolePage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
   const [{ show }, ws] = await Promise.all([searchParams, getWorkspace()]);
   const supabase = await createClient();
-  const accounts = ws.workspaces.map((w) => w.id);
+  const accounts = [ws.account.id];
   const view = show === "done" ? "done" : "open";
   const since = weekAgo();
   let q = supabase

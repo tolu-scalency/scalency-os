@@ -16,13 +16,13 @@ import { createClient } from "@/lib/supabase/browser";
 type Alert = { id: string; priority: string; reason: string; created_at: string; setter_threads: { contact_name: string | null } | null };
 
 /** Leads waiting for a person (the setter console's queue), for the bell. Checks every minute. */
-function useAlerts(enabled: boolean) {
+function useAlerts(enabled: boolean, workspaceId: string) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   useEffect(() => {
     if (!enabled) return;
     let live = true;
     const load = async () => {
-      const { data } = await createClient().from("setter_handoffs").select("id, priority, reason, created_at, setter_threads(contact_name)").neq("status", "done").order("created_at", { ascending: false }).limit(8);
+      const { data } = await createClient().from("setter_handoffs").select("id, priority, reason, created_at, setter_threads(contact_name)").eq("account_id", workspaceId).neq("status", "done").order("created_at", { ascending: false }).limit(8);
       if (live && data) setAlerts(data as unknown as Alert[]);
     };
     load();
@@ -31,7 +31,7 @@ function useAlerts(enabled: boolean) {
       live = false;
       clearInterval(t);
     };
-  }, [enabled]);
+  }, [enabled, workspaceId]);
   return alerts;
 }
 
@@ -274,7 +274,7 @@ function TopBar({ user, onMenu, onCommand }: { user: ShellUser; onMenu: () => vo
   const router = useRouter();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<"account" | "alerts" | null>(null);
-  const alerts = useAlerts(user.permissions.includes("inbox.send") || user.permissions.includes("ai.manage"));
+  const alerts = useAlerts(user.permissions.includes("inbox.send") || user.permissions.includes("ai.manage"), user.workspaceId);
   const urgent = alerts.some((a) => a.priority === "urgent");
 
   return (
@@ -448,7 +448,7 @@ function WorkspaceSwitcher({ user, collapsed }: { user: ShellUser; collapsed: bo
       {open && (
         <>
           <button type="button" aria-label="Close" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div className="rise absolute left-0 top-12 z-50 w-[268px] rounded-2xl border border-line bg-white p-1.5 text-navy shadow-[var(--shadow-pop)]">
+          <div className={`rise z-50 rounded-2xl border border-line bg-white p-1.5 text-navy shadow-[var(--shadow-pop)] ${collapsed ? "fixed left-[84px] top-[64px] w-[268px]" : "absolute inset-x-0 top-[calc(100%+6px)]"}`}>
             <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-medium text-faint">Your workspaces</div>
             <ul className="max-h-64 overflow-y-auto">
               {user.workspaces.map((w) => (

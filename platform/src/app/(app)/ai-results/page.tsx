@@ -31,7 +31,7 @@ const PERIODS = { "7": 7, "30": 30, "90": 90 } as const;
 export default async function AiResultsPage({ searchParams }: { searchParams: Promise<{ days?: string; scope?: string }> }) {
   const [sp, ws] = await Promise.all([searchParams, getWorkspace()]);
   const days = PERIODS[(sp.days ?? "30") as keyof typeof PERIODS] ?? 30;
-  const all = sp.scope === "all" && ws.workspaces.length > 1;
+  const all = false;
   const accounts = all ? ws.workspaces.map((w) => w.id) : [ws.account.id];
   const supabase = await createClient();
   const now = nowMs();
@@ -60,7 +60,7 @@ export default async function AiResultsPage({ searchParams }: { searchParams: Pr
       days={days}
       all={all}
       clinics={accounts.length}
-      many={ws.workspaces.length > 1}
+      many={false}
       name={ws.account.name}
       now={now}
       threads={(threadRows ?? []) as Th[]}

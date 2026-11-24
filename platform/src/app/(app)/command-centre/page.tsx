@@ -14,7 +14,7 @@ function since(days: number) {
  *  one click to take over or hand back. */
 export default async function CommandCentrePage() {
   const ws = await getWorkspace();
-  const accounts = ws.workspaces.map((w) => w.id);
+  const accounts = [ws.account.id];
   const supabase = await createClient();
   const { data: threads } = await supabase
     .from("setter_threads")
@@ -59,7 +59,7 @@ export default async function CommandCentrePage() {
   });
   return (
     <Page wide>
-      <PageHeader eyebrow="AI" title="Command centre" subtitle="Every live AI conversation in one place. Read along, get a summary, and take over or hand back in one click." />
+      <PageHeader eyebrow="AI" title="Command centre" subtitle={`Every live AI conversation in ${ws.account.name}. Read along, get a summary, take over and reply yourself, or hand back to the AI.`} />
       <CommandCentre items={items} />
     </Page>
   );

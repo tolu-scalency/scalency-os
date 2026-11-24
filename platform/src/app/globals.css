@@ -340,3 +340,9 @@ html {
 .app-grid > * {
   background: linear-gradient(180deg, transparent 0, transparent 360px, var(--color-canvas) 900px);
 }
+
+/* Printing an audit report: just the report. */
+@media print {
+  aside, header, nav, .print\:hidden { display: none !important; }
+  .app-grid { background: none !important; }
+}
