@@ -135,3 +135,50 @@ export async function newWebhookAddresses(id: string): Promise<Result> {
   if (error || !count) return { error: "We couldn't change the addresses. Try again." };
   return { ok: "New addresses made. Paste them into your 3 GHL workflows now, as the old ones have stopped working." };
 }
+
+// ---------------------------------------------------------------- Knowledge bank
+
+type KnowledgeIn = { question: string; answer: string };
+const cleanQa = (k: KnowledgeIn) => ({ question: String(k.question ?? "").trim().slice(0, 300), answer: String(k.answer ?? "").trim().slice(0, 1500) });
+
+/** Adds answers to the Knowledge bank. Typed answers are approved; scanned ones wait to be checked. */
+export async function addKnowledge(setterId: string, items: KnowledgeIn[], source: "manual" | "website" | "document"): Promise<Result & { count?: number }> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const rows = (Array.isArray(items) ? items : [])
+    .map(cleanQa)
+    .filter((k) => k.question && k.answer)
+    .slice(0, 50)
+    .map((k) => ({ ...k, account_id: ws.account.id, agent_id: setterId, source: ["manual", "website", "document"].includes(source) ? source : "manual", approved: source === "manual" }));
+  if (!rows.length) return { error: "Add a question and an answer." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("setter_knowledge").insert(rows);
+  if (error) return { error: "We couldn't save that. Check the database update (SQL-14) has been run." };
+  refresh();
+  return { ok: rows.length === 1 ? "Added" : `${rows.length} answers added`, count: rows.length };
+}
+
+export async function updateKnowledge(id: string, patch: { question?: string; answer?: string; approved?: boolean }): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (typeof patch.question === "string") row.question = patch.question.trim().slice(0, 300);
+  if (typeof patch.answer === "string") row.answer = patch.answer.trim().slice(0, 1500);
+  if (typeof patch.approved === "boolean") row.approved = patch.approved;
+  if (row.question === "" || row.answer === "") return { error: "A question and an answer are both needed." };
+  const supabase = await createClient();
+  const { error } = await supabase.from("setter_knowledge").update(row).eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't save that." };
+  refresh();
+  return { ok: "Saved" };
+}
+
+export async function deleteKnowledge(id: string): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const supabase = await createClient();
+  const { error } = await supabase.from("setter_knowledge").delete().eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't delete that." };
+  refresh();
+  return { ok: "Deleted" };
+}

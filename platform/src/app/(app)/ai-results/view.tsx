@@ -52,12 +52,12 @@ function Spark({ values, w = 260, h = 70, light = false }: { values: number[]; w
     <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" preserveAspectRatio="none" aria-hidden>
       <defs>
         <linearGradient id={id} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor={light ? "#1a86ee" : "#38bdf8"} stopOpacity="0.35" />
-          <stop offset="1" stopColor={light ? "#1a86ee" : "#38bdf8"} stopOpacity="0" />
+          <stop offset="0" stopColor={light ? "#1a86ee" : "#ffffff"} stopOpacity="0.35" />
+          <stop offset="1" stopColor={light ? "#1a86ee" : "#ffffff"} stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={`${line} L${w},${h} L0,${h} Z`} fill={`url(#${id})`} />
-      <path d={line} fill="none" stroke={light ? "#1a86ee" : "#5eead4"} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={line} fill="none" stroke={light ? "#1a86ee" : "#9fe7ff"} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -66,7 +66,9 @@ export type Handoff = { id: string; priority: string; status: string; created_at
 export type FeedRow = { id: string; role: string; body: string; channel: string | null; created_at: string; setter_threads: { contact_name: string | null } | null };
 
 /** The dashboard itself, kept separate from the data loading so it can be previewed. */
-export function Results({ days, all, clinics, many, name, now, threads, handoffs, feedRows }: { days: number; all: boolean; clinics: number; many: boolean; name: string; now: number; threads: Th[]; handoffs: Handoff[]; feedRows: FeedRow[] }) {
+export type Guarantee = { clinic: string; target: number; days: number; start: string; booked: number };
+
+export function Results({ days, all, clinics, many, name, now, threads, handoffs, feedRows, guarantees = [] }: { days: number; all: boolean; clinics: number; many: boolean; name: string; now: number; threads: Th[]; handoffs: Handoff[]; feedRows: FeedRow[]; guarantees?: Guarantee[] }) {
   const th = threads;
   const leads = th.filter((t) => (t.origin ?? "lead") === "lead");
   const contacted = th.filter((t) => t.last_outbound_at);
@@ -105,11 +107,11 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
     return { id: f.id, who, body: b, at: f.created_at, kind, channel: f.channel };
   });
   const FEED = {
-    reply: { tag: "AI REPLY", label: "Replied", chip: "text-sky-300 bg-sky-400/10" },
-    booked: { tag: "BOOKING", label: "Booked", chip: "text-emerald-300 bg-emerald-400/10" },
-    handoff: { tag: "SETTER", label: "Handoff", chip: "text-amber-300 bg-amber-400/10" },
-    guard: { tag: "GUARDRAIL", label: "Safety", chip: "text-rose-300 bg-rose-400/10" },
-    event: { tag: "AI", label: "Update", chip: "text-slate-300 bg-white/5" },
+    reply: { tag: "AI REPLY", label: "Replied", chip: "text-white bg-white/15" },
+    booked: { tag: "BOOKING", label: "Booked", chip: "text-[#bff7d6] bg-white/15" },
+    handoff: { tag: "SETTER", label: "Handoff", chip: "text-[#ffe7a8] bg-white/15" },
+    guard: { tag: "GUARDRAIL", label: "Safety", chip: "text-[#ffd6d6] bg-white/15" },
+    event: { tag: "AI", label: "Update", chip: "text-white/85 bg-white/10" },
   } as const;
 
   const link = (patch: Record<string, string>) => {
@@ -131,7 +133,7 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-navy px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> Live
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#55e3ec]" /> Live
           </div>
           <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em]">AI results</h1>
           <p className="mt-1 text-[14px] text-muted">{all ? `All ${clinics} clinics` : name} · last {days} days</p>
@@ -158,11 +160,11 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
       </div>
 
       {/* The command centre */}
-      <section className="relative overflow-hidden rounded-[22px] bg-[linear-gradient(160deg,#0b1b3a_0%,#081430_60%,#0a1f44_100%)] text-white shadow-[0_30px_80px_-30px_rgba(10,30,70,0.6)] ring-1 ring-white/10">
+      <section className="relative overflow-hidden rounded-[22px] sidebar-blue text-white shadow-[0_30px_70px_-30px_rgba(10,63,166,0.55)] ring-1 ring-white/10">
         <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:28px_28px]" />
         <div className="relative grid gap-px bg-white/5 lg:grid-cols-[280px_1fr_320px]">
-          <div className="flex flex-col gap-4 bg-[#0a1733]/80 p-5">
-            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/50">Your AI front desk</div>
+          <div className="flex flex-col gap-4 bg-white/[0.04] p-5">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/75">Your AI front desk</div>
             {(channels.length ? channels : [["SMS", 0] as [string, number]]).slice(0, 5).map(([c, n]) => (
               <div key={c} className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/[0.06] ring-1 ring-white/10">
@@ -170,39 +172,39 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13.5px] font-semibold">{CHANNEL[c]?.[0] ?? c}</div>
-                  <div className="text-[11.5px] text-white/50">Leads messaged</div>
+                  <div className="text-[11.5px] text-white/75">Leads messaged</div>
                 </div>
                 <div className="font-mono text-[18px] font-semibold">{n}</div>
               </div>
             ))}
             <div className="mt-auto rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/10">
-              <div className="text-[11.5px] text-white/50">Leads per day</div>
+              <div className="text-[11.5px] text-white/75">Leads per day</div>
               <div className="mt-1 h-14">
                 <Spark values={leadsPerDay} />
               </div>
             </div>
           </div>
 
-          <div className="flex min-h-[360px] flex-col gap-2.5 bg-[#091530]/80 p-5">
+          <div className="flex min-h-[360px] flex-col gap-2.5 bg-white/[0.02] p-5">
             <div className="flex items-center justify-between">
-              <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/50">Live feed</div>
-              <Link href="/inbox?view=ai" className="text-[12px] font-semibold text-sky-300 hover:underline">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/75">Live feed</div>
+              <Link href="/inbox?view=ai" className="text-[12px] font-semibold text-white hover:underline">
                 Open conversations
               </Link>
             </div>
             {feed.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center text-center text-[13px] text-white/50">As the AI talks to leads, every reply, booking and handoff appears here.</div>
+              <div className="flex flex-1 items-center justify-center text-center text-[13px] text-white/75">As the AI talks to leads, every reply, booking and handoff appears here.</div>
             ) : (
               feed.slice(0, 7).map((f, n) => {
                 const look = FEED[f.kind as keyof typeof FEED];
                 return (
-                  <div key={f.id} className={`flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3.5 py-2.5 ring-1 ring-white/[0.07] ${n === 0 ? "ring-emerald-400/30" : ""}`} style={{ opacity: 1 - n * 0.08 }}>
+                  <div key={f.id} className={`flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3.5 py-2.5 ring-1 ring-white/[0.07] ${n === 0 ? "ring-white/30" : ""}`} style={{ opacity: 1 - n * 0.08 }}>
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-[10px] font-semibold tracking-[0.14em] text-white/40">{look.tag}</div>
+                      <div className="font-mono text-[10px] font-semibold tracking-[0.14em] text-white/65">{look.tag}</div>
                       <div className="truncate text-[13.5px] font-semibold">
                         {f.kind === "reply" ? `Replied to ${f.who}` : f.body.length > 70 ? `${f.body.slice(0, 70)}…` : f.body}
                       </div>
-                      <div className="truncate text-[11.5px] text-white/50">{f.kind === "reply" ? f.body.slice(0, 90) : f.who}</div>
+                      <div className="truncate text-[11.5px] text-white/75">{f.kind === "reply" ? f.body.slice(0, 90) : f.who}</div>
                     </div>
                     <span className={`flex-none rounded-full px-2 py-0.5 font-mono text-[10.5px] font-semibold ${look.chip}`}>{ago(f.at, now)}</span>
                   </div>
@@ -211,12 +213,12 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
             )}
           </div>
 
-          <div className="flex flex-col gap-4 bg-[#0a1733]/80 p-5">
+          <div className="flex flex-col gap-4 bg-white/[0.04] p-5">
             <div>
-              <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/50">Consultations booked</div>
+              <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-white/75">Consultations booked</div>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="font-mono text-[40px] font-semibold leading-none tracking-tight">{booked.length}</span>
-                <span className="text-[12px] text-emerald-300">{pct(booked.length, contacted.length)}% booking rate</span>
+                <span className="text-[12px] text-[#bff7d6]">{pct(booked.length, contacted.length)}% booking rate</span>
               </div>
               <div className="mt-3 h-20">
                 <Spark values={perDay} />
@@ -231,23 +233,59 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
                 ] as const
               ).map(([k, v]) => (
                 <div key={k} className="rounded-xl bg-white/[0.05] px-2.5 py-2 ring-1 ring-white/10">
-                  <div className="text-[10.5px] text-white/50">{k}</div>
+                  <div className="text-[10.5px] text-white/75">{k}</div>
                   <div className="font-mono text-[17px] font-semibold">{v}</div>
                 </div>
               ))}
             </div>
             <div>
               <div className="mb-1.5 flex items-center justify-between text-[11.5px]">
-                <span className="text-white/60">Show rate</span>
+                <span className="text-white/80">Show rate</span>
                 <span className="font-mono font-semibold">{showed + noshow ? `${pct(showed, showed + noshow)}%` : "–"}</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full bg-[linear-gradient(90deg,#38bdf8,#5eead4)]" style={{ width: `${showed + noshow ? pct(showed, showed + noshow) : 0}%` }} />
+                <div className="h-full rounded-full bg-[linear-gradient(90deg,#9fe7ff,#ffffff)]" style={{ width: `${showed + noshow ? pct(showed, showed + noshow) : 0}%` }} />
               </div>
             </div>
           </div>
         </div>
       </section>
+
+      {guarantees.length > 0 && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {guarantees.map((g) => {
+            const start = new Date(`${g.start}T00:00:00Z`).getTime();
+            const end = start + g.days * 86_400_000;
+            const left = Math.max(0, Math.ceil((end - now) / 86_400_000));
+            const elapsed = Math.min(1, Math.max(0, (now - start) / (end - start)));
+            const done = Math.min(1, g.booked / g.target);
+            const onTrack = done >= elapsed;
+            return (
+              <div key={g.clinic} className="card flex flex-col gap-3 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="eyebrow mb-1">Guarantee{many ? ` · ${g.clinic}` : ""}</div>
+                    <div className="text-[15px] font-semibold">
+                      {g.target} consultations in {g.days} days
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ${g.booked >= g.target ? "bg-ok-bg text-ok" : onTrack ? "bg-chip text-brand" : "bg-warn-bg text-warn"}`}>
+                    {g.booked >= g.target ? "Met" : onTrack ? "On track" : "Behind"}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono text-[30px] font-semibold tracking-tight text-navy">{g.booked}</span>
+                  <span className="text-[13px] text-muted">of {g.target} booked · {left} days left</span>
+                </div>
+                <div className="relative h-2.5 overflow-hidden rounded-full bg-surface">
+                  <div className="h-full rounded-full bg-[linear-gradient(90deg,#29b0f8,#0a5fe3)]" style={{ width: `${done * 100}%` }} />
+                  <div className="absolute top-0 h-full w-0.5 bg-navy/40" style={{ left: `${elapsed * 100}%` }} title="Where it should be by today" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {kpis.map(([k, v, s]) => (

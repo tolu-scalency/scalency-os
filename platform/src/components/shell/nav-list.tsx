@@ -155,14 +155,14 @@ export function NavList({
           className="flyout fixed z-[60] pl-2"
         >
           {/* The padding on the left is an invisible bridge from the sidebar to the panel. */}
-          <div className="w-[260px] rounded-2xl border border-line bg-white p-2 text-navy shadow-[0_20px_50px_-12px_rgba(11,27,58,0.35)]">
+          <div className={`${panelGroup.links.some((l) => l.hint) ? "w-[320px]" : "w-[260px]"} rounded-2xl border border-line bg-white p-2 text-navy shadow-[0_20px_50px_-12px_rgba(11,27,58,0.35)]`}>
           <div className="flex items-center gap-2 px-2.5 pb-2 pt-1.5">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-chip text-brand">
               <Icon name={panelGroup.icon} size={15} />
             </span>
             <span className="text-[14px] font-semibold">{panelGroup.label}</span>
           </div>
-          <ul className="flex max-h-[360px] flex-col gap-0.5 overflow-y-auto">
+          <ul className="flex max-h-[min(520px,calc(100vh-80px))] flex-col gap-0.5 overflow-y-auto">
             {panelGroup.links.map((l) => {
               const on = activeLink(pathname, panelGroup.links!) === l.href;
               return (
@@ -174,9 +174,12 @@ export function NavList({
                       insidePanel.current = false;
                       setHover(null);
                     }}
-                    className={`flex h-9 items-center gap-2 rounded-lg px-2.5 text-[13.5px] transition-colors ${on ? "bg-chip font-semibold text-brand" : "text-navy hover:bg-surface"}`}
+                    className={`flex items-center gap-2 rounded-lg px-2.5 text-[13.5px] transition-colors ${l.hint ? "min-h-11 py-1.5" : "h-9"} ${on ? "bg-chip font-semibold text-brand" : "text-navy hover:bg-surface"}`}
                   >
-                    <span className="min-w-0 flex-1 truncate">{l.label}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{l.label}</span>
+                      {l.hint && <span className={`block truncate text-[11.5px] font-normal ${on ? "text-brand/70" : "text-muted"}`}>{l.hint}</span>}
+                    </span>
                     {l.soon && <span className="rounded-md bg-surface px-1.5 py-px text-[10px] font-medium text-muted">Soon</span>}
                   </Link>
                 </li>

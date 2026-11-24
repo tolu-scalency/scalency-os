@@ -8,6 +8,7 @@ import { TaskList } from "@/components/task-list";
 import { can, formatPence, getDashboard, getDashboardExtras, getWorkspace, listPipelines, timeAgo } from "@/lib/data";
 import { cleanLayout, DEFAULT_LAYOUT, type Widget } from "@/lib/dashboard";
 import { createClient } from "@/lib/supabase/server";
+import { AiToday } from "./ai-today";
 import { DashboardGrid } from "./dashboard-grid";
 
 export const metadata: Metadata = { title: "Home" };
@@ -204,10 +205,10 @@ async function Home() {
             <h2 className="relative text-[16px] font-semibold">Shortcuts</h2>
             <div className="relative mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { href: "/workflows", icon: "zap" as const, title: "Workflows", text: "Texts and emails on autopilot" },
-                { href: "/ai-builder", icon: "spark" as const, title: "AI setup", text: "Describe your business, we set it up" },
+                { href: "/agents", icon: "spark" as const, title: "AI setter", text: "Replies and books in under a minute" },
+                { href: "/ai/knowledge", icon: "book" as const, title: "Knowledge", text: "What the AI is allowed to say" },
                 { href: "/inbox", icon: "inbox" as const, title: "Inbox", text: "Every conversation in one place" },
-                { href: "/chat", icon: "hash" as const, title: "Team chat", text: "Lead alerts for the whole team" },
+                { href: "/workflows", icon: "zap" as const, title: "Workflows", text: "Texts and emails on autopilot" },
               ].map((f) => (
                 <Link key={f.href} href={f.href} className="flex items-center gap-3 rounded-xl bg-white/10 p-3 ring-1 ring-white/15 transition-colors hover:bg-white/15">
                   <span className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-white text-brand"><Icon name={f.icon} size={17} /></span>
@@ -250,6 +251,7 @@ async function Home() {
             <Button href="/tasks" icon="tasks">New task</Button>
             {can(ws, "contacts.edit") && <Button href="/contacts?new=1" variant="primary" icon="plus">New contact</Button>}
           </div>
+          {can(ws, "ai.manage") && <AiToday accountId={ws.account.id} />}
         </>
       }
     />
