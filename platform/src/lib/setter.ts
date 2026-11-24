@@ -40,6 +40,10 @@ export type SetterBusiness = {
   guaranteeTarget: number;
   guaranteeDays: number;
   guaranteeStart: string;
+  /** Number for urgent problems after a treatment (on-call practitioner). Blank: the main phone. */
+  urgentPhone: string;
+  /** The clinic's own words for urgent problems after a treatment. Blank: the safe default. */
+  urgentAdvice: string;
 };
 
 export type JourneyAction = "message" | "sms" | "email" | "whatsapp" | "call_task" | "setter" | "ai_call";
@@ -323,6 +327,8 @@ export const DEMO_BUSINESS: SetterBusiness = {
   guaranteeTarget: 0,
   guaranteeDays: 60,
   guaranteeStart: "",
+  urgentPhone: "",
+  urgentAdvice: "",
 };
 
 // The med spa example is the demo itself.
@@ -378,6 +384,8 @@ export function cleanBusiness(v: unknown): SetterBusiness {
     guaranteeTarget: num(o.guaranteeTarget, 0, 10000, 0),
     guaranteeDays: num(o.guaranteeDays, 7, 365, 60),
     guaranteeStart: /^\d{4}-\d{2}-\d{2}$/.test(String(o.guaranteeStart ?? "")) ? String(o.guaranteeStart) : "",
+    urgentPhone: str(o.urgentPhone, 40),
+    urgentAdvice: str(o.urgentAdvice, 600),
   };
 }
 

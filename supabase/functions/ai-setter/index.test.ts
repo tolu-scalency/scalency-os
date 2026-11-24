@@ -8,6 +8,7 @@ const assertEquals = (a: unknown, b: unknown) => deepStrictEqual(a, b);
 const assertMatch = (s: string, re: RegExp) => match(s, re);
 const assertStringIncludes = (s: string, part: string) => ok(s.includes(part), `expected to find ${JSON.stringify(part)}`);
 import {
+  complicationReply,
   opportunityAudit,
   nextReminder,
   isConfirmation,
@@ -409,7 +410,7 @@ Deno.test("end to end: hand over creates a task for the team and stops the AI", 
   // The guardrail caught it first: urgent task and tags, a fixed safe reply, and the AI never ran.
   assert(calls.some((x) => x.path === "/contacts/c1/tasks" && String(x.body?.title).startsWith("URGENT") && String(x.body?.title).includes("Possible complication")));
   assert(calls.some((x) => x.path === "/contacts/c1/tags" && JSON.stringify(x.body).includes("ai-urgent")));
-  assert(calls.some((x) => x.path === "/conversations/messages" && String(x.body?.message).includes("NHS 111")));
+  assert(calls.some((x) => x.path === "/conversations/messages" && String(x.body?.message).includes("999 or go to A&E") && !String(x.body?.message).includes("NHS")));
   assertEquals(c.seen.length, 0);
 });
 
@@ -632,7 +633,23 @@ Deno.test("guardrails: complications, under-18 and prescription medicine names",
   assertEquals(c.seen.length, 0);
   assertEquals(r.brain.handover?.category, "complication");
   assertEquals(handoffPriority("complication"), "urgent");
-  assertStringIncludes(r.brain.message, "999 or NHS 111");
+  assert(!r.brain.message.includes("NHS"));
+  assertMatch(r.brain.message, /call (999 or go to A&E|911 or go to the ER) now/);
+  // UK clinic: on-call number first, 999 only for severe signs, never NHS 111.
+  const uk = complicationReply({ phone: "028 9000 0000", urgentPhone: "07700 900000", spelling: "UK" }, "");
+  assertStringIncludes(uk, "please call us on 07700 900000");
+  assertStringIncludes(uk, "999 or go to A&E");
+  assert(!uk.includes("NHS"));
+  // The clinic's own words replace the default advice.
+  assertStringIncludes(complicationReply({ urgentAdvice: "Please ring Dr Kelly on the aftercare line." }, ""), "ring Dr Kelly");
+  // A second message after the handover gets a short reply, not the whole safety message again.
+  const again = await guardedBrain(
+    { business: { ...business, phone: "028 9000 0000" }, rules: {} },
+    { mode: { kind: "reply" }, turns: [{ who: "ai", text: r.brain.message, at: "2026-11-24T10:06:00Z" }, { who: "lead", text: "my lips are still so swollen and painful since the filler", at: "2026-11-24T10:20:00Z" }], lead: { firstName: "Jess", details: "" } },
+    { claude: c.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) },
+  );
+  assertStringIncludes(again.brain.message, "I've added that for our clinical team");
+  assert(!again.brain.message.includes("999") && !again.brain.message.includes("911"));
 
   // A first message naming Botox is rewritten; if the AI insists, the names are stripped.
   const stubborn = scripted([() => ({ content: [tool("send_message", { text: "Hi Jess, Botox is £9 a unit!" })] }), () => ({ content: [tool("send_message", { text: "Hi Jess, Botox is still £9!" })] })]);
