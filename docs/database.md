@@ -318,6 +318,7 @@ Migration `20261202090000_ai_setter`. The AI itself runs in the Supabase functio
 - `setter_turns`: every message in and out and what the AI did (booked, handed over...). Test chat turns have `is_test` set, no thread, and are only used for the daily limit (300).
 - `setter_clock` and `claim_setter_tick()`: stop the follow-up clock running twice within 45 seconds. Server only.
 - Members can read setters and conversations; "Manage AI" (`ai.manage`) can change them.
+- Lead reactivation (SQL-12, `20261204090000_setter_reactivation.sql`): `setter_threads.origin` says how a conversation started (`lead`, `reply` or `reactivation`), and `next_action` can be `reactivate`. Reactivation queues old GHL leads by tag, spaced out within opening hours, with at most 2 follow-ups.
 - Contacts copied from GHL (SQL-11, `20261203090000_ghl_contacts.sql`): the AI setter can import a sub-account's contacts and copies each new GHL lead in, one way only. They have `source = 'GHL'` and `custom ->> 'ghl_id'` (indexed). They're matched to existing contacts by GHL ID, email or phone, and never get consent set. They don't start Scalency workflows (contact created, tag added or removed), because GHL stays in charge of messaging them.
 
 ## Not in this version yet
