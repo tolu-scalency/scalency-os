@@ -309,6 +309,17 @@ function ClinicTab({ b, set, ro }: { b: SetterBusiness; set: (p: Partial<SetterB
           <input {...t("bookingLink")} maxLength={500} placeholder="https://" className={field} />
           <span className={hint}>Your GHL or other booking page. Choose below when the AI sends it.</span>
         </label>
+        <div className="grid gap-4 sm:grid-cols-[1fr_200px]">
+          <label className={label}>
+            Deposit link (optional)
+            <input {...t("depositLink")} maxLength={500} placeholder="https://buy.stripe.com/…" className={field} />
+            <span className={hint}>A Stripe or GHL payment link. After booking a treatment, the AI sends it once and says it comes off the final price.</span>
+          </label>
+          <label className={label}>
+            Deposit amount
+            <input {...t("depositAmount")} maxLength={40} placeholder="£30 deposit" className={field} />
+          </label>
+        </div>
         <fieldset className="flex flex-col gap-2" disabled={ro}>
           <legend className="mb-1.5 text-[12.5px] font-semibold text-navy">How the AI gets them booked</legend>
           {(
@@ -486,6 +497,29 @@ function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules
             <span className="block text-[12px] text-muted">Call twice when a lead comes in, Instagram DM on day 1, selfie video on day 3, &quot;we&apos;re all busy&quot; video on day 8.</span>
           </span>
         </label>
+      </Section>
+      <Section title="Team alerts" text="Tell the clinic's team when a person needs to step in. For WhatsApp group alerts, make a GHL workflow with an Inbound Webhook trigger that sends a WhatsApp or SMS, and paste its address here.">
+        <label className={label}>
+          Alert the team about
+          <select value={r.alertOn} disabled={ro} onChange={(e) => set({ alertOn: e.target.value as SetterRules["alertOn"] })} className={field}>
+            <option value="handoffs">Handoffs and no-shows (recommended)</option>
+            <option value="urgent">Urgent only (complications, medical questions, complaints)</option>
+            <option value="all">Everything, including every booking</option>
+            <option value="off">Nothing</option>
+          </select>
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={label}>
+            Alert webhook (optional)
+            <input value={r.alertWebhook} disabled={ro} onChange={(e) => set({ alertWebhook: e.target.value.trim() })} placeholder="https://services.leadconnectorhq.com/hooks/…" maxLength={500} className={field} />
+            <span className={hint}>Gets the contact, reason, priority and a link to them in GHL.</span>
+          </label>
+          <label className={label}>
+            Alert email (optional)
+            <input value={r.alertEmail} disabled={ro} onChange={(e) => set({ alertEmail: e.target.value })} placeholder="frontdesk@clinic.co.uk" maxLength={300} className={field} />
+            <span className={hint}>Up to 5, separated by commas.</span>
+          </label>
+        </div>
       </Section>
       <Section title="When the AI joins" text="Which conversations the AI takes part in. Your 3 GHL workflows decide what it hears about; these decide what it does with it.">
         <label className="flex items-start gap-2 text-[13.5px]">
@@ -768,6 +802,7 @@ function GhlTab({ setter, ro }: { setter: Setter; ro: boolean }) {
                 ["new_lead", "AI setter: new lead", "Trigger: Facebook Lead Form Submitted (or Form Submitted, or Contact Created). The AI sends the first text within a minute, or when you open."],
                 ["inbound", "AI setter: lead replied", "Trigger: Customer Replied (all channels). The AI answers."],
                 ["booked", "AI setter: booked", "Trigger: Customer Booked Appointment. Stops follow-ups if they booked another way."],
+                ["appointment", "AI setter: appointment status (optional)", "Trigger: Appointment Status (Showed, No Show, Cancelled). Webhook: add Custom Data status = {{appointment.status}}. Gives you show and no-show rates on Results, and alerts you to no-shows."],
               ] as const
             ).map(([k, title, how]) => (
               <div key={k} className="flex flex-col gap-1.5">
@@ -1017,10 +1052,37 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
   const [first, setFirst] = useState("Jess");
   const [form, setForm] = useState("Treatment: Botox/Fillers. Had it before: No, first time. When: within 2 weeks. Best time: evening.");
   const [touch, setTouch] = useState(0);
+  // What the AI has learnt about the lead so far, and whether this chat has a (pretend) booking to move or cancel.
+  const [qual, setQual] = useState<Record<string, string | number | boolean | null> | null>(null);
+  const [hasBooking, setHasBooking] = useState(false);
   const [pending, start] = useTransition();
   const end = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  // On a laptop or desktop the test chat fills exactly the rest of the screen, so the page never
+  // scrolls: only the chat does (like GHL's conversations).
+  const box = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState<number | null>(null);
   useEffect(() => {
-    end.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const measure = () => {
+      const el = box.current;
+      if (!el || window.innerWidth < 1024) return setFit(null);
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      const first = Math.max(460, window.innerHeight - top - 16);
+      setFit(first);
+      // Then take off whatever the page's own bottom spacing adds, so nothing scrolls.
+      requestAnimationFrame(() => {
+        const extra = document.documentElement.scrollHeight - window.innerHeight;
+        if (extra > 0) setFit(Math.max(460, first - extra));
+      });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  // Keep the newest message in view by scrolling the chat itself, never the page.
+  useEffect(() => {
+    const el = list.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [turns, pending]);
 
   const ask = (mode: "opener" | "reply" | "followup", history: ChatTurn[]) =>
@@ -1035,6 +1097,7 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
         business: b,
         rules: r,
         turns: history.filter((t) => t.who !== "event").map((t) => ({ who: t.who, text: t.text, at: t.at })),
+        has_booking: hasBooking,
       });
       if ("error" in res && res.error) return void notify(String(res.error), "bad");
       const now = new Date().toISOString();
@@ -1044,19 +1107,20 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
       if (res.message) add.push({ who: "ai", text: String(res.message), at: now });
       else add.push({ who: "event", text: "Nothing sent.", at: now });
       setTurns([...history, ...add]);
+      if (res.qualification) setQual((q) => ({ ...(q ?? {}), ...(res.qualification as Record<string, string | number | boolean | null>) }));
+      if (res.booked || res.rescheduled) setHasBooking(true);
+      if (res.cancelled) setHasBooking(false);
       if (mode === "followup") setTouch((x) => x + 1);
     });
-  // Like the real thing: it waits before answering, so several messages in a row get one reply.
-  const delay = Math.min(60, Math.max(10, r.replyDelaySeconds || 20));
-  const [waitLeft, setWaitLeft] = useState(0);
-  const waiting = useRef<{ timer: ReturnType<typeof setInterval> | null; history: ChatTurn[] }>({ timer: null, history: [] });
+  // Like the real thing, it pauses before answering (so several texts in a row get one reply),
+  // then shows "typing". In the test chat the pause is 5 seconds; for real it's your reply wait.
+  const waiting = useRef<{ timer: ReturnType<typeof setTimeout> | null; history: ChatTurn[] }>({ timer: null, history: [] });
   useEffect(() => () => {
-    if (waiting.current.timer) clearInterval(waiting.current.timer);
+    if (waiting.current.timer) clearTimeout(waiting.current.timer);
   }, []);
   const answerNow = () => {
-    if (waiting.current.timer) clearInterval(waiting.current.timer);
+    if (waiting.current.timer) clearTimeout(waiting.current.timer);
     waiting.current.timer = null;
-    setWaitLeft(0);
     ask("reply", waiting.current.history);
   };
   const send = () => {
@@ -1066,19 +1130,14 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
     setTurns(history);
     setText("");
     waiting.current.history = history;
-    if (waiting.current.timer) clearInterval(waiting.current.timer);
-    setWaitLeft(delay);
-    let left = delay;
-    waiting.current.timer = setInterval(() => {
-      left -= 1;
-      setWaitLeft(left);
-      if (left <= 0) answerNow();
-    }, 1000);
+    if (waiting.current.timer) clearTimeout(waiting.current.timer);
+    waiting.current.timer = setTimeout(answerNow, 5000);
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-      <section className="card flex min-h-[520px] flex-col overflow-hidden">
+    // Fits the screen like GHL's conversations: the chat scrolls inside itself, not the page.
+    <div ref={box} style={fit ? { height: fit } : undefined} className="grid gap-4 lg:grid-cols-[1fr_300px]">
+      <section className="card flex h-[70dvh] min-h-0 flex-col overflow-hidden lg:h-full">
         <div className="flex items-center gap-2 border-b border-line px-4 py-3">
           <Icon name="mail" size={16} />
           <div className="min-w-0 flex-1">
@@ -1088,18 +1147,33 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
           <button
             type="button"
             onClick={() => {
-              if (waiting.current.timer) clearInterval(waiting.current.timer);
+              if (waiting.current.timer) clearTimeout(waiting.current.timer);
               waiting.current.timer = null;
-              setWaitLeft(0);
               setTurns([]);
               setTouch(0);
+              setQual(null);
+              setHasBooking(false);
             }}
             className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold"
           >
             <Icon name="refresh" size={13} /> Start again
           </button>
         </div>
-        <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto bg-surface/60 p-4">
+        {qual && Object.values(qual).some((v) => v !== null && v !== "") && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-white px-4 py-2 text-[11.5px]">
+            {typeof qual.score === "number" && (
+              <span className={`rounded-full px-2 py-0.5 font-mono font-semibold ${qual.score >= 80 ? "bg-ok-bg text-ok" : qual.score >= 50 ? "bg-chip text-brand" : "bg-surface text-muted"}`}>score {qual.score}/100</span>
+            )}
+            {Object.entries(qual)
+              .filter(([k, v]) => k !== "score" && v !== null && v !== "" && v !== false)
+              .map(([k, v]) => (
+                <span key={k} className="rounded-full bg-surface px-2 py-0.5 text-navy">
+                  <span className="text-muted">{k.replace(/_/g, " ")}:</span> {v === true ? "yes" : String(v)}
+                </span>
+              ))}
+          </div>
+        )}
+        <div ref={list} className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain bg-surface/60 p-4">
           {!turns.length && (
             <div className="m-auto max-w-sm text-center text-[13px] text-muted">
               Click <strong>New lead comes in</strong> to see the first text, then reply as the lead. Try price questions, &quot;does it hurt?&quot;, a medical question, &quot;are you a bot?&quot;, booking a time, or &quot;not interested&quot;.
@@ -1115,14 +1189,6 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
                 {t.text}
               </div>
             ),
-          )}
-          {waitLeft > 0 && !pending && (
-            <div className="flex items-center gap-2 self-start rounded-2xl bg-white px-3.5 py-2 text-[12.5px] text-muted ring-1 ring-line">
-              Replies in {waitLeft}s, like it will for real (your reply wait).
-              <button type="button" onClick={answerNow} className="font-semibold text-brand hover:underline">
-                Answer now
-              </button>
-            </div>
           )}
           {pending && <div className="self-start rounded-2xl bg-white px-3.5 py-2.5 text-[13px] text-muted ring-1 ring-line">{b.assistantName || "The AI"} is typing…</div>}
           <div ref={end} />
@@ -1140,7 +1206,7 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
           </button>
         </form>
       </section>
-      <aside className="flex flex-col gap-3">
+      <aside className="flex min-h-0 flex-col gap-3 lg:overflow-y-auto">
         <div className="card flex flex-col gap-3 p-4">
           <div className="text-[13.5px] font-semibold">The lead</div>
           <label className={label}>

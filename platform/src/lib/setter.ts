@@ -29,6 +29,9 @@ export type SetterBusiness = {
   scripts: string;
   /** What the reactivation message offers old leads (blank: the current offer). */
   reactivationOffer: string;
+  /** A deposit to secure a treatment booking: payment link and amount. */
+  depositLink: string;
+  depositAmount: string;
 };
 
 export type BusinessType = "med_spa" | "dental" | "home_services" | "coaching" | "real_estate" | "fitness" | "other";
@@ -148,6 +151,10 @@ export type SetterRules = {
   /** When the AI joins. */
   /** Speed to lead: the first message goes straight away, any time. */
   instantFirstMessage: boolean;
+  /** Team alerts: which events, and where (a webhook such as a GHL workflow that posts to WhatsApp, and email). */
+  alertOn: "off" | "urgent" | "handoffs" | "all";
+  alertWebhook: string;
+  alertEmail: string;
   joinNewLeads: boolean;
   joinReplies: "all" | "own";
   onlyTags: string[];
@@ -178,6 +185,9 @@ export const DEFAULT_RULES: SetterRules = {
   minNoticeHours: 2,
   replyDelaySeconds: 20,
   instantFirstMessage: true,
+  alertOn: "handoffs",
+  alertWebhook: "",
+  alertEmail: "",
   joinNewLeads: true,
   joinReplies: "all",
   onlyTags: [],
@@ -224,6 +234,8 @@ export const DEMO_BUSINESS: SetterBusiness = {
   instructions: "",
   scripts: "",
   reactivationOffer: "",
+  depositLink: "",
+  depositAmount: "",
 };
 
 // The med spa example is the demo itself.
@@ -268,6 +280,8 @@ export function cleanBusiness(v: unknown): SetterBusiness {
     instructions: str(o.instructions, 3000),
     scripts: str(o.scripts, 6000),
     reactivationOffer: str(o.reactivationOffer, 500),
+    depositLink: /^https:\/\/[^\s]+$/.test(String(o.depositLink ?? "").trim()) ? String(o.depositLink).trim().slice(0, 500) : "",
+    depositAmount: str(o.depositAmount, 40),
   };
 }
 
@@ -292,6 +306,14 @@ export function cleanRules(v: unknown): SetterRules {
     // At least 10 seconds, so it never answers the instant someone hits send.
     replyDelaySeconds: Math.min(60, Math.max(10, Math.round(Number(o.replyDelaySeconds ?? DEFAULT_RULES.replyDelaySeconds)) || DEFAULT_RULES.replyDelaySeconds)),
     instantFirstMessage: o.instantFirstMessage !== false,
+    alertOn: (["off", "urgent", "handoffs", "all"] as const).includes(o.alertOn as never) ? (o.alertOn as SetterRules["alertOn"]) : "handoffs",
+    alertWebhook: /^https:\/\/[^\s]+$/.test(String(o.alertWebhook ?? "").trim()) ? String(o.alertWebhook).trim().slice(0, 500) : "",
+    alertEmail: String(o.alertEmail ?? "")
+      .split(",")
+      .map((x) => x.trim().toLowerCase())
+      .filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x))
+      .slice(0, 5)
+      .join(", "),
     joinNewLeads: o.joinNewLeads !== false,
     joinReplies: o.joinReplies === "own" ? "own" : "all",
     onlyTags: cleanTags(o.onlyTags),

@@ -39,7 +39,7 @@
   --app-h: calc(100dvh - 64px - var(--nav-h));
   color-scheme: light;
   --gradient: linear-gradient(90deg, #55e3ec 0%, #29b0f8 50%, #0a5fe3 100%);
-  --shadow-card: 0 1px 2px rgba(11, 36, 71, 0.04), 0 8px 24px -12px rgba(11, 36, 71, 0.1);
+  --shadow-card: 0 0 0 1px rgba(11, 36, 71, 0.015), 0 1px 2px rgba(11, 36, 71, 0.04), 0 12px 32px -16px rgba(11, 36, 71, 0.12);
   --shadow-pop: 0 2px 6px rgba(11, 36, 71, 0.06), 0 24px 48px -16px rgba(11, 36, 71, 0.25);
 }
 
@@ -65,9 +65,9 @@ body {
 
 /* A white panel with a hairline border and a soft shadow. */
 @utility card {
-  background: #ffffff;
+  background: linear-gradient(180deg, #ffffff 0%, #fdfeff 100%);
   border: 1px solid var(--color-line);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--shadow-card);
 }
 

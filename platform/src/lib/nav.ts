@@ -144,7 +144,12 @@ export const NAV: NavGroup[] = [
     label: "AI",
     icon: "spark",
     href: "/agents",
-    links: [{ label: "AI setter", href: "/agents" }, ...soonLinks("ai")],
+    links: [
+      { label: "AI setter", href: "/agents" },
+      { label: "Results", href: "/ai-results" },
+      { label: "Setter console", href: "/setter-console" },
+      ...soonLinks("ai"),
+    ],
   },
   { key: "reporting", label: "Reporting", icon: "chart", href: "/reports", soon: true, links: [{ label: "Reports", href: "/reports", soon: true }, ...soonLinks("reporting")] },
 ];
@@ -208,6 +213,7 @@ export const PAGE_PERM: Record<string, Permission> = {
   "/forms": "sites.manage",
   "/funnels": "sites.manage",
   "/domains": "sites.manage",
+  "/setter-console": "inbox.send",
   "/qr-codes": "sites.manage",
   "/campaigns": "marketing.manage",
   "/agents": "ai.manage",
