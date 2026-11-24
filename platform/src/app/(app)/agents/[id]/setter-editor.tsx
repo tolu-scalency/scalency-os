@@ -12,8 +12,9 @@ import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icon";
 import { notify } from "@/components/toast";
 import { Pill } from "@/components/ui";
-import { createClient } from "@/lib/supabase/browser";
+import { callSetter } from "@/lib/call-setter";
 import { BUSINESS_TYPES, DAY_NAMES, THREAD_LOOK, TIMEZONES, businessTypeOf, type SetterBusiness, type SetterRules, type SetterStatus, type ThreadState } from "@/lib/setter";
+import { JourneyTab, KnowledgeTab, RetentionTab, VoiceTab, type KnowledgeItem } from "./growth-tabs";
 import { deleteSetter, newWebhookAddresses, saveGhlChoices, saveSetter, setSetterStatus, setThread } from "../actions";
 
 export type ThreadView = {
@@ -26,7 +27,7 @@ export type ThreadView = {
   nextAt: string | null;
   nextIsOpener: boolean;
   contacted: boolean;
-  origin: "lead" | "reply" | "reactivation";
+  origin: "lead" | "reply" | "reactivation" | "missed_call" | "rebooking";
   appointmentAt: string | null;
   note: string | null;
   updatedAt: string;
@@ -35,27 +36,13 @@ export type ThreadView = {
 
 type Ghl = { locationId: string; locationName: string; calendarId: string; calendarName: string; pipelineId: string; stages: Record<string, string>; checkedAt: string | null; error: string | null };
 type Setter = { id: string; name: string; status: SetterStatus; business: SetterBusiness; rules: SetterRules; ghl: Ghl };
-type Tab = "clinic" | "rules" | "ghl" | "test" | "reactivate" | "conversations";
+export type Tab = "clinic" | "knowledge" | "rules" | "journey" | "retention" | "voice" | "ghl" | "test" | "reactivate" | "conversations";
 type Options = { calendars: { id: string; name: string }[]; pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[] };
 
 const field = "field h-10 w-full text-[13.5px]";
 const area = "field w-full py-2.5 text-[13.5px] leading-relaxed";
 const label = "flex flex-col gap-1.5 text-[12.5px] font-semibold text-navy";
 const hint = "text-[11.5px] font-normal text-muted";
-
-async function callSetter(body: Record<string, unknown>) {
-  const { data, error } = await createClient().functions.invoke("ai-setter", { body });
-  if (error) {
-    let msg = "We couldn't reach the AI setter. Check it's deployed in Supabase (Edge Functions, ai-setter).";
-    try {
-      const ctx = (error as { context?: Response }).context;
-      const j = ctx ? await ctx.json() : null;
-      if (j?.error) msg = j.error;
-    } catch {}
-    return { error: msg } as Record<string, unknown> & { error: string };
-  }
-  return data as Record<string, unknown>;
-}
 
 const NO_STATS = { queued: 0, messaged: 0, replied: 0, booked: 0 };
 
@@ -64,15 +51,19 @@ export function SetterEditor({
   threads,
   canEdit,
   reactivation = NO_STATS,
+  knowledge = [],
+  initialTab,
 }: {
   setter: Setter;
   threads: ThreadView[];
   accountId: string;
   canEdit: boolean;
   reactivation?: { queued: number; messaged: number; replied: number; booked: number };
+  knowledge?: KnowledgeItem[];
+  initialTab?: Tab;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>(setter.ghl.checkedAt ? "test" : "clinic");
+  const [tab, setTab] = useState<Tab>(initialTab ?? (setter.ghl.checkedAt ? "test" : "clinic"));
   const [name, setName] = useState(setter.name);
   const [b, setB] = useState<SetterBusiness>(setter.business);
   const [r, setR] = useState<SetterRules>(setter.rules);
@@ -115,7 +106,11 @@ export function SetterEditor({
 
   const tabs: [Tab, string, string][] = [
     ["clinic", "Business", "building"],
-    ["rules", "Hours and follow-up", "clock"],
+    ["knowledge", "Knowledge", "book"],
+    ["rules", "Hours and alerts", "clock"],
+    ["journey", "Journey", "zap"],
+    ["retention", "Reviews and rebooking", "star"],
+    ["voice", "Voice AI", "phone"],
     ["ghl", "Connect GHL", "link"],
     ["test", "Test chat", "mail"],
     ["reactivate", "Reactivation", "refresh"],
@@ -166,16 +161,20 @@ export function SetterEditor({
         </p>
       )}
 
-      <div className="flex flex-wrap gap-1.5 border-b border-line pb-3">
+      <div className="-mx-1 flex gap-1 overflow-x-auto rounded-2xl bg-white p-1 ring-1 ring-line [scrollbar-width:none]">
         {tabs.map(([k, l, icon]) => (
-          <button key={k} type="button" onClick={() => setTab(k)} className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[13px] font-semibold ${tab === k ? "bg-navy text-white" : "text-muted hover:bg-white hover:text-navy"}`}>
+          <button key={k} type="button" onClick={() => setTab(k)} className={`inline-flex min-h-9 flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-[13px] font-semibold transition-colors ${tab === k ? "bg-navy text-white shadow-sm" : "text-muted hover:bg-surface hover:text-navy"}`}>
             <Icon name={icon as IconName} size={14} /> {l}
           </button>
         ))}
       </div>
 
       {tab === "clinic" && <ClinicTab b={b} set={setBiz} ro={ro} />}
+      {tab === "knowledge" && <KnowledgeTab setterId={setter.id} items={knowledge} b={b} setBiz={setBiz} ro={ro} />}
       {tab === "rules" && <RulesTab r={r} set={setRules} ro={ro} />}
+      {tab === "journey" && <JourneyTab r={r} set={setRules} ro={ro} />}
+      {tab === "retention" && <RetentionTab r={r} set={setRules} b={b} setBiz={setBiz} ro={ro} />}
+      {tab === "voice" && <VoiceTab r={r} set={setRules} ro={ro} />}
       {tab === "ghl" && <GhlTab setter={setter} ro={ro} />}
       {tab === "test" && <TestTab setterId={setter.id} b={b} r={r} />}
       {tab === "reactivate" && <ReactivateTab setterId={setter.id} b={b} set={setBiz} ro={ro} connected={Boolean(setter.ghl.locationId)} live={setter.status !== "off"} stats={reactivation} />}
@@ -520,6 +519,20 @@ function RulesTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<SetterRules
             <span className={hint}>Up to 5, separated by commas.</span>
           </label>
         </div>
+        <div className="grid gap-4 sm:grid-cols-[1fr_220px]">
+          <label className={label}>
+            Alert words (what customers say)
+            <TagListInput value={r.alertKeywords} onChange={(v) => set({ alertKeywords: v })} disabled={ro} placeholder="refund, manager, complaint, reaction, lawyer" />
+            <span className={hint}>If a lead&apos;s message has any of these words or phrases, the team is told straight away. Separate with commas.</span>
+          </label>
+          <label className={label}>
+            When someone says one
+            <select value={r.keywordAction} disabled={ro} onChange={(e) => set({ keywordAction: e.target.value === "handoff" ? "handoff" : "alert" })} className={field}>
+              <option value="alert">Alert the team, AI carries on</option>
+              <option value="handoff">Hand to the team, AI stops</option>
+            </select>
+          </label>
+        </div>
       </Section>
       <Section title="When the AI joins" text="Which conversations the AI takes part in. Your 3 GHL workflows decide what it hears about; these decide what it does with it.">
         <label className="flex items-start gap-2 text-[13.5px]">
@@ -802,7 +815,8 @@ function GhlTab({ setter, ro }: { setter: Setter; ro: boolean }) {
                 ["new_lead", "AI setter: new lead", "Trigger: Facebook Lead Form Submitted (or Form Submitted, or Contact Created). The AI sends the first text within a minute, or when you open."],
                 ["inbound", "AI setter: lead replied", "Trigger: Customer Replied (all channels). The AI answers."],
                 ["booked", "AI setter: booked", "Trigger: Customer Booked Appointment. Stops follow-ups if they booked another way."],
-                ["appointment", "AI setter: appointment status (optional)", "Trigger: Appointment Status (Showed, No Show, Cancelled). Webhook: add Custom Data status = {{appointment.status}}. Gives you show and no-show rates on Results, and alerts you to no-shows."],
+                ["missed_call", "AI setter: missed call (optional)", "Trigger: Call Status, with status No Answer, Busy or Voicemail (inbound calls). Texts back anyone whose call wasn't answered. Turn it on in Reviews and rebooking."],
+                ["appointment", "AI setter: appointment status (optional)", "Trigger: Appointment Status (Showed, No Show, Cancelled). Webhook: add Custom Data status = {{appointment.status}}. Gives you show and no-show rates on Results, alerts you to no-shows, and starts review requests and rebooking. Optional extra custom data: value = the treatment price, treatment = the treatment name."],
               ] as const
             ).map(([k, title, how]) => (
               <div key={k} className="flex flex-col gap-1.5">
@@ -1270,7 +1284,7 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
                 <div className="min-w-0 flex-[1_1_200px]">
                   <div className="truncate text-[14.5px] font-semibold">{t.name}</div>
                   <div className="truncate text-[12px] text-muted">
-                    {t.origin === "reactivation" ? "Reactivation · " : t.origin === "reply" ? "Messaged in · " : ""}
+                    {t.origin === "reactivation" ? "Reactivation · " : t.origin === "reply" ? "Messaged in · " : t.origin === "missed_call" ? "Missed call · " : t.origin === "rebooking" ? "Rebooking · " : ""}
                     {t.channel} · {t.touches} follow-up{t.touches === 1 ? "" : "s"} · updated {fmt(t.updatedAt)}
                     {t.appointmentAt ? ` · consult ${fmt(t.appointmentAt)}` : ""}
                     {t.state === "active" && t.nextAt ? ` · ${t.nextIsOpener ? "first message" : "next follow-up"} ${fmt(t.nextAt)}` : ""}

@@ -8,6 +8,11 @@ const assertEquals = (a: unknown, b: unknown) => deepStrictEqual(a, b);
 const assertMatch = (s: string, re: RegExp) => match(s, re);
 const assertStringIncludes = (s: string, part: string) => ok(s.includes(part), `expected to find ${JSON.stringify(part)}`);
 import {
+  keywordHit,
+  rebookDaysFor,
+  readSite,
+  scanSite,
+  taskText,
   channelOf,
   followUpAt,
   Ghl,
@@ -118,7 +123,7 @@ Deno.test("prompt: booking link modes", () => {
   assertStringIncludes(systemPrompt({ business: { ...business, bookingLink: link, bookingMode: "both" }, rules: {} }, at), "also give the booking link");
   // No link saved: always offers times.
   assert(!systemPrompt({ business: { ...business, bookingLink: "", bookingMode: "link" }, rules: {} }, at).includes("send the booking link"));
-  assertStringIncludes(systemPrompt({ business, rules: {} }, at), "Recommend the one or two services");
+  assertStringIncludes(systemPrompt({ business, rules: {} }, at), "recommend the one service");
 });
 
 Deno.test("free times: 3 days x 3 times, with notice, day and part-of-day filters", () => {
@@ -658,4 +663,88 @@ Deno.test("after booking: the AI can move or cancel the appointment it booked", 
   const d = scripted([() => ({ content: [tool("cancel_appointment", {})] }), () => ({ content: [tool("send_message", { text: "I'll pass that to the team." })] })]);
   const r2 = await runBrain({ business, rules: {} }, { mode: { kind: "reply" }, turns: [], lead: { firstName: "Jess", details: "" } }, { claude: d.claude, freeSlots: async () => [], book: async () => ({ ok: false, error: "x" }) });
   assertEquals(r2.cancelled, undefined);
+});
+
+Deno.test("listening first: a plain hello gets a greeting and a question, prices only when asked", () => {
+  const p = systemPrompt({ business, rules: {} }, new Date("2026-11-24T15:00:00Z"));
+  assertStringIncludes(p, "If they open with just a greeting");
+  assertStringIncludes(p, "Prices: only when they ask");
+  assertStringIncludes(p, "Never start every message with");
+  assert(!p.includes("give one useful thing (the offer, a starting price"));
+  const opener = taskText({ kind: "opener" }, { firstName: "Jess", details: "" });
+  assertStringIncludes(opener, "No prices");
+  assertStringIncludes(taskText({ kind: "missed_call" }, { firstName: "Jess", details: "" }), "missed");
+  assertStringIncludes(taskText({ kind: "review" }, { firstName: "Jess", details: "", reviewLink: "https://g.page/r/x" }), "https://g.page/r/x");
+  assertStringIncludes(taskText({ kind: "rebook" }, { firstName: "Jess", details: "", treatment: "lip filler" }), "lip filler");
+});
+
+Deno.test("keyword alerts: whole words and phrases, any case", () => {
+  assertEquals(keywordHit("I want a REFUND please", ["refund", "manager"]), "refund");
+  assertEquals(keywordHit("can I speak to the manager?", ["speak to the manager"]), "speak to the manager");
+  assertEquals(keywordHit("refunded already", ["refund"]), null);
+  assertEquals(keywordHit("hello", []), null);
+});
+
+Deno.test("journeys and rebooking rules: steps set the follow-up days; treatments set when they're due", () => {
+  const r = rulesOf({ journey: [{ day: 3, action: "call_task" }, { day: 1, action: "sms" }, { day: 99, action: "email" }, { day: 5, action: "nonsense" as never }], rebookOn: true, rebookItems: [{ treatment: "Lip filler", days: 180 }, { treatment: "", days: 10 }] });
+  assertEquals(r.journey, [{ day: 1, action: "sms" }, { day: 3, action: "call_task" }, { day: 5, action: "message" }]);
+  assertEquals(r.followUpDays, [1, 3, 5]);
+  assertEquals(rebookDaysFor("lip filler top-up", r), 180);
+  assertEquals(rebookDaysFor("skin peel", r), 90);
+  assertEquals(rulesOf({}).journey, []);
+  assertEquals(rulesOf({}).followUpDays, [1, 3, 5, 8, 12, 16]);
+});
+
+Deno.test("journeys: a call-task step adds a GHL task instead of a message and schedules the next step", async () => {
+  const c = scripted([() => ({ content: [tool("send_message", { text: "should not send" })] })]);
+  const { ghl, calls } = fakeGhl({ messages: [{ id: "o1", direction: "outbound", body: "Hi Jess", messageType: "TYPE_SMS", dateAdded: "2026-11-23T15:00:00Z" }] });
+  const thread = { ...newThread(), next_action: "followup" as const, last_outbound_at: "2026-11-23T15:00:00Z", sent_ids: ["o1"] };
+  const a2 = { ...agent, rules: { journey: [{ day: 1, action: "call_task" as const }, { day: 3, action: "sms" as const }] } };
+  const r = await work(fakeDb().db, a2, thread, { kind: "followup", touch: 0 }, { claude: c.claude, ghl, now: new Date("2026-11-24T15:00:00Z") });
+  assertEquals(r.journey, "call_task");
+  assert(calls.some((x) => x.path === "/contacts/c1/tasks" && String(x.body?.title).startsWith("Call Jess Doe")));
+  assert(!calls.some((x) => x.path === "/conversations/messages"));
+  assertEquals(thread.touches, 1);
+  assertEquals(thread.next_action, "followup");
+  assertEquals(c.seen.length, 0);
+});
+
+Deno.test("review request: sent after a visit, then the rebooking reminder is scheduled", async () => {
+  const c = scripted([() => ({ content: [tool("send_message", { text: "Hope it went well! Would you mind leaving a quick review?" })] })]);
+  const { ghl } = fakeGhl({});
+  const thread = { ...newThread(), state: "booked" as const, next_action: "review" as const, rebook_at: "2027-02-22T15:00:00.000Z", last_outbound_at: "2026-11-01T10:00:00Z" };
+  const r = await work(fakeDb().db, { ...agent, business: { ...business, reviewLink: "https://g.page/r/glow" } }, thread, { kind: "review" }, { claude: c.claude, ghl, now: new Date("2026-11-24T15:00:00Z") });
+  assertStringIncludes(String(r.sent), "review");
+  assertStringIncludes(JSON.stringify(c.seen[0]), "https://g.page/r/glow");
+  assertEquals(thread.state, "booked");
+  assertEquals(thread.next_action, "rebook");
+  assertEquals(thread.next_action_at, "2027-02-22T15:00:00.000Z");
+});
+
+Deno.test("rebooking: the reminder starts a short new conversation", async () => {
+  const c = scripted([() => ({ content: [tool("send_message", { text: "It's about that time again for your top-up. Shall I find you a time?" })] })]);
+  const { ghl, calls } = fakeGhl({});
+  const thread = { ...newThread(), state: "booked" as const, next_action: "rebook" as const, treatment: "lip filler", last_outbound_at: "2026-08-01T10:00:00Z" };
+  await work(fakeDb().db, agent, thread, { kind: "rebook" }, { claude: c.claude, ghl, now: new Date("2026-11-24T15:00:00Z") });
+  assertEquals(thread.state, "active");
+  assertEquals(thread.origin, "rebooking");
+  assertEquals(thread.next_action, "followup");
+  assert(calls.some((x) => x.path === "/contacts/c1/tags" && JSON.stringify(x.body).includes("ai-rebooking")));
+});
+
+Deno.test("website scan: reads the home page and useful pages on the same site, then pulls out the facts", async () => {
+  const pages: Record<string, string> = {
+    "https://glow.example/": `<html><body><h1>Glow Aesthetics</h1><p>${"Welcome to our clinic in Cardiff. ".repeat(10)}</p><a href="/treatments">Treatments</a><a href="/faq">FAQ</a><a href="https://other.example/treatments">x</a><a href="/logo.png">x</a><script>bad()</script></body></html>`,
+    "https://glow.example/treatments": `<p>${"Lip filler from &pound;180. ".repeat(12)}</p>`,
+    "https://glow.example/faq": `<p>${"Is there downtime? Usually none. ".repeat(10)}</p>`,
+  };
+  const fetcher = (async (u: string | URL) => new Response(pages[String(u)] ?? "", { status: pages[String(u)] ? 200 : 404, headers: { "content-type": "text/html" } })) as typeof fetch;
+  const read = await readSite(new URL("https://glow.example/"), fetcher);
+  assertEquals(read.map((p) => p.url), ["https://glow.example/", "https://glow.example/treatments", "https://glow.example/faq"]);
+  assert(!read[0].text.includes("bad()"));
+  assertStringIncludes(read[1].text, "£180");
+  const c = scripted([() => ({ content: [tool("findings", { clinicName: "Glow Aesthetics", location: "Cardiff", services: "Lip filler from £180", knowledge: [{ question: "Is there downtime?", answer: "Usually none." }, { question: "", answer: "x" }] })] })]);
+  const found = await scanSite(c.claude as never, read);
+  assertEquals(found.business.clinicName, "Glow Aesthetics");
+  assertEquals(found.knowledge, [{ question: "Is there downtime?", answer: "Usually none." }]);
 });

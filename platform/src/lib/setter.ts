@@ -32,7 +32,28 @@ export type SetterBusiness = {
   /** A deposit to secure a treatment booking: payment link and amount. */
   depositLink: string;
   depositAmount: string;
+  /** Google review link sent after a visit. */
+  reviewLink: string;
+  /** Average value of a treatment, for revenue when GHL doesn't send one (0: unknown). */
+  avgValue: number;
+  /** Guarantee tracker: a promise such as "8 extra bookings in 60 days" (0: no guarantee). */
+  guaranteeTarget: number;
+  guaranteeDays: number;
+  guaranteeStart: string;
 };
+
+export type JourneyAction = "message" | "sms" | "email" | "whatsapp" | "call_task" | "setter";
+export type JourneyStep = { day: number; action: JourneyAction };
+export const JOURNEY_ACTIONS: { id: JourneyAction; label: string; hint: string }[] = [
+  { id: "message", label: "AI message", hint: "On the channel they used" },
+  { id: "sms", label: "AI text", hint: "Text message" },
+  { id: "email", label: "AI email", hint: "Email" },
+  { id: "whatsapp", label: "AI WhatsApp", hint: "WhatsApp (if connected in GHL)" },
+  { id: "call_task", label: "Call task", hint: "A GHL task for the team to call" },
+  { id: "setter", label: "Setter", hint: "Into the setter console" },
+];
+export type RebookItem = { treatment: string; days: number };
+export type VoiceMode = "off" | "missed" | "after_hours" | "all_day";
 
 export type BusinessType = "med_spa" | "dental" | "home_services" | "coaching" | "real_estate" | "fitness" | "other";
 
@@ -161,6 +182,22 @@ export type SetterRules = {
   skipTags: string[];
   /** After a team member replies: 0 = until handed back, otherwise hours. */
   teamPauseHours: number;
+  /** Follow-up journey (empty: the standard AI follow-ups on followUpDays). */
+  journey: JourneyStep[];
+  /** Words or phrases that alert the team, or hand the lead straight over. */
+  alertKeywords: string[];
+  keywordAction: "alert" | "handoff";
+  missedCall: boolean;
+  reviewOn: boolean;
+  reviewHours: number;
+  rebookOn: boolean;
+  rebookDays: number;
+  rebookItems: RebookItem[];
+  /** Voice AI (needs a voice provider and a UK number before it can go live). */
+  voiceProvider: "" | "retell" | "vapi";
+  voiceMode: VoiceMode;
+  voiceCallNewLeads: boolean;
+  voiceTransfer: string;
 };
 
 export type SetterStatus = "off" | "test" | "live";
@@ -193,6 +230,19 @@ export const DEFAULT_RULES: SetterRules = {
   onlyTags: [],
   skipTags: [],
   teamPauseHours: 0,
+  journey: [],
+  alertKeywords: [],
+  keywordAction: "alert",
+  missedCall: false,
+  reviewOn: false,
+  reviewHours: 3,
+  rebookOn: false,
+  rebookDays: 90,
+  rebookItems: [],
+  voiceProvider: "",
+  voiceMode: "off",
+  voiceCallNewLeads: false,
+  voiceTransfer: "",
 };
 
 /** The pilot demo: a med spa built from the niche playbook's typical US prices. Replace with the real clinic's details. */
@@ -236,12 +286,21 @@ export const DEMO_BUSINESS: SetterBusiness = {
   reactivationOffer: "",
   depositLink: "",
   depositAmount: "",
+  reviewLink: "",
+  avgValue: 0,
+  guaranteeTarget: 0,
+  guaranteeDays: 60,
+  guaranteeStart: "",
 };
 
 // The med spa example is the demo itself.
 const EXAMPLE_KEYS = ["clinicName", "consultName", "consultLength", "consultPrice", "services", "offer", "financing", "whoTreats", "policies", "proof", "faqs", "tone"] as const;
 BUSINESS_TYPES[0].example = Object.fromEntries(EXAMPLE_KEYS.map((k) => [k, DEMO_BUSINESS[k]]));
 
+const num = (v: unknown, min: number, max: number, d: number) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && v !== "" && v != null ? Math.min(max, Math.max(min, n)) : d;
+};
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\r\n/g, "\n").trim().slice(0, max) : "");
 
 export function cleanBusiness(v: unknown): SetterBusiness {
@@ -282,6 +341,11 @@ export function cleanBusiness(v: unknown): SetterBusiness {
     reactivationOffer: str(o.reactivationOffer, 500),
     depositLink: /^https:\/\/[^\s]+$/.test(String(o.depositLink ?? "").trim()) ? String(o.depositLink).trim().slice(0, 500) : "",
     depositAmount: str(o.depositAmount, 40),
+    reviewLink: /^https:\/\/[^\s]+$/.test(String(o.reviewLink ?? "").trim()) ? String(o.reviewLink).trim().slice(0, 500) : "",
+    avgValue: num(o.avgValue, 0, 100000, 0),
+    guaranteeTarget: num(o.guaranteeTarget, 0, 10000, 0),
+    guaranteeDays: num(o.guaranteeDays, 7, 365, 60),
+    guaranteeStart: /^\d{4}-\d{2}-\d{2}$/.test(String(o.guaranteeStart ?? "")) ? String(o.guaranteeStart) : "",
   };
 }
 
@@ -319,7 +383,32 @@ export function cleanRules(v: unknown): SetterRules {
     onlyTags: cleanTags(o.onlyTags),
     skipTags: cleanTags(o.skipTags),
     teamPauseHours: [0, 4, 24, 72, 168].includes(Number(o.teamPauseHours)) ? Number(o.teamPauseHours) : 0,
+    journey: cleanJourney(o.journey),
+    alertKeywords: [...new Set((Array.isArray(o.alertKeywords) ? o.alertKeywords : typeof o.alertKeywords === "string" ? o.alertKeywords.split(",") : []).map((k) => String(k).trim().toLowerCase().slice(0, 60)).filter((k) => k.length >= 2))].slice(0, 40),
+    keywordAction: o.keywordAction === "handoff" ? "handoff" : "alert",
+    missedCall: o.missedCall === true,
+    reviewOn: o.reviewOn === true,
+    reviewHours: num(o.reviewHours, 1, 168, 3),
+    rebookOn: o.rebookOn === true,
+    rebookDays: num(o.rebookDays, 7, 730, 90),
+    rebookItems: (Array.isArray(o.rebookItems) ? o.rebookItems : [])
+      .map((i) => ({ treatment: str((i as RebookItem)?.treatment, 60), days: num((i as RebookItem)?.days, 7, 730, 90) }))
+      .filter((i) => i.treatment)
+      .slice(0, 20),
+    voiceProvider: o.voiceProvider === "retell" || o.voiceProvider === "vapi" ? o.voiceProvider : "",
+    voiceMode: (["off", "missed", "after_hours", "all_day"] as const).includes(o.voiceMode as never) ? (o.voiceMode as VoiceMode) : "off",
+    voiceCallNewLeads: o.voiceCallNewLeads === true,
+    voiceTransfer: /^\+?[0-9 ]{7,20}$/.test(String(o.voiceTransfer ?? "").trim()) ? String(o.voiceTransfer).trim() : "",
   };
+}
+
+export function cleanJourney(v: unknown): JourneyStep[] {
+  const ids = JOURNEY_ACTIONS.map((a) => a.id) as string[];
+  return (Array.isArray(v) ? v : [])
+    .map((j) => ({ day: Math.round(Number((j as JourneyStep)?.day)), action: (ids.includes((j as JourneyStep)?.action) ? (j as JourneyStep).action : "message") as JourneyAction }))
+    .filter((j) => Number.isInteger(j.day) && j.day > 0 && j.day <= 60)
+    .sort((a, b) => a.day - b.day)
+    .slice(0, 12);
 }
 
 export const TIMEZONES = [

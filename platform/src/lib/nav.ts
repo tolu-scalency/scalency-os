@@ -41,10 +41,7 @@ export const SOON_PAGES: SoonPage[] = [
   { slug: "trigger-links", group: "marketing", icon: "link", title: "Trigger links", tagline: "Links that tag people and start workflows when clicked.", bullets: ["Track who clicked", "Start follow-ups", "Use in any message"] },
   { slug: "affiliates", group: "marketing", icon: "team", title: "Affiliates", tagline: "Partners who refer customers for commission.", bullets: ["Referral links", "Commission tracking", "Partner portal"] },
   // AI
-  { slug: "voice-receptionist", group: "ai", icon: "phone", title: "AI voice receptionist", tagline: "An AI that answers calls, qualifies leads and books appointments.", bullets: ["Answers 24/7 in a natural voice", "Books straight into the calendar", "Call summary on the contact"] },
-  { slug: "conversation-ai", group: "ai", icon: "inbox", title: "Conversation AI", tagline: "AI that replies to texts and chats like your team.", bullets: ["Trained on your business", "Hands over to a person when needed", "Books calls"] },
   { slug: "creative-studio", group: "ai", icon: "video", title: "AI creative studio", tagline: "Make images and videos for ads and social posts.", bullets: ["Connect leading image and video models", "Brand colours and logos", "Save straight to the social planner"] },
-  { slug: "knowledge-base", group: "ai", icon: "book", title: "Knowledge base", tagline: "What the AI knows about your business.", bullets: ["Upload documents and FAQs", "Add your website", "Used by every AI feature"] },
   // Sites
   { slug: "surveys", group: "sites", icon: "form", title: "Surveys and quizzes", tagline: "Multi-step forms that qualify leads.", bullets: ["Logic based on answers", "Scores and results pages", "Answers saved to fields"] },
   { slug: "chat-widget", group: "sites", icon: "inbox", title: "Chat widget", tagline: "A chat bubble for your website.", bullets: ["Chats land in the inbox", "Collects name and phone", "AI replies out of hours"] },
@@ -56,10 +53,8 @@ export const SOON_PAGES: SoonPage[] = [
   { slug: "certificates", group: "memberships", icon: "star", title: "Certificates", tagline: "Certificates when people finish a course.", bullets: ["Your branding", "Sent automatically", "Verifiable links"] },
   // Reputation
   { slug: "reviews", group: "reputation", icon: "star", title: "Reviews", tagline: "Google and Facebook reviews in one place.", bullets: ["Reply from Scalency", "AI suggested replies", "Alerts for bad reviews"] },
-  { slug: "review-requests", group: "reputation", icon: "send", title: "Review requests", tagline: "Ask happy customers for a review automatically.", bullets: ["By text or email", "After a deal is won", "Track who left one"] },
   { slug: "review-widgets", group: "reputation", icon: "star", title: "Review widgets", tagline: "Show your best reviews on your website.", bullets: ["Copy and paste code", "Matches your brand", "Updates itself"] },
   // Reporting
-  { slug: "attribution", group: "reporting", icon: "chart", title: "Attribution", tagline: "Which channels bring leads and sales.", bullets: ["First and last touch", "Revenue by source", "Ad spend return"] },
   { slug: "call-reporting", group: "reporting", icon: "phone", title: "Call reporting", tagline: "Calls answered, missed and booked.", bullets: ["By person and number", "Recordings", "Busiest times"] },
   { slug: "appointment-report", group: "reporting", icon: "calendar", title: "Appointment report", tagline: "Bookings, shows and no-shows.", bullets: ["Show rate by calendar", "By team member", "Trends over time"] },
 ];
@@ -72,6 +67,27 @@ const soonLinks = (group: string): NavLink[] => SOON_PAGES.filter((p) => p.group
 
 export const NAV: NavGroup[] = [
   { key: "home", label: "Home", icon: "home", href: "/dashboard" },
+  {
+    key: "ai",
+    label: "AI",
+    icon: "spark",
+    href: "/agents",
+    links: [
+      { label: "AI setter", href: "/agents", hint: "Set up, test and switch on" },
+      { label: "Command centre", href: "/command-centre", hint: "Every live AI conversation" },
+      { label: "Setter console", href: "/setter-console", hint: "Leads that need a person" },
+      { label: "Results", href: "/ai-results", hint: "Speed to lead, bookings, shows" },
+      { label: "Revenue", href: "/revenue", hint: "Money by channel" },
+      { label: "Knowledge", href: "/ai/knowledge", hint: "Approved answers and website scan" },
+      { label: "Journeys", href: "/ai/journey", hint: "Follow-up steps until they book" },
+      { label: "Reviews and rebooking", href: "/ai/retention", hint: "Reviews, rebooking, missed calls" },
+      { label: "Reactivation", href: "/ai/reactivate", hint: "Bring old leads back" },
+      { label: "Voice AI", href: "/ai/voice", hint: "Calls and live transfer" },
+      { label: "Usage", href: "/usage", hint: "Messages per clinic" },
+      { label: "Free audit", href: "/audit", hint: "Missed-revenue calculator for sales" },
+      ...soonLinks("ai"),
+    ],
+  },
   {
     key: "inbox",
     label: "Inbox",
@@ -129,7 +145,7 @@ export const NAV: NavGroup[] = [
     ],
   },
   { key: "memberships", label: "Memberships", icon: "book", href: S("courses"), soon: true, links: soonLinks("memberships") },
-  { key: "reputation", label: "Reputation", icon: "star", href: S("reviews"), soon: true, links: soonLinks("reputation") },
+  { key: "reputation", label: "Reputation", icon: "star", href: S("reviews"), links: [{ label: "Review requests", href: "/ai/retention" }, ...soonLinks("reputation")] },
 
   {
     key: "automation",
@@ -139,19 +155,7 @@ export const NAV: NavGroup[] = [
     href: "/workflows",
     links: [{ label: "Workflows", href: "/workflows" }, { label: "AI setup", href: "/ai-builder" }],
   },
-  {
-    key: "ai",
-    label: "AI",
-    icon: "spark",
-    href: "/agents",
-    links: [
-      { label: "AI setter", href: "/agents" },
-      { label: "Results", href: "/ai-results" },
-      { label: "Setter console", href: "/setter-console" },
-      ...soonLinks("ai"),
-    ],
-  },
-  { key: "reporting", label: "Reporting", icon: "chart", href: "/reports", soon: true, links: [{ label: "Reports", href: "/reports", soon: true }, ...soonLinks("reporting")] },
+  { key: "reporting", label: "Reporting", icon: "chart", href: "/revenue", links: [{ label: "Revenue by channel", href: "/revenue" }, { label: "AI results", href: "/ai-results" }, { label: "Reports", href: "/reports", soon: true }, ...soonLinks("reporting")] },
 ];
 
 export const SETTINGS_NAV: NavGroup = {
@@ -214,6 +218,10 @@ export const PAGE_PERM: Record<string, Permission> = {
   "/funnels": "sites.manage",
   "/domains": "sites.manage",
   "/setter-console": "inbox.send",
+  "/command-centre": "inbox.send",
+  "/ai": "ai.manage",
+  "/usage": "ai.manage",
+  "/revenue": "reporting.view",
   "/qr-codes": "sites.manage",
   "/campaigns": "marketing.manage",
   "/agents": "ai.manage",

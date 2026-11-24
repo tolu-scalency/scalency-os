@@ -113,9 +113,9 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: st
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        {eyebrow && <div className="eyebrow mb-2">{eyebrow}</div>}
-        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.03em] sm:text-[28px]">{title}</h1>
-        {subtitle && <div className="mt-1 text-[14px] text-muted">{subtitle}</div>}
+        {eyebrow && <div className="mb-2.5 inline-flex items-center rounded-full bg-chip px-2.5 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-brand">{eyebrow}</div>}
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.03em] sm:text-[30px]">{title}</h1>
+        {subtitle && <div className="mt-1.5 max-w-[720px] text-[14.5px] leading-relaxed text-muted">{subtitle}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
