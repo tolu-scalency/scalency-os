@@ -18,7 +18,7 @@ export default async function UsagePage() {
   const start = monthStart().toISOString();
   const last = monthStart(1).toISOString();
   const rows = await Promise.all(
-    ws.workspaces.map(async (w) => {
+    [{ id: ws.account.id, name: ws.account.name }].map(async (w) => {
       const c = (q: PromiseLike<{ count: number | null }>) => Promise.resolve(q).then((r) => r.count ?? 0);
       const turns = () => supabase.from("setter_turns").select("id", { count: "exact", head: true }).eq("account_id", w.id);
       const [ai, aiLast, tests, threads, calls] = await Promise.all([
@@ -37,7 +37,7 @@ export default async function UsagePage() {
   const max = Math.max(1, ...rows.map((r) => r.ai));
   return (
     <Page>
-      <PageHeader eyebrow="AI" title="Usage" subtitle={`What the AI has done in ${month}, per clinic.`} />
+      <PageHeader eyebrow="AI" title="Usage" subtitle={`What the AI has done for ${ws.account.name} in ${month}.`} />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {(
           [
@@ -56,7 +56,7 @@ export default async function UsagePage() {
       </div>
       <section className="card overflow-hidden">
         <div className="border-b border-line px-5 py-4">
-          <h2 className="text-[16px] font-semibold">By clinic</h2>
+          <h2 className="text-[16px] font-semibold">This workspace</h2>
           <p className="text-[12.5px] text-muted">Test chat messages are free and limited to 300 a day. Last month shown for comparison.</p>
         </div>
         <div className="divide-y divide-line">

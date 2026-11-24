@@ -10,7 +10,7 @@ const modules: { group: string; items: { name: string; text: string; icon: IconN
       { name: "Contacts", text: "Every lead, with notes and history", icon: "users", live: true },
       { name: "Pipeline", text: "Drag deals through your stages", icon: "pipeline", live: true },
       { name: "Tasks", text: "Follow-ups that never slip", icon: "tasks", live: true },
-      { name: "Proposals", text: "Send, sign and get paid", icon: "card", live: false },
+      { name: "Revenue", text: "Money by channel, cost per shown consult", icon: "pound", live: true },
     ],
   },
   {
@@ -18,8 +18,8 @@ const modules: { group: string; items: { name: string; text: string; icon: IconN
     items: [
       { name: "Inbox", text: "Email and texts in one thread", icon: "inbox", live: true },
       { name: "Team chat", text: "Channels with live lead alerts", icon: "hash", live: true },
-      { name: "Calendar", text: "Booking links and reminders", icon: "calendar", live: false },
-      { name: "Campaigns", text: "Email and SMS broadcasts", icon: "megaphone", live: false },
+      { name: "Command centre", text: "Every AI conversation, live", icon: "inbox", live: true },
+      { name: "Voice AI", text: "Calls in 60 seconds, live transfer", icon: "mic", live: true },
     ],
   },
   {
@@ -27,32 +27,32 @@ const modules: { group: string; items: { name: string; text: string; icon: IconN
     items: [
       { name: "Workflows", text: "Triggers, waits, texts and emails", icon: "zap", live: true },
       { name: "AI assistant", text: "Ask anything about your pipeline", icon: "spark", live: true },
-      { name: "AI agents", text: "Reply and book while you sleep", icon: "user", live: false },
-      { name: "AI builder", text: "Describe it, we build the workflow", icon: "activity", live: false },
+      { name: "AI setter", text: "Replies, qualifies and books 24/7", icon: "user", live: true },
+      { name: "Show-up engine", text: "Reminders, no-shows, waitlist", icon: "calendar", live: true },
     ],
   },
   {
     group: "Grow",
     items: [
-      { name: "Funnels", text: "Pages that turn clicks into calls", icon: "funnel", live: false },
-      { name: "Forms", text: "Qualify leads as they answer", icon: "form", live: false },
-      { name: "Client onboarding", text: "A checklist for every new client", icon: "onboarding", live: false },
-      { name: "Ads insights", text: "Cost per booked call, not per click", icon: "chart", live: false },
+      { name: "Funnels", text: "Pages that turn clicks into calls", icon: "funnel", live: true },
+      { name: "Forms", text: "Qualify leads as they answer", icon: "form", live: true },
+      { name: "Creative studio", text: "Ads checked against UK rules", icon: "image", live: true },
+      { name: "Reviews and rebooking", text: "Five stars, then back again", icon: "star", live: true },
     ],
   },
 ];
 
 const flow: { title: string; text: string; icon: IconName; at: string }[] = [
   { title: "Enquiry lands", text: "From your form, ads or a call.", icon: "user", at: "0s" },
-  { title: "Instant reply", text: "A text and email go out on their own.", icon: "send", at: "+30s" },
-  { title: "Team alerted", text: "#leads lights up with their details.", icon: "hash", at: "+31s" },
-  { title: "Call booked", text: "A task for the closer, stage moves.", icon: "calendar", at: "+2h" },
-  { title: "Won", text: "Value lands in your pipeline report.", icon: "pound", at: "Day 3" },
+  { title: "AI replies", text: "It asks what they want, like a person.", icon: "spark", at: "+4s" },
+  { title: "AI calls", text: "Voice AI rings them inside a minute.", icon: "phone", at: "+60s" },
+  { title: "Booked", text: "Straight into your calendar, 4 reminders set.", icon: "calendar", at: "+9m" },
+  { title: "Shown up", text: "Confirmed, attended, revenue on the dashboard.", icon: "pound", at: "Day 3" },
 ];
 
 export function HomeExtras() {
   return (
-    <div className="overflow-x-clip bg-white font-sans text-navy">
+    <div className="home-extras overflow-x-clip bg-white font-sans text-navy">
       {/* The product map */}
       <section className="relative overflow-hidden py-16 sm:py-24">
         <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[900px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(85,227,236,0.18),transparent)]" />
@@ -95,7 +95,7 @@ export function HomeExtras() {
       </section>
 
       {/* How a lead flows */}
-      <section className="relative overflow-hidden bg-[#061a3a] py-16 text-white sm:py-24">
+      <section className="relative overflow-hidden bg-[linear-gradient(135deg,#0465C7_0%,#0a5fe3_45%,#2FA8EB_100%)] py-16 text-white sm:py-24">
         <div className="pointer-events-none absolute -left-40 top-10 h-[420px] w-[420px] rounded-full bg-[radial-gradient(closest-side,rgba(85,227,236,0.25),transparent)]" />
         <div className="pointer-events-none absolute -right-40 bottom-0 h-[420px] w-[420px] rounded-full bg-[radial-gradient(closest-side,rgba(10,95,227,0.45),transparent)]" />
         <div className="relative mx-auto max-w-[1200px] px-6 sm:px-8">

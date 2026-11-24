@@ -8,6 +8,7 @@ const assertEquals = (a: unknown, b: unknown) => deepStrictEqual(a, b);
 const assertMatch = (s: string, re: RegExp) => match(s, re);
 const assertStringIncludes = (s: string, part: string) => ok(s.includes(part), `expected to find ${JSON.stringify(part)}`);
 import {
+  opportunityAudit,
   nextReminder,
   isConfirmation,
   checkCreative,
@@ -871,4 +872,13 @@ Deno.test("show-up: booking schedules the first reminder; a reminder schedules t
   assertEquals(booked.next_action_at, "2026-11-29T14:00:00.000Z");
   assertEquals(booked.state, "booked");
   assertStringIncludes(JSON.stringify(c2.seen[0]), "reply YES");
+});
+
+Deno.test("AI opportunity audit: findings biggest first, with a monthly total", async () => {
+  const c = scripted([() => ({ content: [tool("audit", { headline: "About £4,000 a month is slipping away", summary: "Good reviews, slow replies.", scores: [{ area: "Speed to lead", score: 30, note: "Replies take hours" }], findings: [{ area: "Speed to lead", issue: "Replies take 4 hours", fix: "AI replies in a minute (120 enquiries x 10% x £250)", monthly: 3000, effort: "low" }, { area: "Reviews", issue: "No review requests", fix: "Ask after every visit", monthly: 1000, effort: "bogus" }], roadmap: [{ phase: "First 30 days", items: ["Switch on the AI setter"] }] })] })]);
+  const r = await opportunityAudit(c.claude as never, { business: "Glow", monthly_enquiries: 120 }, []);
+  assertEquals(r.monthlyTotal, 4000);
+  assertEquals(r.findings[1].effort, "medium");
+  assertEquals(r.roadmap[0].items, ["Switch on the AI setter"]);
+  assertStringIncludes(JSON.stringify(c.seen[0]), "monthly enquiries: 120");
 });

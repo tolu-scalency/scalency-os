@@ -22,7 +22,7 @@ const ORIGIN: Record<string, string> = { lead: "New leads", reply: "Messaged in"
 export default async function RevenuePage({ searchParams }: { searchParams: Promise<{ days?: string; scope?: string }> }) {
   const [sp, ws] = await Promise.all([searchParams, getWorkspace()]);
   const days = PERIODS.find((p) => String(p) === sp.days) ?? 90;
-  const all = sp.scope === "all" && ws.workspaces.length > 1;
+  const all = false;
   const accounts = all ? ws.workspaces.map((w) => w.id) : [ws.account.id];
   const now = nowMs();
   const since = new Date(now - days * 86_400_000).toISOString();
@@ -85,7 +85,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
         subtitle={`${all ? `All ${accounts.length} clinics` : ws.account.name} · last ${days} days`}
         actions={
           <>
-            {ws.workspaces.length > 1 && (
+            {false && (
               <div className="flex gap-1 rounded-xl bg-surface p-1">
                 <Link href={link({ scope: "" })} className={`rounded-lg px-3 py-1.5 text-[12.5px] font-semibold ${!all ? "bg-white text-navy shadow-sm" : "text-muted"}`}>
                   This clinic

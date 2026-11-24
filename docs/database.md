@@ -329,6 +329,7 @@ Migration `20261202090000_ai_setter`. The AI itself runs in the Supabase functio
 - `setter_versions`: every save of an AI setter's business details and rules (the 40 newest are kept), for Restore.
 - `creatives`: Creative studio copy with its UK ad-rules check and status (draft, in_review, approved, rejected). Approving needs `settings.manage`.
 - `ad_spend`: ad spend per lead source and month, for cost per lead, booking and shown consult on Revenue.
+- Team replies and audits (SQL-16, `20261208090000_team_replies_audits.sql`): `setter_turns.role` can be `team` (a message a team member sent from the command centre). `audits`: saved AI opportunity audit reports per workspace (intake answers, report, monthly total).
 - Contacts copied from GHL (SQL-11, `20261203090000_ghl_contacts.sql`): the AI setter can import a sub-account's contacts and copies each new GHL lead in, one way only. They have `source = 'GHL'` and `custom ->> 'ghl_id'` (indexed). They're matched to existing contacts by GHL ID, email or phone, and never get consent set. They don't start Scalency workflows (contact created, tag added or removed), because GHL stays in charge of messaging them.
 
 ## Not in this version yet

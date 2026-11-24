@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { notify } from "@/components/toast";
@@ -56,6 +56,7 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
   const [summary, setSummary] = useState<Record<string, { summary: string; next: string }>>({});
   const [busy, setBusy] = useState("");
   const [, start] = useTransition();
+  const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 30_000);
@@ -71,6 +72,11 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
     [items, filter, q],
   );
   const open = items.find((t) => t.id === openId) ?? list[0] ?? null;
+  // Keep the newest message in view when switching conversations or when new ones arrive.
+  const lastAt = open?.turns.at(-1)?.at;
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [open?.id, lastAt]);
   const counts = { active: items.filter((t) => t.state === "active").length, handed_over: items.filter((t) => t.state === "handed_over").length, waiting: items.filter((t) => t.waiting && t.state === "active").length, booked: items.filter((t) => t.state === "booked").length };
 
   const summarise = async (t: LiveThread) => {
@@ -91,7 +97,7 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
         {(
           [
             ["AI talking now", counts.active, "spark", "text-brand"],
@@ -100,7 +106,7 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
             ["Booked", counts.booked, "checkCircle", "text-ok"],
           ] as const
         ).map(([k, v, icon, c]) => (
-          <div key={k} className="card flex items-center gap-3 p-4">
+          <div key={k} className="card flex items-center gap-3 px-4 py-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface">
               <Icon name={icon} size={17} />
             </span>
@@ -112,8 +118,8 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
         ))}
       </div>
 
-      <div className="grid min-h-[620px] gap-4 lg:grid-cols-[360px_1fr]">
-        <section className="card flex min-h-0 flex-col overflow-hidden">
+      <div className="grid gap-4 lg:h-[calc(100dvh-300px)] lg:min-h-[480px] lg:grid-cols-[340px_1fr]">
+        <section className="card flex max-h-[60dvh] min-h-0 flex-col overflow-hidden lg:max-h-none">
           <div className="flex flex-col gap-2.5 border-b border-line p-3">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or clinic" aria-label="Search conversations" className="field h-10 w-full text-[13px]" />
             <div className="flex flex-wrap gap-1">
@@ -153,7 +159,7 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
           </div>
         </section>
 
-        <section className="card flex min-h-0 flex-col overflow-hidden">
+        <section className="card flex h-[75dvh] min-h-0 flex-col overflow-hidden lg:h-auto">
           {!open ? (
             <div className="flex flex-1 items-center justify-center p-8 text-center text-[13px] text-muted">Choose a conversation to read along.</div>
           ) : (
@@ -189,7 +195,8 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
               </div>
 
               <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_280px]">
-                <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto bg-surface/60 p-5">
+                <div className="flex min-h-0 flex-col">
+                <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-surface/60 p-5">
                   {open.turns.length === 0 && <div className="m-auto text-[13px] text-muted">No messages yet.</div>}
                   {open.turns.map((m, i) =>
                     m.role === "event" ? (
@@ -198,13 +205,16 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
                       </div>
                     ) : (
                       <div key={i} className={`flex max-w-[78%] flex-col ${m.role === "lead" ? "self-start" : "self-end items-end"}`}>
-                        <div className={`whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${m.role === "lead" ? "bg-white text-navy ring-1 ring-line" : "bg-brand text-white"}`}>{m.body}</div>
+                        <div className={`whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${m.role === "lead" ? "bg-white text-navy ring-1 ring-line" : m.role === "team" ? "bg-navy text-white" : "bg-brand text-white"}`}>{m.body}</div>
                         <div className="mt-1 px-1 font-mono text-[10.5px] text-faint">
-                          {m.role === "ai" ? open.assistant : open.name.split(" ")[0]} · {clock(m.at)}
+                          {m.role === "ai" ? `${open.assistant} (AI)` : m.role === "team" ? "Team" : open.name.split(" ")[0]} · {clock(m.at)}
                         </div>
                       </div>
                     ),
                   )}
+                  <div ref={endRef} />
+                </div>
+                <Composer thread={open} onSent={() => start(() => router.refresh())} onTakeOver={() => setState(open, "paused")} busy={busy === `t${open.id}`} />
                 </div>
                 <aside className="flex flex-col gap-4 border-t border-line p-5 lg:border-l lg:border-t-0">
                   <div>
@@ -239,12 +249,74 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
                       {open.score == null && Object.keys(open.qualification).length === 0 && <span className="text-[12.5px] text-muted">Nothing yet.</span>}
                     </div>
                   </div>
-                  <p className="mt-auto text-[11.5px] text-muted">To reply yourself, open them in GHL. Taking over stops the AI messaging this lead until you hand it back.</p>
+                  <p className="mt-auto text-[11.5px] text-muted">Taking over stops the AI messaging this lead until you hand it back. Your replies go out through GHL on the channel they used.</p>
                 </aside>
               </div>
             </>
           )}
         </section>
+      </div>
+    </div>
+  );
+}
+
+/** The team's reply box: shown once a person has taken over. The AI can draft a reply to edit first. */
+function Composer({ thread, onSent, onTakeOver, busy }: { thread: LiveThread; onSent: () => void; onTakeOver: () => void; busy: boolean }) {
+  const [text, setText] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
+  const team = thread.state === "paused" || thread.state === "handed_over";
+  if (!team)
+    return (
+      <div className="flex flex-wrap items-center gap-3 border-t border-line bg-white px-4 py-3">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-chip text-brand">
+          <Icon name="spark" size={14} />
+        </span>
+        <span className="min-w-0 flex-1 text-[13px] text-muted">The AI is handling this conversation. Take over to reply yourself.</span>
+        <button type="button" disabled={busy} onClick={onTakeOver} className="btn-primary inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3.5 text-[12.5px] font-semibold">
+          <Icon name="user" size={13} /> Take over and reply
+        </button>
+      </div>
+    );
+  const draft = async () => {
+    setDrafting(true);
+    const r = await callSetter({ agent_id: thread.agentId, action: "draft_reply", thread_id: thread.id });
+    setDrafting(false);
+    if ("error" in r && r.error) return void notify(String(r.error), "bad");
+    setText(String(r.draft ?? ""));
+  };
+  const send = async () => {
+    if (!text.trim()) return;
+    setSending(true);
+    const r = await callSetter({ agent_id: thread.agentId, action: "team_send", thread_id: thread.id, text });
+    setSending(false);
+    if ("error" in r && r.error) return void notify(String(r.error), "bad");
+    setText("");
+    notify("Sent", "ok");
+    onSent();
+  };
+  return (
+    <div className="border-t border-line bg-white p-3">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
+        }}
+        rows={3}
+        maxLength={1600}
+        placeholder={`Reply to ${thread.name.split(" ")[0]} as the team (${thread.channel === "Live_Chat" ? "web chat" : thread.channel})…`}
+        className="field w-full resize-none py-2.5 text-[13.5px] leading-relaxed"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" disabled={drafting} onClick={draft} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold">
+          <Icon name="spark" size={13} /> {drafting ? "Drafting…" : text ? "Redraft with AI" : "Draft with AI"}
+        </button>
+        <span className="text-[11.5px] text-muted">Edit anything before sending. Ctrl + Enter sends.</span>
+        <span className="ml-auto font-mono text-[11px] text-faint">{text.length}/1600</span>
+        <button type="button" disabled={sending || !text.trim()} onClick={send} className="btn-primary inline-flex min-h-9 items-center gap-1.5 rounded-xl px-4 text-[12.5px] font-semibold disabled:opacity-50">
+          <Icon name="send" size={13} /> {sending ? "Sending…" : "Send"}
+        </button>
       </div>
     </div>
   );

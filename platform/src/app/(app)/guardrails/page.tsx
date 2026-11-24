@@ -29,7 +29,7 @@ export default async function GuardrailsPage({ searchParams }: { searchParams: P
   const { data } = await supabase
     .from("setter_turns")
     .select("id, body, created_at, account_id, setter_threads(contact_name)")
-    .in("account_id", ws.workspaces.map((w) => w.id))
+    .eq("account_id", ws.account.id)
     .eq("role", "event")
     .gte("created_at", since(90))
     .or("body.ilike.Guardrail*,body.ilike.Said*,body.ilike.Opted out*,body.ilike.*marketing consent*")
@@ -71,7 +71,7 @@ export default async function GuardrailsPage({ searchParams }: { searchParams: P
                 <span className="block text-[13.5px] text-navy">{r.body}</span>
                 <span className="block text-[12px] text-muted">
                   {r.setter_threads?.contact_name || "A lead"}
-                  {ws.workspaces.length > 1 ? ` · ${ws.workspaces.find((w) => w.id === r.account_id)?.name ?? ""}` : ""}
+                  
                 </span>
               </span>
               <span className="font-mono text-[12px] text-faint">{fmt(r.created_at)}</span>
