@@ -13,8 +13,8 @@ import { Icon, type IconName } from "@/components/icon";
 import { notify } from "@/components/toast";
 import { Pill } from "@/components/ui";
 import { callSetter } from "@/lib/call-setter";
-import { BUSINESS_TYPES, DAY_NAMES, THREAD_LOOK, TIMEZONES, businessTypeOf, type SetterBusiness, type SetterRules, type SetterStatus, type ThreadState } from "@/lib/setter";
-import { JourneyTab, KnowledgeTab, RetentionTab, VoiceTab, type KnowledgeItem } from "./growth-tabs";
+import { cleanBusiness, cleanRules, STAGE_KEYS, BUSINESS_TYPES, DAY_NAMES, THREAD_LOOK, TIMEZONES, businessTypeOf, type SetterBusiness, type SetterRules, type SetterStatus, type ThreadState } from "@/lib/setter";
+import { JourneyTab, KnowledgeTab, RetentionTab, ShowUpTab, VersionsPanel, VoiceTab, type CallItem, type KnowledgeItem, type VersionItem } from "./growth-tabs";
 import { deleteSetter, newWebhookAddresses, saveGhlChoices, saveSetter, setSetterStatus, setThread } from "../actions";
 
 export type ThreadView = {
@@ -36,7 +36,7 @@ export type ThreadView = {
 
 type Ghl = { locationId: string; locationName: string; calendarId: string; calendarName: string; pipelineId: string; stages: Record<string, string>; checkedAt: string | null; error: string | null };
 type Setter = { id: string; name: string; status: SetterStatus; business: SetterBusiness; rules: SetterRules; ghl: Ghl };
-export type Tab = "clinic" | "knowledge" | "rules" | "journey" | "retention" | "voice" | "ghl" | "test" | "reactivate" | "conversations";
+export type Tab = "clinic" | "knowledge" | "rules" | "journey" | "showup" | "retention" | "voice" | "ghl" | "test" | "reactivate" | "conversations";
 type Options = { calendars: { id: string; name: string }[]; pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[] };
 
 const field = "field h-10 w-full text-[13.5px]";
@@ -53,6 +53,8 @@ export function SetterEditor({
   reactivation = NO_STATS,
   knowledge = [],
   initialTab,
+  versions = [],
+  calls = [],
 }: {
   setter: Setter;
   threads: ThreadView[];
@@ -61,6 +63,8 @@ export function SetterEditor({
   reactivation?: { queued: number; messaged: number; replied: number; booked: number };
   knowledge?: KnowledgeItem[];
   initialTab?: Tab;
+  versions?: VersionItem[];
+  calls?: CallItem[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab ?? (setter.ghl.checkedAt ? "test" : "clinic"));
@@ -109,6 +113,7 @@ export function SetterEditor({
     ["knowledge", "Knowledge", "book"],
     ["rules", "Hours and alerts", "clock"],
     ["journey", "Journey", "zap"],
+    ["showup", "Show-up and consent", "calendar"],
     ["retention", "Reviews and rebooking", "star"],
     ["voice", "Voice AI", "phone"],
     ["ghl", "Connect GHL", "link"],
@@ -118,7 +123,7 @@ export function SetterEditor({
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-5 px-4 py-5 sm:px-7 sm:py-7">
+    <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5 px-4 py-5 sm:px-8 sm:py-7">
       <div className="flex flex-wrap items-center gap-2">
         <Link href="/agents" className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted hover:bg-white" aria-label="Back to AI setters">
           <Icon name="arrowLeft" size={17} />
@@ -174,7 +179,21 @@ export function SetterEditor({
       {tab === "rules" && <RulesTab r={r} set={setRules} ro={ro} />}
       {tab === "journey" && <JourneyTab r={r} set={setRules} ro={ro} />}
       {tab === "retention" && <RetentionTab r={r} set={setRules} b={b} setBiz={setBiz} ro={ro} />}
-      {tab === "voice" && <VoiceTab r={r} set={setRules} ro={ro} />}
+      {tab === "showup" && <ShowUpTab r={r} set={setRules} ro={ro} />}
+      {tab === "voice" && <VoiceTab r={r} set={setRules} ro={ro} setterId={setter.id} calls={calls} />}
+      {tab === "clinic" && (
+        <VersionsPanel
+          versions={versions}
+          ro={ro}
+          onRestore={(v) => {
+            setB(cleanBusiness(v.business));
+            setR(cleanRules(v.rules));
+            if (v.name) setName(v.name);
+            setDirty(true);
+            notify("Restored. Check it in the Test chat, then click Save.", "ok");
+          }}
+        />
+      )}
       {tab === "ghl" && <GhlTab setter={setter} ro={ro} />}
       {tab === "test" && <TestTab setterId={setter.id} b={b} r={r} />}
       {tab === "reactivate" && <ReactivateTab setterId={setter.id} b={b} set={setBiz} ro={ro} connected={Boolean(setter.ghl.locationId)} live={setter.status !== "off"} stats={reactivation} />}
@@ -767,16 +786,12 @@ function GhlTab({ setter, ro }: { setter: Setter; ro: boolean }) {
               </select>
             </label>
             {pipeline && (
-              <div className="grid gap-4 sm:grid-cols-3">
-                {(
-                  [
-                    ["contacted", "After the first text"],
-                    ["booked", "When it books"],
-                    ["not_interested", "When they say no"],
-                  ] as const
-                ).map(([k, l]) => (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {STAGE_KEYS.map(({ key: k, label: l, hint: h }) => (
                   <label key={k} className={label}>
-                    {l}
+                    <span>
+                      {l} <span className={hint}>· {h}</span>
+                    </span>
                     <select value={stages[k] ?? ""} disabled={ro} onChange={(e) => setStages({ ...stages, [k]: e.target.value })} className={field}>
                       <option value="">Don&apos;t move</option>
                       {pipeline.stages.map((s) => (
@@ -815,6 +830,8 @@ function GhlTab({ setter, ro }: { setter: Setter; ro: boolean }) {
                 ["new_lead", "AI setter: new lead", "Trigger: Facebook Lead Form Submitted (or Form Submitted, or Contact Created). The AI sends the first text within a minute, or when you open."],
                 ["inbound", "AI setter: lead replied", "Trigger: Customer Replied (all channels). The AI answers."],
                 ["booked", "AI setter: booked", "Trigger: Customer Booked Appointment. Stops follow-ups if they booked another way."],
+                ["behaviour", "AI setter: behaviour (optional)", "Trigger: Trigger Link Clicked, Email Opened or a page visit. Webhook custom data: action = what they did, for example looked at lip filler prices. The AI sends a timely, helpful message. Turn it on in Show-up and consent."],
+                ["voice", "AI setter: voice calls (for Vapi or Retell)", "Not a GHL workflow: paste this as the Server URL in Vapi (assistant, Advanced) or the webhook URL in Retell (agent settings). Call summaries and transcripts then appear on the conversation and in GHL."],
                 ["missed_call", "AI setter: missed call (optional)", "Trigger: Call Status, with status No Answer, Busy or Voicemail (inbound calls). Texts back anyone whose call wasn't answered. Turn it on in Reviews and rebooking."],
                 ["appointment", "AI setter: appointment status (optional)", "Trigger: Appointment Status (Showed, No Show, Cancelled). Webhook: add Custom Data status = {{appointment.status}}. Gives you show and no-show rates on Results, alerts you to no-shows, and starts review requests and rebooking. Optional extra custom data: value = the treatment price, treatment = the treatment name."],
               ] as const

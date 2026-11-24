@@ -1107,7 +1107,7 @@ function Submissions({ submissions, name, qualify, views }: { submissions: Submi
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6">
+    <div className="mx-auto w-full max-w-[1480px] px-4 py-6 sm:px-6">
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
         {stat("Views", String(views), "Last 30 days")}
         {stat("Sent", String(finished), "Last 30 days")}

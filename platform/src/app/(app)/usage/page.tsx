@@ -21,16 +21,18 @@ export default async function UsagePage() {
     ws.workspaces.map(async (w) => {
       const c = (q: PromiseLike<{ count: number | null }>) => Promise.resolve(q).then((r) => r.count ?? 0);
       const turns = () => supabase.from("setter_turns").select("id", { count: "exact", head: true }).eq("account_id", w.id);
-      const [ai, aiLast, tests, threads] = await Promise.all([
+      const [ai, aiLast, tests, threads, calls] = await Promise.all([
         c(turns().eq("role", "ai").eq("is_test", false).gte("created_at", start)),
         c(turns().eq("role", "ai").eq("is_test", false).gte("created_at", last).lt("created_at", start)),
         c(turns().eq("is_test", true).gte("created_at", start)),
         c(supabase.from("setter_threads").select("id", { count: "exact", head: true }).eq("account_id", w.id).gte("updated_at", start)),
+        supabase.from("setter_calls").select("duration_seconds").eq("account_id", w.id).gte("created_at", start).limit(5000).then((r) => (r.data ?? []) as { duration_seconds: number | null }[]),
       ]);
-      return { id: w.id, name: w.name, ai, aiLast, tests, threads };
+      const minutes = Math.round(calls.reduce((n, x) => n + (x.duration_seconds ?? 0), 0) / 60);
+      return { id: w.id, name: w.name, ai, aiLast, tests, threads, calls: calls.length, minutes };
     }),
   );
-  const total = rows.reduce((t, r) => ({ ai: t.ai + r.ai, tests: t.tests + r.tests, threads: t.threads + r.threads }), { ai: 0, tests: 0, threads: 0 });
+  const total = rows.reduce((t, r) => ({ ai: t.ai + r.ai, tests: t.tests + r.tests, threads: t.threads + r.threads, minutes: t.minutes + r.minutes }), { ai: 0, tests: 0, threads: 0, minutes: 0 });
   const month = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(new Date());
   const max = Math.max(1, ...rows.map((r) => r.ai));
   return (
@@ -42,13 +44,13 @@ export default async function UsagePage() {
             ["AI messages sent", total.ai],
             ["Conversations", total.threads],
             ["Test chat messages", total.tests],
-            ["Voice minutes", "–"],
+            ["Voice minutes", total.minutes],
           ] as const
         ).map(([k, v]) => (
           <div key={k} className="card p-5">
             <div className="text-[12px] font-medium text-muted">{k}</div>
             <div className="mt-1.5 font-mono text-[28px] font-semibold tracking-tight text-navy">{v}</div>
-            {k === "Voice minutes" && <div className="text-[11.5px] text-muted">Once voice is connected</div>}
+            {k === "Voice minutes" && <div className="text-[11.5px] text-muted">AI calls made and answered</div>}
           </div>
         ))}
       </div>
@@ -63,7 +65,7 @@ export default async function UsagePage() {
               <div className="min-w-[180px] flex-1">
                 <div className="text-[14px] font-semibold text-navy">{r.name}</div>
                 <div className="text-[12px] text-muted">
-                  {r.threads} conversations · {r.tests} test messages
+                  {r.threads} conversations · {r.calls} calls ({r.minutes} min) · {r.tests} test messages
                 </div>
               </div>
               <div className="flex min-w-[240px] flex-[2] items-center gap-3">

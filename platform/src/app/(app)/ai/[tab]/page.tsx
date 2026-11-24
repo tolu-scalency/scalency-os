@@ -3,7 +3,7 @@ import { shortId } from "@/lib/short-id-shared";
 import { getWorkspace } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
 
-const TABS = ["knowledge", "journey", "retention", "voice", "reactivate", "test", "rules"];
+const TABS = ["knowledge", "journey", "showup", "retention", "voice", "reactivate", "test", "rules", "ghl"];
 
 /** Menu shortcuts (Knowledge, Journeys, Rebooking, Voice AI…) open that tab of the clinic's AI setter. */
 export default async function AiShortcut({ params }: { params: Promise<{ tab: string }> }) {

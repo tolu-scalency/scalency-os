@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/icon";
 import { Page } from "@/components/ui";
+import { Capacity } from "./capacity";
 
 export type Th = {
   id: string;
@@ -16,6 +17,7 @@ export type Th = {
   appointment_status: string | null;
   guardrail_flags: number | null;
   lead_score: number | null;
+  qa_score?: number | null;
 };
 
 
@@ -62,13 +64,13 @@ function Spark({ values, w = 260, h = 70, light = false }: { values: number[]; w
   );
 }
 
-export type Handoff = { id: string; priority: string; status: string; created_at: string; claimed_at: string | null; category: string };
+export type Handoff = { id: string; thread_id?: string; priority: string; status: string; created_at: string; claimed_at: string | null; category: string };
 export type FeedRow = { id: string; role: string; body: string; channel: string | null; created_at: string; setter_threads: { contact_name: string | null } | null };
 
 /** The dashboard itself, kept separate from the data loading so it can be previewed. */
 export type Guarantee = { clinic: string; target: number; days: number; start: string; booked: number };
 
-export function Results({ days, all, clinics, many, name, now, threads, handoffs, feedRows, guarantees = [] }: { days: number; all: boolean; clinics: number; many: boolean; name: string; now: number; threads: Th[]; handoffs: Handoff[]; feedRows: FeedRow[]; guarantees?: Guarantee[] }) {
+export function Results({ days, all, clinics, many, name, now, threads, handoffs, feedRows, guarantees = [], setterId = "" }: { days: number; all: boolean; clinics: number; many: boolean; name: string; now: number; threads: Th[]; handoffs: Handoff[]; feedRows: FeedRow[]; guarantees?: Guarantee[]; setterId?: string }) {
   const th = threads;
   const leads = th.filter((t) => (t.origin ?? "lead") === "lead");
   const contacted = th.filter((t) => t.last_outbound_at);
@@ -119,6 +121,8 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
     if (patch.scope === "") p.delete("scope");
     return `/ai-results?${p.toString()}`;
   };
+  const handoffThreads = new Set(handoffs.map((h) => h.thread_id).filter(Boolean));
+  const qaScores = th.map((t) => t.qa_score).filter((x): x is number => typeof x === "number");
   const kpis: [string, string, string][] = [
     ["New leads", String(leads.length), `${reactivated.length} old leads reactivated`],
     ["Replied", `${pct(replied.length, contacted.length)}%`, `${replied.length} of ${contacted.length} messaged`],
@@ -126,6 +130,12 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
     ["Showed up", showed + noshow ? `${pct(showed, showed + noshow)}%` : "–", showed + noshow ? `${showed} showed · ${noshow} no-shows` : "Add the appointment status webhook"],
     ["Handoffs", String(handoffs.length), `${waiting} waiting · pickup ${secs(quantile(pickups, 0.5))}`],
     ["Safety catches", String(guardrails), "Guardrail interventions"],
+    ["Contact rate", `${pct(contacted.length, leads.length + reactivated.length)}%`, "Leads the AI reached"],
+    ["Cancellation rate", booked.length ? `${pct(th.filter((t) => t.appointment_status === "cancelled").length, booked.length)}%` : "–", "Of bookings"],
+    ["AI containment", booked.length ? `${pct(booked.filter((t) => !handoffThreads.has(t.id)).length, booked.length)}%` : "–", "Booked with no person needed"],
+    ["Handoff response", secs(quantile(pickups, 0.5)), "Median time to pick up"],
+    ["No-show rate", showed + noshow ? `${pct(noshow, showed + noshow)}%` : "–", `${noshow} no-shows`],
+    ["Conversation quality", qaScores.length ? `${Math.round(qaScores.reduce((a, b) => a + b, 0) / qaScores.length)}` : "–", qaScores.length ? `${qaScores.length} graded (QA)` : "Grade them in QA"],
   ];
 
   return (
@@ -286,6 +296,8 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
           })}
         </div>
       )}
+
+      {setterId && !all && <Capacity setterId={setterId} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {kpis.map(([k, v, s]) => (

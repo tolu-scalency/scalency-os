@@ -11,6 +11,29 @@ import { acceptInvite, createWorkspace, switchWorkspace } from "@/app/(app)/work
 import { CommandBar } from "./command";
 import { NavList } from "./nav-list";
 import { NAV, SETTINGS_NAV, navFor, permForPath } from "@/lib/nav";
+import { createClient } from "@/lib/supabase/browser";
+
+type Alert = { id: string; priority: string; reason: string; created_at: string; setter_threads: { contact_name: string | null } | null };
+
+/** Leads waiting for a person (the setter console's queue), for the bell. Checks every minute. */
+function useAlerts(enabled: boolean) {
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    const load = async () => {
+      const { data } = await createClient().from("setter_handoffs").select("id, priority, reason, created_at, setter_threads(contact_name)").neq("status", "done").order("created_at", { ascending: false }).limit(8);
+      if (live && data) setAlerts(data as unknown as Alert[]);
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [enabled]);
+  return alerts;
+}
 
 export type ShellUser = {
   name: string;
@@ -115,7 +138,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
         <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} permissions={user.permissions} />
-        <div className="flex-1 pb-[var(--nav-h)]">
+        <div className="app-grid flex-1 pb-[var(--nav-h)]">
           <div key={pathname} className="page-in">
             {page}
           </div>
@@ -251,6 +274,8 @@ function TopBar({ user, onMenu, onCommand }: { user: ShellUser; onMenu: () => vo
   const router = useRouter();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState<"account" | "alerts" | null>(null);
+  const alerts = useAlerts(user.permissions.includes("inbox.send") || user.permissions.includes("ai.manage"));
+  const urgent = alerts.some((a) => a.priority === "urgent");
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-line bg-white/85 px-3 backdrop-blur-md sm:gap-3 sm:px-6">
@@ -302,17 +327,40 @@ function TopBar({ user, onMenu, onCommand }: { user: ShellUser; onMenu: () => vo
             onClick={() => setOpen(open === "alerts" ? null : "alerts")}
             aria-expanded={open === "alerts"}
             aria-label="Notifications"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface hover:text-navy"
+            className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface hover:text-navy"
           >
             <Icon name="bell" size={18} />
+            {alerts.length > 0 && (
+              <span className={`absolute right-1.5 top-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 font-mono text-[10px] font-semibold text-white ring-2 ring-white ${urgent ? "animate-pulse bg-bad" : "bg-brand"}`}>{alerts.length}</span>
+            )}
           </button>
           {open === "alerts" && (
-            <Popover onClose={() => setOpen(null)} width="w-80">
-              <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
-                <span className="tile h-11 w-11 rounded-xl"><Icon name="bell" size={18} /></span>
-                <div className="text-[14px] font-semibold">You&apos;re all caught up</div>
-                <p className="text-[12.5px] text-muted">New lead alerts and mentions will show here.</p>
-              </div>
+            <Popover onClose={() => setOpen(null)} width="w-[340px]">
+              {alerts.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                  <span className="tile h-11 w-11 rounded-xl"><Icon name="bell" size={18} /></span>
+                  <div className="text-[14px] font-semibold">You&apos;re all caught up</div>
+                  <p className="text-[12.5px] text-muted">Leads the AI passes to your team show here.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between px-3 pb-1.5 pt-2">
+                    <span className="text-[13.5px] font-semibold">Needs a person</span>
+                    <Link href="/setter-console" onClick={() => setOpen(null)} className="text-[12px] font-semibold text-brand hover:underline">
+                      Open the queue
+                    </Link>
+                  </div>
+                  {alerts.map((a) => (
+                    <Link key={a.id} href="/setter-console" onClick={() => setOpen(null)} className="flex items-start gap-2.5 rounded-xl px-3 py-2.5 hover:bg-surface">
+                      <span className={`mt-1.5 h-2 w-2 flex-none rounded-full ${a.priority === "urgent" ? "bg-bad" : a.priority === "high" ? "bg-warn" : "bg-brand"}`} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-semibold text-navy">{a.setter_threads?.contact_name || "A lead"}</span>
+                        <span className="block truncate text-[12px] text-muted">{a.reason}</span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </Popover>
           )}
         </div>

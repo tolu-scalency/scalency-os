@@ -40,12 +40,12 @@ export default async function AiResultsPage({ searchParams }: { searchParams: Pr
   const [{ data: threadRows }, { data: handoffRows }, { data: feedRows }, { data: agentRows }] = await Promise.all([
     supabase
       .from("setter_threads")
-      .select("id, account_id, origin, channel, state, created_at, first_reply_at, last_inbound_at, last_outbound_at, booked_at, appointment_status, guardrail_flags, lead_score")
+      .select("id, account_id, origin, channel, state, created_at, first_reply_at, last_inbound_at, last_outbound_at, booked_at, appointment_status, guardrail_flags, lead_score, qa_score")
       .in("account_id", accounts)
       .gte("created_at", since)
       .order("created_at", { ascending: true })
       .limit(5000),
-    supabase.from("setter_handoffs").select("id, priority, status, created_at, claimed_at, category").in("account_id", accounts).gte("created_at", since).limit(2000),
+    supabase.from("setter_handoffs").select("id, thread_id, priority, status, created_at, claimed_at, category").in("account_id", accounts).gte("created_at", since).limit(2000),
     supabase
       .from("setter_turns")
       .select("id, role, body, channel, created_at, setter_threads(contact_name)")
@@ -66,6 +66,7 @@ export default async function AiResultsPage({ searchParams }: { searchParams: Pr
       threads={(threadRows ?? []) as Th[]}
       handoffs={(handoffRows ?? []) as Handoff[]}
       feedRows={(feedRows ?? []) as unknown as FeedRow[]}
+      setterId={((agentRows ?? []) as { id: string; account_id: string }[]).find((a) => a.account_id === ws.account.id)?.id ?? ""}
       guarantees={await guaranteesFor((agentRows ?? []) as { id: string; account_id: string; business: unknown }[], ws.workspaces)}
     />
   );

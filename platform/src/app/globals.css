@@ -326,3 +326,17 @@ a.card:hover,
 html {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* The app's canvas: a faint grid that fades out down the page (ClinicRx-style, our colours). */
+.app-grid {
+  background-image:
+    linear-gradient(rgba(10, 95, 227, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(10, 95, 227, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: -1px -1px;
+  mask-image: none;
+  background-attachment: local;
+}
+.app-grid > * {
+  background: linear-gradient(180deg, transparent 0, transparent 360px, var(--color-canvas) 900px);
+}
