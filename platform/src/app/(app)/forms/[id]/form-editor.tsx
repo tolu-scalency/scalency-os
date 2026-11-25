@@ -68,6 +68,7 @@ export function FormEditor({
   pipelines,
   submissions,
   initialTab,
+  calendars = [],
 }: {
   form: FormState;
   base: string;
@@ -81,6 +82,7 @@ export function FormEditor({
   pipelines: { id: string; name: string }[];
   submissions: Submission[];
   initialTab: Tab;
+  calendars?: { id: string; name: string }[];
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [name, setName] = useState(form.name);
@@ -231,6 +233,25 @@ export function FormEditor({
     setDrag(null);
   };
   const onAdd = (d: Drag) => {
+    // The booking calendar always goes on its own last step, with a heading.
+    if (d.t === "new-content" && d.kind === "booking") {
+      const lastStep = def.steps[def.steps.length - 1];
+      let next = def;
+      let sid = lastStep.id;
+      if (lastStep.rows.length || def.steps.length === 1) {
+        const made = addStep(def);
+        next = { ...made.def, steps: made.def.steps.map((s) => (s.id === made.step ? { ...s, title: "Book your call" } : s)) };
+        sid = made.step;
+      }
+      const h = addByClick(next, { t: "new-content", kind: "heading" }, sid, null);
+      const withHeading = h.select ? updateBlock(h.def, h.select, { text: "Pick a time for your call" } as Partial<Block>) : h.def;
+      const r = addByClick(withHeading, d, sid, null);
+      commit(r.def);
+      setStepId(sid);
+      if (r.select) setSelected(r.select);
+      setPanel("none");
+      return;
+    }
     const r = addByClick(def, d, step.id, selected);
     commit(r.def);
     if (r.select) setSelected(r.select);
@@ -471,6 +492,9 @@ export function FormEditor({
                 selected={selected}
                 stepId={step.id}
                 customFields={customFields}
+                calendars={calendars}
+                stages={stages}
+                pipelines={pipelines}
                 readOnly={readOnly}
                 onDeselect={() => setSelected(null)}
                 onBlock={(id, patch) => commit(updateBlock(def, id, patch as Partial<Block>), `b:${id}:${Object.keys(patch).join(",")}`)}
@@ -513,6 +537,7 @@ export function FormEditor({
                     commit(removeStep(def, a.id));
                     if (step.id === a.id) setStepId(def.steps.find((x) => x.id !== a.id)!.id);
                   } else if (a.t === "move") commit(moveStep(def, a.id, a.dir));
+                  else if (a.t === "save") commit({ ...def, steps: def.steps.map((s) => (s.id === a.id ? { ...s, save: a.on } : s)) });
                   else setStepId(a.id);
                 }}
               />

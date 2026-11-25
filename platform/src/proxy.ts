@@ -46,14 +46,14 @@ export async function proxy(request: NextRequest) {
   // A client's own domain: show their site. Forms still load from /f/ on the same domain.
   const host = request.headers.get("host") ?? request.nextUrl.host;
   if (host && !isAppHost(host)) {
-    if (p0.startsWith("/f/") || p0.startsWith("/api/forms/") || p0.startsWith("/_next/")) return NextResponse.next({ request });
+    if (p0.startsWith("/f/") || p0.startsWith("/api/forms/") || p0.startsWith("/api/book/") || p0.startsWith("/_next/")) return NextResponse.next({ request });
     const page = p0.replace(/\/+$/, "");
     const to = request.nextUrl.clone();
     to.pathname = `/d/${encodeURIComponent(host.toLowerCase().replace(/:\d+$/, ""))}${page}`;
     return NextResponse.rewrite(to);
   }
   if (FORMS_HOST && request.nextUrl.host === FORMS_HOST) {
-    if (p0.startsWith("/f/") || p0.startsWith("/api/forms/")) return NextResponse.next({ request });
+    if (p0.startsWith("/f/") || p0.startsWith("/api/forms/") || p0.startsWith("/api/book/")) return NextResponse.next({ request });
     return NextResponse.redirect(new URL(p0 + request.nextUrl.search, APP_URL));
   }
   // Public forms, their embed script and submissions never need a login session.
