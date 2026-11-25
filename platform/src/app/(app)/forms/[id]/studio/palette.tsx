@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import type { CustomField } from "@/lib/data";
-import { CONTENT_KINDS, FIELD_KINDS, allFields, type FormDefinition } from "@/lib/form-builder";
+import { CONTENT_KINDS, FIELD_KINDS, allBlocks, allFields, type FormDefinition } from "@/lib/form-builder";
 import type { Drag } from "./tree";
 
 export function Palette({ def, customFields, onDragStart, onDragEnd, onAdd, readOnly }: { def: FormDefinition; customFields: CustomField[]; onDragStart: (d: Drag) => void; onDragEnd: () => void; onAdd: (d: Drag) => void; readOnly: boolean }) {
@@ -101,8 +101,11 @@ export function Palette({ def, customFields, onDragStart, onDragEnd, onAdd, read
           )}
         {section(
           "Content",
-          CONTENT_KINDS.map((k) => item(`c-${k.kind}`, k.label, k.kind === "image" ? "image" : k.kind === "divider" ? "minus" : k.icon, { t: "new-content", kind: k.kind })),
+          CONTENT_KINDS.filter((k) => k.kind !== "booking").map((k) => item(`c-${k.kind}`, k.label, k.kind === "image" ? "image" : k.kind === "divider" ? "minus" : k.icon, { t: "new-content", kind: k.kind })),
         )}
+        {section("Booking", [
+          item("c-booking", "Booking calendar", "calendar", { t: "new-content", kind: "booking" }, allBlocks(def).some((x) => x.type === "content" && x.kind === "booking"), "A calendar to book a call, on the form's last step. Scalency booking pages or Calendly."),
+        ])}
         {section(
           "Advanced",
           FIELD_KINDS.filter((k) => k.group === "Advanced").map((k) => item(k.kind, k.label, k.icon, { t: "new-field", kind: k.kind }, false, "Fills itself from the web address, e.g. ?campaign=spring")),

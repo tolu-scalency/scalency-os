@@ -7,7 +7,7 @@
 import { useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { Icon } from "@/components/icon";
 import { ContentView, FieldView, palette } from "@/components/lead-form";
-import { FONTS, kindInfo, type Block, type FormDefinition, type Row, type Step } from "@/lib/form-builder";
+import { FONTS, bookingStepIx, kindInfo, type Block, type FormDefinition, type Row, type Step } from "@/lib/form-builder";
 import { targetKey, type Drag, type Target } from "./tree";
 
 export type CanvasProps = {
@@ -154,10 +154,18 @@ export function Canvas(props: CanvasProps) {
           </>
         )}
 
-        <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: t.buttonAlign === "center" ? "center" : "flex-start", pointerEvents: "none" }}>
-          {def.steps.findIndex((s) => s.id === step.id) > 0 && <span style={btn(def, true)}>{def.back}</span>}
-          <span style={{ ...btn(def), flex: t.buttonAlign === "full" ? 1 : undefined }}>{def.steps.at(-1)?.id === step.id ? def.button : def.next}</span>
-        </div>
+        {(() => {
+          const ix = def.steps.findIndex((s) => s.id === step.id);
+          const bix = bookingStepIx(def);
+          if (bix > 0 && ix === bix) return null;
+          const finish = bix > 0 ? ix === bix - 1 : ix === def.steps.length - 1;
+          return (
+            <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: t.buttonAlign === "center" ? "center" : "flex-start", pointerEvents: "none" }}>
+              {ix > 0 && <span style={btn(def, true)}>{def.back}</span>}
+              <span style={{ ...btn(def), flex: t.buttonAlign === "full" ? 1 : undefined }}>{finish ? def.button : def.next}</span>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -343,7 +351,7 @@ function BlockView({
   onAction: (id: string, a: "duplicate" | "delete") => void;
 }) {
   const [hover, setHover] = useState(false);
-  const label = b.type === "field" ? (b.kind === "custom" ? "Contact field" : kindInfo(b.kind)?.label) : b.kind[0].toUpperCase() + b.kind.slice(1);
+  const label = b.type === "field" ? (b.kind === "custom" ? "Contact field" : kindInfo(b.kind)?.label) : b.kind === "booking" ? "Booking calendar" : b.kind[0].toUpperCase() + b.kind.slice(1);
   return (
     <div
       draggable={!readOnly}

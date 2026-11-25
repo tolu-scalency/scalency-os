@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { adminClient } from "@/lib/admin";
-import { allFields, answerText, cleanDefinition, isVisible, scoreOf, type Answers, type FieldBlock } from "@/lib/form-builder";
+import { allFields, answerText, bookingBlock, cleanDefinition, isVisible, scoreOf, type Answers, type FieldBlock } from "@/lib/form-builder";
 import { parseFieldValue } from "@/lib/field-types";
 import { normalisePhone } from "@/lib/forms";
 import { runWorkflowsSoon } from "@/lib/run-soon";
@@ -14,7 +14,9 @@ import { formAlerts } from "@/lib/form-alerts";
 //                 private resume code the browser sends back on the final submit.
 // otherwise       the final submit: contact updated, tags added, optional deal,
 //                 score worked out (qualified or not), submission completed, which
-//                 starts any "Form submitted" workflows.
+//                 starts any "Form submitted" workflows. If the form ends with a
+//                 booking calendar (and they qualify for it), the answer says so and
+//                 the page shows the calendar; the redirect is used after they book.
 
 export const dynamic = "force-dynamic";
 
@@ -272,6 +274,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   }
 
   const status = qualified === null ? "submitted" : qualified ? "qualified" : "unqualified";
+  // A code the page sends back once they've booked on the calendar step.
+  const finish = resumeIn && existing ? resumeIn : randomBytes(16).toString("hex");
+  tracking.resume = finish;
   const record = {
     status,
     opportunity_id: opportunityId,
@@ -307,5 +312,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   }
   runWorkflowsSoon(admin, account);
   const redirect = outcome?.redirect || (form.redirect_url as string | null) || null;
+  const bk = bookingBlock(def);
+  const showCalendar = Boolean(bk) && (qualified !== false || bk!.qualifiedOnly === false);
+  if (showCalendar) return json(200, { ok: true, booking: true, redirect, resume: finish, message: outcome?.message || def.success });
   return json(200, { ok: true, redirect, message: outcome?.message || def.success });
 }

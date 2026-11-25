@@ -6,7 +6,7 @@
 
 import { useState, type ReactNode } from "react";
 import { Icon, type IconName } from "@/components/icon";
-import type { CustomField } from "@/lib/data";
+import type { CustomField, Stage } from "@/lib/data";
 import { FONTS, allBlocks, allFields, kindInfo, type Block, type ContentBlock, type FieldBlock, type FormDefinition, type Logic, type Theme } from "@/lib/form-builder";
 import { findBlock, findColumn, findRow } from "./tree";
 
@@ -15,12 +15,15 @@ type Props = {
   selected: string | null;
   stepId: string;
   customFields: CustomField[];
+  calendars: { id: string; name: string }[];
+  stages: Stage[];
+  pipelines: { id: string; name: string }[];
   readOnly: boolean;
   onBlock: (id: string, patch: Partial<Block>) => void;
   onDef: (patch: Partial<FormDefinition>) => void;
   onTheme: (patch: Partial<Theme>) => void;
   onAction: (a: { t: "block-dup" | "block-del" | "row-dup" | "row-del" | "col-del"; id: string } | { t: "cols"; id: string; n: number } | { t: "block-step"; id: string; step: string }) => void;
-  onSteps: (a: { t: "add" } | { t: "rename"; id: string; title: string } | { t: "del"; id: string } | { t: "move"; id: string; dir: -1 | 1 } | { t: "open"; id: string }) => void;
+  onSteps: (a: { t: "add" } | { t: "rename"; id: string; title: string } | { t: "del"; id: string } | { t: "move"; id: string; dir: -1 | 1 } | { t: "open"; id: string } | { t: "save"; id: string; on: boolean }) => void;
   onDeselect: () => void;
 };
 
@@ -151,8 +154,8 @@ function Swatches({ value, colours, onChange }: { value: string; colours: string
 function BlockPanel(p: Props & { b: Block }) {
   const { b, def } = p;
   const set = (patch: Partial<FieldBlock> | Partial<ContentBlock>) => p.onBlock(b.id, patch as Partial<Block>);
-  const title = b.type === "field" ? (b.kind === "custom" ? "Contact field" : kindInfo(b.kind)?.label ?? "Question") : b.kind[0].toUpperCase() + b.kind.slice(1);
-  const icon = (b.type === "field" ? kindInfo(b.kind)?.icon : b.kind === "image" ? "image" : "edit") as IconName;
+  const title = b.type === "field" ? (b.kind === "custom" ? "Contact field" : kindInfo(b.kind)?.label ?? "Question") : b.kind === "booking" ? "Booking calendar" : b.kind[0].toUpperCase() + b.kind.slice(1);
+  const icon = (b.type === "field" ? kindInfo(b.kind)?.icon : b.kind === "image" ? "image" : b.kind === "booking" ? "calendar" : "edit") as IconName;
   const here = findBlock(def, b.id)!;
 
   return (
@@ -171,7 +174,7 @@ function BlockPanel(p: Props & { b: Block }) {
         </>
       }
     >
-      {b.type === "field" ? <FieldSettings {...p} f={b} set={set} /> : <ContentSettings b={b} set={set} />}
+      {b.type === "field" ? <FieldSettings {...p} f={b} set={set} /> : b.kind === "booking" ? <BookingSettings {...p} b={b} set={set} /> : <ContentSettings b={b} set={set} />}
 
       {def.steps.length > 1 && (
         <Label text="Step">
@@ -185,8 +188,66 @@ function BlockPanel(p: Props & { b: Block }) {
         </Label>
       )}
 
-      <LogicEditor def={def} b={b} onChange={(logic) => set({ logic })} />
+      {!(b.type === "content" && b.kind === "booking") && <LogicEditor def={def} b={b} onChange={(logic) => set({ logic })} />}
     </Panel>
+  );
+}
+
+function BookingSettings({ b, set, def, calendars, stages, pipelines }: Props & { b: ContentBlock; set: (p: Partial<ContentBlock>) => void }) {
+  const calendly = b.source === "calendly";
+  const lastIx = def.steps.length - 1;
+  const onLast = def.steps[lastIx]?.rows.some((r) => r.columns.some((c) => c.blocks.some((x) => x.id === b.id)));
+  return (
+    <>
+      <Label text="Calendar">
+        <Segmented value={calendly ? "calendly" : "scalency"} options={[{ value: "scalency", label: "Scalency" }, { value: "calendly", label: "Calendly" }]} onChange={(v) => set({ source: v === "calendly" ? "calendly" : "scalency" })} />
+      </Label>
+      {calendly ? (
+        <>
+          <Label text="Calendly link" hint="Open the event in Calendly and copy its link, e.g. https://calendly.com/yourname/strategy-call">
+            <input value={b.url ?? ""} onChange={(e) => set({ url: e.target.value.trim() })} placeholder="https://calendly.com/…" className="field h-10 text-[13px]" />
+          </Label>
+          <Label text="When they book, move them to" hint="Optional. Calendly bookings don't go through a Scalency booking page, so set the stage and tag here.">
+            <select value={b.stageId ?? ""} onChange={(e) => set({ stageId: e.target.value || undefined })} className="field h-10 text-[13px]">
+              <option value="">Don&apos;t move them</option>
+              {pipelines.map((pl) => (
+                <optgroup key={pl.id} label={pl.name}>
+                  {stages
+                    .filter((st) => st.pipelineId === pl.id)
+                    .map((st) => (
+                      <option key={st.id} value={st.id}>
+                        {st.name}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </Label>
+          <Label text="And add the tag">
+            <input value={b.tag ?? ""} maxLength={40} onChange={(e) => set({ tag: e.target.value })} placeholder="e.g. Call booked" className="field h-10 text-[13px]" />
+          </Label>
+        </>
+      ) : (
+        <Label text="Booking page" hint="The times, length, who takes the call, the pipeline stage and the tag all come from the booking page.">
+          <select value={b.calendarId ?? ""} onChange={(e) => set({ calendarId: e.target.value || undefined })} className="field h-10 text-[13px]">
+            <option value="">Choose a booking page</option>
+            {calendars.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {!calendars.length && <span className="text-[12px] text-muted">No booking pages yet. Make one in Calendar, then Booking pages.</span>}
+        </Label>
+      )}
+      {def.qualify.enabled && (
+        <Toggle on={b.qualifiedOnly !== false} onChange={(v) => set({ qualifiedOnly: v })} label="Only show to people who qualify" hint="Everyone else gets your “not a fit” message from After submitting." />
+      )}
+      <p className="rounded-xl bg-surface px-3 py-2.5 text-[12px] leading-relaxed text-muted">
+        The form is sent when they reach this step, so they&apos;re saved and tagged even if they don&apos;t book. Once they book, they see your thank-you message or go to your thank-you page.
+      </p>
+      {!onLast && <p className="rounded-xl bg-warn-bg px-3 py-2.5 text-[12px] text-warn">Move the calendar to its own last step.</p>}
+    </>
   );
 }
 
@@ -552,7 +613,17 @@ function FormPanel(p: Props) {
               )}
             </div>
             {def.steps.length > 1 && (
-              <Toggle on={def.saveProgress} onChange={(v) => p.onDef({ saveProgress: v })} label="Save people who stop part way" hint="Once they've given an email or phone, they're saved as a contact even if they don't finish. You'll see them as “Started” in Submissions." />
+              <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
+                <Toggle on={def.saveProgress} onChange={(v) => p.onDef({ saveProgress: v })} label="Save people who stop part way" hint="Once they've given an email or phone, they're saved as a contact even if they don't finish. You'll see them as “Started” in Submissions." />
+                <span className="mt-1 text-[12px] font-semibold text-muted">Save a partial lead when they finish:</span>
+                {def.steps.slice(0, -1).map((s, i) => (
+                  <label key={s.id} className="flex items-center gap-2 text-[13px]">
+                    <input type="checkbox" checked={s.save ?? def.saveProgress} onChange={(e) => p.onSteps({ t: "save", id: s.id, on: e.target.checked })} className="h-4 w-4 accent-[#0a5fe3]" />
+                    Step {i + 1}: {s.title}
+                  </label>
+                ))}
+                <span className="text-[11.5px] text-muted">Nothing is saved until they&apos;ve given an email or phone.</span>
+              </div>
             )}
             <Toggle on={def.remember} onChange={(v) => p.onDef({ remember: v })} label="Remember visitors" hint="Fills in their name, email and phone next time, on any of your forms, on the same device." />
             <div className="flex flex-col gap-2 rounded-xl border border-line p-3">

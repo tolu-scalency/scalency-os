@@ -16,7 +16,7 @@ export type FieldKind =
   | "select" | "radio" | "checkboxes" | "yes_no" | "rating" | "checkbox"
   | "money" | "file" | "signature"
   | "hidden";
-export type ContentKind = "heading" | "paragraph" | "image" | "divider" | "spacer";
+export type ContentKind = "heading" | "paragraph" | "image" | "divider" | "spacer" | "booking";
 export type LogicOp = "is" | "is_not" | "contains" | "answered" | "empty";
 export type Logic = { field: string; op: LogicOp; value?: string };
 
@@ -51,11 +51,23 @@ export type ContentBlock = {
   height?: number;
   align?: "left" | "center";
   logic?: Logic;
+  /** Booking calendar: a Scalency booking page or a Calendly link, shown on the last step. */
+  source?: "scalency" | "calendly";
+  /** Scalency booking page id. */
+  calendarId?: string;
+  /** Calendly link, e.g. https://calendly.com/you/strategy-call */
+  url?: string;
+  /** Only people who pass the score see the calendar; everyone else gets the "not a fit" outcome. */
+  qualifiedOnly?: boolean;
+  /** Calendly: tag and pipeline stage to give them once they book. */
+  tag?: string;
+  stageId?: string;
 };
 export type Block = FieldBlock | ContentBlock;
 export type Column = { id: string; blocks: Block[] };
 export type Row = { id: string; columns: Column[] };
-export type Step = { id: string; title: string; rows: Row[] };
+/** save: save them as a partial lead when they finish this step (unset = the form's "save people who stop part way"). */
+export type Step = { id: string; title: string; rows: Row[]; save?: boolean };
 
 export type Outcome = { message: string; redirect: string; tag: string };
 export type Theme = {
@@ -137,6 +149,7 @@ export const CONTENT_KINDS: { kind: ContentKind; label: string; icon: string }[]
   { kind: "image", label: "Image", icon: "eye" },
   { kind: "divider", label: "Divider", icon: "list" },
   { kind: "spacer", label: "Spacer", icon: "columns" },
+  { kind: "booking", label: "Booking calendar", icon: "calendar" },
 ];
 export const kindInfo = (k: string) => FIELD_KINDS.find((x) => x.kind === k);
 
@@ -174,7 +187,7 @@ export function field(kind: FieldKind, label?: string, extra: Partial<FieldBlock
 }
 export function content(kind: ContentKind, extra: Partial<ContentBlock> = {}): ContentBlock {
   const base: Partial<ContentBlock> =
-    kind === "heading" ? { text: "Heading", level: 1 } : kind === "paragraph" ? { text: "Add some text here." } : kind === "spacer" ? { height: 24 } : kind === "image" ? { src: "", alt: "" } : {};
+    kind === "heading" ? { text: "Heading", level: 1 } : kind === "paragraph" ? { text: "Add some text here." } : kind === "spacer" ? { height: 24 } : kind === "image" ? { src: "", alt: "" } : kind === "booking" ? { source: "scalency", qualifiedOnly: true } : {};
   return { id: uid(), type: "content", kind, ...base, ...extra } as ContentBlock;
 }
 /** A row from blocks: one column per argument (an array = several blocks in that column). */
@@ -284,9 +297,27 @@ export function scoreOf(def: FormDefinition, answers: Answers): number {
   return total;
 }
 
+/** The booking calendar block, if the form has one. */
+export function bookingBlock(def: FormDefinition): ContentBlock | null {
+  return (allBlocks(def).find((b) => b.type === "content" && b.kind === "booking") as ContentBlock | undefined) ?? null;
+}
+/** Index of the step that holds the booking calendar (always the last step), or -1. */
+export function bookingStepIx(def: FormDefinition): number {
+  const ix = def.steps.findIndex((s) => s.rows.some((r) => r.columns.some((c) => c.blocks.some((b) => b.type === "content" && b.kind === "booking"))));
+  return ix;
+}
+
 /** A form can only be published with a way to reach the person. */
 export function publishProblem(def: FormDefinition): string | null {
   const fields = allFields(def);
+  const bk = bookingBlock(def);
+  if (bk) {
+    const ix = bookingStepIx(def);
+    if (ix !== def.steps.length - 1 || ix === 0) return "Put the booking calendar on its own last step, after the steps with their details.";
+    if (stepFields(def.steps[ix]).length) return "The booking calendar step can't have questions. Move them to an earlier step.";
+    if (!def.steps.slice(0, ix).some((s) => stepFields(s).some((f) => f.kind === "email"))) return "Add an Email field before the booking calendar, so the booking goes to the right person.";
+    if (bk.source === "calendly" ? !bk.url : !bk.calendarId) return bk.source === "calendly" ? "Paste your Calendly link into the booking calendar." : "Choose which booking page the calendar shows.";
+  }
   if (!fields.some((f) => f.kind === "email" || f.kind === "phone")) return "Add an Email or Phone field, so each submission can become a contact.";
   if (fields.some((f) => kindInfo(f.kind)?.choices && !(f.options ?? []).length)) return "Give every choice question at least one option.";
   if (fields.some((f) => f.kind === "custom" && !f.key)) return "Choose which contact field each “Contact field” question saves to.";
@@ -359,6 +390,20 @@ function cleanBlock(raw: unknown, seen: Set<string>, once: Set<string>): Block |
       out.alt = str(b.alt, 200);
     }
     if (kind === "spacer") out.height = Math.min(160, Math.max(8, Number(b.height) || 24));
+    if (kind === "booking") {
+      if (once.has("booking")) return null;
+      once.add("booking");
+      out.source = b.source === "calendly" ? "calendly" : "scalency";
+      const cal = str(b.calendarId, 36);
+      if (/^[0-9a-f-]{36}$/i.test(cal)) out.calendarId = cal.toLowerCase();
+      const url = str(b.url, 300).trim().replace(/[?#].*$/, "");
+      if (/^https:\/\/(www\.)?calendly\.com\/[A-Za-z0-9_\-/]+$/.test(url)) out.url = url;
+      out.qualifiedOnly = b.qualifiedOnly !== false;
+      const tag = str(b.tag, 40).trim();
+      if (tag) out.tag = tag;
+      const stage = str(b.stageId, 36);
+      if (/^[0-9a-f-]{36}$/i.test(stage)) out.stageId = stage.toLowerCase();
+    }
     if (b.align === "center") out.align = "center";
     if (logic) out.logic = logic;
     return out;
@@ -432,7 +477,7 @@ export function cleanDefinition(raw: unknown): FormDefinition {
       }
       if (columns.length && columns.some((c) => c.blocks.length)) rows.push({ id: str(r.id, 16).replace(/[^a-z0-9]/gi, "") || uid(), columns });
     }
-    steps.push({ id: str(s.id, 16).replace(/[^a-z0-9]/gi, "") || uid(), title: str(s.title, 80).trim() || `Step ${steps.length + 1}`, rows });
+    steps.push({ id: str(s.id, 16).replace(/[^a-z0-9]/gi, "") || uid(), title: str(s.title, 80).trim() || `Step ${steps.length + 1}`, rows, ...(typeof s.save === "boolean" ? { save: s.save } : {}) });
   }
   if (!steps.length) steps.push(step("Step 1"));
 

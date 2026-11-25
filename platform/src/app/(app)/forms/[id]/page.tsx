@@ -24,7 +24,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
   if (!form) notFound();
 
   const since = daysAgo(30).slice(0, 10);
-  const [customFields, tags, stages, pipelines, { data: subs }, h, { data: acc }, { data: stats }] = await Promise.all([
+  const [customFields, tags, stages, pipelines, { data: subs }, h, { data: acc }, { data: stats }, { data: cals }] = await Promise.all([
     listCustomFields(ws.account.id),
     listTags(ws.account.id),
     listAllStages(ws.account.id),
@@ -38,6 +38,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
     headers(),
     supabase.from("accounts").select("slug").eq("id", ws.account.id).single(),
     supabase.from("form_stats").select("views").eq("form_id", id).gte("day", since),
+    supabase.from("calendars").select("id, name, status").eq("account_id", ws.account.id).neq("status", "archived").order("name"),
   ]);
   const health = await formsHealth();
   const views = (stats ?? []).reduce((n, r) => n + ((r.views as number) ?? 0), 0);
@@ -87,6 +88,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
         stages={stages.map((s, i) => ({ id: s.id, name: s.name, position: i + 1, pipelineId: s.pipelineId }))}
         pipelines={pipelines.map((p) => ({ id: p.id, name: p.name }))}
         submissions={submissions}
+        calendars={(cals ?? []).map((c) => ({ id: c.id as string, name: c.name as string }))}
         initialTab={tab === "share" || tab === "settings" || tab === "submissions" ? tab : "design"}
       />
     </main>

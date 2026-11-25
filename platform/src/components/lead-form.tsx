@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import {
   FONTS,
   answerText,
+  bookingStepIx,
   isVisible,
   stepFields,
   type Answers,
@@ -17,6 +18,7 @@ import {
   type FormDefinition,
   type Theme,
 } from "@/lib/form-builder";
+import { FormBooking, type Booked, type Person } from "@/components/form-booking";
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -425,6 +427,8 @@ export function ContentView({ b, theme, design = false }: { b: ContentBlock; the
       return <hr style={{ border: 0, borderTop: `1px solid ${p.line}`, margin: "4px 0" }} />;
     case "spacer":
       return <div style={{ height: b.height ?? 24, ...(design ? { background: `repeating-linear-gradient(45deg, transparent, transparent 6px, ${p.tint} 6px, ${p.tint} 12px)`, borderRadius: 6 } : {}) }} />;
+    case "booking":
+      return <FormBooking b={b} theme={theme} person={{ first: "", last: "", email: "", phone: "" }} consent={false} design onBooked={() => {}} />;
   }
 }
 
@@ -462,6 +466,8 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
   const [message, setMessage] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const resume = useRef<string>("");
+  // Forms with a booking calendar: the form is sent on the step before it, then they book.
+  const [after, setAfter] = useState<{ redirect: string | null; token: string } | null>(null);
   // When the form appeared: answers sent within a couple of seconds are from bots.
   const shownAt = useRef(0);
   useEffect(() => {
@@ -470,7 +476,10 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
   const box = useRef<HTMLDivElement>(null);
   const steps = def.steps;
   const step = steps[Math.min(stepIx, steps.length - 1)];
-  const last = stepIx >= steps.length - 1;
+  const bookingIx = bookingStepIx(def);
+  const finishIx = bookingIx > 0 ? bookingIx - 1 : steps.length - 1;
+  const last = stepIx >= finishIx;
+  const onBooking = bookingIx > 0 && stepIx === bookingIx;
 
   // Fill in from the web address (?email=…, ?campaign=…) and, if switched on,
   // from what this visitor gave on one of the workspace's forms before.
@@ -577,7 +586,7 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ answers: out, partial, resume: resume.current, website, t: shownAt.current ? Date.now() - shownAt.current : 0, sp: embed ? new URLSearchParams(window.location.search).get("sp") || "" : "", ...tracking() }),
     });
-    return (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; errors?: Record<string, string>; redirect?: string | null; message?: string; resume?: string; step?: number };
+    return (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; errors?: Record<string, string>; redirect?: string | null; message?: string; resume?: string; step?: number; booking?: boolean };
   }
 
   async function next() {
@@ -588,8 +597,9 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
       return;
     }
     setMessage("");
-    // Save people who stop part way, once we know how to reach them.
-    if (!preview && def.saveProgress) {
+    // Save people who stop part way, once we know how to reach them. Each step can
+    // switch this on or off; otherwise the form's own setting decides.
+    if (!preview && (step.save ?? def.saveProgress)) {
       const hasContact = Object.entries(answers).some(([id, v]) => {
         const f = def.steps.flatMap(stepFields).find((x) => x.id === id);
         return (f?.kind === "email" && EMAIL.test(answerText(v))) || (f?.kind === "phone" && answerText(v).length >= 7);
@@ -598,6 +608,63 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
     }
     setStepIx((i) => Math.min(i + 1, steps.length - 1));
     box.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
+  /** Move the page (or, when embedded, the page around the frame) on to another address. */
+  function go(to: string) {
+    if (embed) {
+      // Browsers can block a frame from moving the page it sits in, so the embed script on
+      // that page does the move. If there's no embed script, the frame tries itself.
+      window.parent?.postMessage({ scalencyForm: formId, redirect: to }, "*");
+      window.setTimeout(() => {
+        try {
+          (window.top ?? window).location.href = to;
+        } catch {
+          window.open(to, "_top");
+        }
+      }, 700);
+    } else window.location.href = to;
+  }
+
+  function person(): Person {
+    const out: Person = { first: "", last: "", email: "", phone: "" };
+    for (const f of def.steps.flatMap(stepFields)) {
+      const v = answerText(answers[f.id]).trim();
+      if (!v) continue;
+      if (f.kind === "first_name") out.first = v;
+      else if (f.kind === "last_name") out.last = v;
+      else if (f.kind === "full_name") [out.first, out.last] = [v.split(/\s+/)[0], v.split(/\s+/).slice(1).join(" ")];
+      else if (f.kind === "email") out.email = v;
+      else if (f.kind === "phone") out.phone = v;
+    }
+    return out;
+  }
+
+  // They've booked a time on the calendar step: record it on their submission, then finish.
+  async function booked(x: Booked) {
+    if (after?.token) {
+      await fetch(`/api/forms/${formId}/booked`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ resume: after.token, provider: x.provider, ref: x.ref ?? "", start: x.start ?? "" }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+    try {
+      (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq?.("track", "Schedule");
+    } catch {}
+    if (embed && new URLSearchParams(window.location.search).get("then") === "parent") {
+      window.parent?.postMessage({ scalencyForm: formId, done: true, booked: true }, "*");
+      return;
+    }
+    const to = after?.redirect || x.redirect;
+    if (to) {
+      setState("busy");
+      return go(to);
+    }
+    const when = x.start ? new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(new Date(x.start)) : "";
+    setResult({ message: x.thankYou || `You're booked in${when ? ` for ${when}` : ""}. We've emailed you the details${x.meetingUrl ? " and the call link" : ""}.` });
+    setState("done");
   }
 
   function remember() {
@@ -611,6 +678,7 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (onBooking) return;
     if (!last) return next();
     const errs = check(def.steps.flatMap(stepFields));
     if (def.consent.enabled && def.consent.required && answers.__consent !== true) errs.__consent = "Please tick this box to continue.";
@@ -622,6 +690,11 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
       return;
     }
     if (preview) {
+      if (bookingIx > 0) {
+        setStepIx(bookingIx);
+        setMessage("This is a preview: on the live form they pick a time here.");
+        return;
+      }
       setMessage("This is a preview, so nothing was sent. Publish the form and open its link to test it for real.");
       return;
     }
@@ -636,23 +709,19 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
           w.fbq?.("track", "Lead");
           w.gtag?.("event", "generate_lead", { form_name: formId });
         } catch {}
+        // A booking calendar comes next: show it, and move on once they've booked.
+        if (d.booking && bookingIx > 0) {
+          setAfter({ redirect: d.redirect ?? null, token: d.resume ?? "" });
+          setStepIx(bookingIx);
+          setState("idle");
+          box.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+          return;
+        }
         // On a funnel step, the page around the form moves people on to the next step.
         if (embed && new URLSearchParams(window.location.search).get("then") === "parent") {
           window.parent?.postMessage({ scalencyForm: formId, done: true }, "*");
         } else if (d.redirect) {
-          if (embed) {
-            // Browsers can block a frame from moving the page it sits in, so the embed script on
-            // that page does the move. If there's no embed script, the frame tries itself.
-            const to = d.redirect;
-            window.parent?.postMessage({ scalencyForm: formId, redirect: to }, "*");
-            window.setTimeout(() => {
-              try {
-                (window.top ?? window).location.href = to;
-              } catch {
-                window.open(to, "_top");
-              }
-            }, 700);
-          } else window.location.href = d.redirect;
+          go(d.redirect);
           setState("busy");
           return;
         }
@@ -721,7 +790,15 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
               {cols.map((c) => (
                 <div key={c.id} style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
                   {c.blocks.map((b: Block) =>
-                    b.type === "content" ? <ContentView key={b.id} b={b} theme={t} /> : <FieldView key={b.id} f={b} value={answers[b.id]} onChange={(v) => set(b.id, v)} error={errors[b.id]} theme={t} upload={upload} />,
+                    b.type === "content" ? (
+                      b.kind === "booking" && !preview ? (
+                        <FormBooking key={b.id} b={b} theme={t} person={person()} consent={answers.__consent === true} onBooked={booked} />
+                      ) : (
+                        <ContentView key={b.id} b={b} theme={t} design={b.kind === "booking"} />
+                      )
+                    ) : (
+                      <FieldView key={b.id} f={b} value={answers[b.id]} onChange={(v) => set(b.id, v)} error={errors[b.id]} theme={t} upload={upload} />
+                    ),
                   )}
                 </div>
               ))}
@@ -729,7 +806,7 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
           );
         })}
 
-        {last && def.consent.enabled && (
+        {last && !onBooking && def.consent.enabled && (
           <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13.5, color: p.muted, cursor: "pointer" }}>
             <input type="checkbox" checked={answers.__consent === true} onChange={(e) => set("__consent", e.target.checked)} style={{ width: 18, height: 18, marginTop: 1, accentColor: t.accent }} />
             <span>
@@ -743,6 +820,7 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
             {message}
           </p>
         )}
+        {!onBooking && (
         <div style={{ display: "flex", gap: 10, justifyContent: t.buttonAlign === "center" ? "center" : "flex-start" }}>
           {stepIx > 0 && (
             <button type="button" onClick={() => setStepIx((i) => i - 1)} style={buttonStyle(t, true)}>
@@ -753,6 +831,7 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
             {state === "busy" ? "Sending…" : last ? def.button : def.next}
           </button>
         </div>
+        )}
       </form>
     </div>
   );
