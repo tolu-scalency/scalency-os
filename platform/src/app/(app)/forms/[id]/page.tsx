@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { fullId } from "@/lib/short-id";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { Page } from "@/components/ui";
 import { can, getWorkspace, listAllStages, listCustomFields, listPipelines, listTags } from "@/lib/data";
 import { cleanDefinition } from "@/lib/form-builder";
 import { createClient } from "@/lib/supabase/server";
@@ -66,7 +65,7 @@ export default async function FormPage({ params, searchParams }: { params: Promi
   });
 
   return (
-    <Page wide>
+    <main className="flex min-h-dvh w-full flex-col">
       <FormEditor
         form={{
           id: form.id as string,
@@ -90,6 +89,6 @@ export default async function FormPage({ params, searchParams }: { params: Promi
         submissions={submissions}
         initialTab={tab === "share" || tab === "settings" || tab === "submissions" ? tab : "design"}
       />
-    </Page>
+    </main>
   );
 }
