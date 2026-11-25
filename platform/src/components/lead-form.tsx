@@ -19,6 +19,7 @@ import {
   type Theme,
 } from "@/lib/form-builder";
 import { FormBooking, type Booked, type Person } from "@/components/form-booking";
+import { PhoneInput } from "@/components/phone-input";
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -253,12 +254,13 @@ export function FieldView({
             style={{ ...inputStyle(t, Boolean(error)), paddingLeft: t.fieldStyle === "underline" ? 18 : 30 }}
           />
         </span>
+      ) : f.kind === "phone" ? (
+        <PhoneInput value={s} onChange={onChange} country={f.country} placeholder={f.placeholder} readOnly={design} style={inputStyle(t, Boolean(error))} />
       ) : (
         <input type={type} value={s} autoComplete={auto} placeholder={f.placeholder} readOnly={design} tabIndex={design ? -1 : undefined} onChange={(e) => onChange(e.target.value)} style={inputStyle(t, Boolean(error))} />
       )}
       {help}
       {err}
-      {!err && !help && f.kind === "phone" && !design && <span style={{ fontSize: 12, color: p.muted }}>Mobile like 07700 900123, or with your country code.</span>}
     </label>
   );
 }

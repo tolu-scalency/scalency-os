@@ -7,6 +7,15 @@
 import { useState, type ReactNode } from "react";
 import { Icon, type IconName } from "@/components/icon";
 import type { CustomField, Stage } from "@/lib/data";
+import { DIAL } from "@/components/phone-input";
+
+function regionName(iso: string) {
+  try {
+    return new Intl.DisplayNames(["en-GB"], { type: "region" }).of(iso) ?? iso;
+  } catch {
+    return iso;
+  }
+}
 import { FONTS, allBlocks, allFields, kindInfo, type Block, type ContentBlock, type FieldBlock, type FormDefinition, type Logic, type Theme } from "@/lib/form-builder";
 import { findBlock, findColumn, findRow } from "./tree";
 
@@ -295,6 +304,22 @@ function FieldSettings({ f, set, def, customFields }: Props & { f: FieldBlock; s
             <input value={f.key ?? ""} onChange={(e) => set({ key: e.target.value.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 60) })} placeholder="campaign" className="field h-10 min-w-0 flex-1 text-[13px]" />
             <span className="text-muted">=…</span>
           </div>
+        </Label>
+      )}
+
+      {f.kind === "phone" && (
+        <Label text="Country code starts on" hint="People can change it. “Their own country” guesses from where they are.">
+          <select value={f.country ?? ""} onChange={(e) => set({ country: e.target.value || undefined })} className="field h-10 text-[13px]">
+            <option value="">Their own country</option>
+            {Object.keys(DIAL)
+              .map((iso) => ({ iso, name: regionName(iso) }))
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((c) => (
+                <option key={c.iso} value={c.iso}>
+                  {c.name} (+{DIAL[c.iso]})
+                </option>
+              ))}
+          </select>
         </Label>
       )}
 
