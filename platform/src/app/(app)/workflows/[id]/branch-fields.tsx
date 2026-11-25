@@ -11,7 +11,7 @@ import type { Condition, ConditionField, ConditionOp, CustomField, Stage } from 
 import { MAX_BRANCHES, newId, type BranchNode, type Route } from "@/lib/flow";
 import { StagePicker, type Option } from "./step-fields";
 
-type Input = "none" | "tag" | "text" | "stage" | "pipeline" | "deal_status" | "member" | "number" | "days" | "time" | "field" | "form" | "workflow" | "date" | "channel" | "daynum" | "count";
+type Input = "none" | "tag" | "text" | "stage" | "pipeline" | "deal_status" | "member" | "number" | "days" | "time" | "field" | "form" | "workflow" | "date" | "channel" | "daynum" | "count" | "appt_status";
 type OpChoice = { key: string; label: string; op?: ConditionOp; negate?: boolean; noValue?: boolean };
 type Def = { field: ConditionField; label: string; group: string; input: Input; ops: OpChoice[]; icon: IconName; hint: string };
 
@@ -25,6 +25,8 @@ const compare = (more: string, less: string, exact?: string): OpChoice[] => [
   { key: "lt", label: less, op: "lt" },
   ...(exact ? [{ key: "is", label: exact, op: "is" as const }] : []),
 ];
+
+const APPT_STATUS: Record<string, string> = { booked: "Booked", showed: "Showed", no_show: "No-show", cancelled: "Cancelled" };
 
 export const CONDITION_DEFS: Def[] = [
   // Contact
@@ -60,6 +62,9 @@ export const CONDITION_DEFS: Def[] = [
   { field: "submitted_form", label: "Form submitted", group: "Forms and workflows", icon: "form", hint: "Has ever sent a particular form", input: "form", ops: yesNo("has submitted", "has not submitted") },
   { field: "in_workflow", label: "In workflow", group: "Forms and workflows", icon: "zap", hint: "Currently running in another workflow", input: "workflow", ops: yesNo("is in", "is not in") },
   { field: "finished_workflow", label: "Finished workflow", group: "Forms and workflows", icon: "checkCircle", hint: "Has completed another workflow", input: "workflow", ops: yesNo("has finished", "has not finished") },
+  // Appointments
+  { field: "has_appointment", label: "Appointment booked", group: "Appointments", icon: "calendar", hint: "Has a booking still to come", input: "none", ops: yesNo("has booked", "has not booked") },
+  { field: "appointment_status", label: "Last appointment", group: "Appointments", icon: "calendar", hint: "Booked, showed, no-show or cancelled", input: "appt_status", ops: yesNo("is", "is not") },
   // Pipeline
   { field: "in_pipeline", label: "Pipeline", group: "Deals", icon: "pipeline", hint: "Has a deal in a pipeline", input: "pipeline", ops: yesNo("has a deal in", "has no deal in") },
   { field: "in_stage", label: "Pipeline stage", group: "Deals", icon: "columns", hint: "A deal is in a particular stage", input: "stage", ops: yesNo("is in", "is not in") },
@@ -84,7 +89,7 @@ export const CONDITION_DEFS: Def[] = [
     { key: "gt", label: "is after", op: "gt" },
   ] },
 ];
-const DEF_GROUPS = ["Contact", "Consent", "Conversations", "Forms and workflows", "Deals", "Date and time"];
+const DEF_GROUPS = ["Contact", "Consent", "Conversations", "Forms and workflows", "Appointments", "Deals", "Date and time"];
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function defFor(field: ConditionField) {
@@ -101,6 +106,7 @@ export function newCondition(field: ConditionField = "has_tag", stages: Stage[] 
   const value =
     d.input === "stage" ? stages[0]?.id
     : d.input === "deal_status" ? "won"
+    : d.input === "appt_status" ? "showed"
     : d.input === "days" ? "1,2,3,4,5"
     : d.input === "time" ? "09:00"
     : d.input === "channel" ? "email"
@@ -128,6 +134,7 @@ export function conditionText(c: Condition, ctx: Ctx) {
   if (d.input === "form") v = ctx.forms?.find((s) => s.id === v)?.name ?? "a form";
   if (d.input === "workflow") v = ctx.workflows?.find((s) => s.id === v)?.name ?? "a workflow";
   if (d.input === "channel") v = v === "sms" ? "text" : "email";
+  if (d.input === "appt_status") v = APPT_STATUS[v] ?? v;
   if (d.input === "count") v = `${v} days ago`;
   if (d.input === "date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) v = new Date(`${v}T12:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   if (c.field === "deal_value") v = `£${v}`;
@@ -378,6 +385,14 @@ function ValueInput({
           <option value="open">Open</option>
           <option value="won">Won</option>
           <option value="lost">Lost</option>
+        </select>
+      );
+    case "appt_status":
+      return (
+        <select value={v || "showed"} onChange={(e) => set({ value: e.target.value })} className={cls} aria-label="Appointment status">
+          {Object.entries(APPT_STATUS).map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
+          ))}
         </select>
       );
     case "form":

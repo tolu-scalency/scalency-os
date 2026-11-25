@@ -345,6 +345,11 @@ Migration `20261209090000_calendar` (SQL-18). Scalency's own calendar: booking p
 - Workflows: new triggers `appointment_booked`, `appointment_cancelled`, `appointment_no_show` and `appointment_showed` (each with an optional `calendar_id`), fired by `workflows_on_appointment()`. Enrolments remember the appointment (`event_at`, `context.appointment_id`): a reschedule moves their timers and a cancellation ends them. New step `wait_appointment` (wait until a set time before or after the appointment, skipped if already past) in `run_due_workflows`.
 - Message fields: `{{appointment_date}}`, `{{appointment_time}}`, `{{appointment_timezone}}`, `{{appointment_with}}`, `{{appointment_title}}`, `{{appointment_location}}`, `{{meeting_link}}` and `{{manage_link}}`, filled by `render_appointment_fields()` from the contact's next booking.
 
+
+## Appointment conditions (20261210100000_appointment_conditions.sql)
+
+- `wf_condition` gains two If / else checks: `has_appointment` (a booking still to come, status booked or confirmed; optional `value` = calendar id) and `appointment_status` (their latest appointment by start time is `booked`, `showed`, `no_show` or `cancelled`; confirmed counts as booked).
+
 ## Not in this version yet
 
 Team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
