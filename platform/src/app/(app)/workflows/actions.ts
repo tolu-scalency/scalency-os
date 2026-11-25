@@ -30,7 +30,7 @@ export async function createWorkflow(fd: FormData) {
 }
 
 const STEP_TYPES = new Set([
-  "wait", "wait_until", "wait_for_reply", "email", "sms", "task", "move_stage", "set_status", "note", "notify_team",
+  "wait", "wait_until", "wait_for_reply", "wait_appointment", "email", "sms", "task", "move_stage", "set_status", "note", "notify_team",
   "add_tag", "remove_tag", "assign", "if_else", "add_to_workflow", "remove_from_workflow", "webhook", "end",
   "update_field", "email_team",
 ]);
@@ -93,6 +93,10 @@ function cleanStep(s: unknown, ctx: Ctx, seen: Set<string>): WorkflowStep | stri
     case "wait_for_reply":
       if (!(amount >= 1 && amount <= 365)) return `${n}: wait between 1 and 365.`;
       out.push({ id, type: st.type, amount, unit });
+      return { ...out[0], label } as WorkflowStep;
+    case "wait_appointment":
+      if (!(amount >= 0 && amount <= 365)) return `${n}: choose between 0 and 365.`;
+      out.push({ id, type: "wait_appointment", amount, unit, when: st.when === "after" ? "after" : "before" });
       return { ...out[0], label } as WorkflowStep;
     case "wait_until": {
       const hour = Math.round(Number(st.hour));
@@ -344,6 +348,18 @@ export async function saveWorkflow(
         if (!f) return { error: "Choose a form that still exists." };
         trigger = { type: "form_submitted", form_id: fid };
       } else trigger = { type: "form_submitted" };
+      break;
+    }
+    case "appointment_booked":
+    case "appointment_cancelled":
+    case "appointment_no_show":
+    case "appointment_showed": {
+      const cid = String(t.calendar_id ?? "");
+      if (cid) {
+        const { data: c } = await supabase.from("calendars").select("id").eq("id", cid).eq("account_id", ws.account.id).maybeSingle();
+        if (!c) return { error: "Choose a calendar that still exists." };
+        trigger = { type: t.type, calendar_id: cid };
+      } else trigger = { type: t.type };
       break;
     }
     case "stage_entered": {

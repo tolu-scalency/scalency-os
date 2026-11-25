@@ -46,6 +46,20 @@ const templates: {
     tone: "violet",
   },
   {
+    key: "booked",
+    title: "Appointment reminders",
+    text: "Remind people the day and hour before, with the meeting link. Stops if they cancel.",
+    icon: "calendar",
+    tone: "blue",
+  },
+  {
+    key: "missed",
+    title: "Missed appointment",
+    text: "Text no-shows a rebooking link, then add a call task.",
+    icon: "clock",
+    tone: "orange",
+  },
+  {
     key: "won",
     title: "Deal won",
     text: "Welcome new customers and tell the team.",

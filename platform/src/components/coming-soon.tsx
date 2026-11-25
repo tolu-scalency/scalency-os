@@ -84,7 +84,7 @@ function Preview({ icon }: { icon: Parameters<typeof Icon>[0]["name"] }) {
         </div>
       </div>
       <div className="absolute -bottom-4 -left-4 rounded-xl border border-line bg-white px-3 py-2 text-[12px] font-semibold text-brand shadow-[var(--shadow-card)]">
-        <span className="text-gradient">Scalency OS</span>
+        <span className="text-gradient">Scalency</span>
       </div>
     </div>
   );

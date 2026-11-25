@@ -1,4 +1,4 @@
-// Line icons used across Scalency OS. Each is a single SVG path on a 24×24 grid.
+// Line icons used across Scalency. Each is a single SVG path on a 24×24 grid.
 
 const paths = {
   dashboard: "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z",

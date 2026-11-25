@@ -1,6 +1,7 @@
 import { adminClient } from "@/lib/admin";
 import { deliverPending, deliverWebhooks } from "@/lib/deliver";
 import { recheckPendingDomains } from "@/lib/domains";
+import { syncCalendly } from "@/lib/calendar/booking";
 
 // The clock. Netlify calls this every minute (netlify/functions/clock.mts).
 // It runs due workflow steps for every workspace, then sends waiting emails, texts and webhooks.
@@ -23,5 +24,7 @@ export async function GET(request: Request) {
   if (new Date().getMinutes() === 0) await admin.rpc("prune_login_codes");
   // New own domains for pages switch on by themselves once their DNS records show up.
   if (new Date().getMinutes() % 10 === 5) await recheckPendingDomains(admin).catch((e) => console.error("Domain checks failed", e));
+  // Calendly bookings come into Scalency every 5 minutes.
+  if (new Date().getMinutes() % 5 === 2) await syncCalendly(admin).catch((e) => console.error("Calendly sync failed", e));
   return Response.json({ ok: !error, workflowsProcessed: steps ?? 0, messagesSent: sent, webhooksSent: hooks, error: error?.message });
 }

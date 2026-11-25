@@ -12,7 +12,7 @@ import { KEEP_COOKIE } from "@/lib/session-policy";
 const errors: Record<string, string> = {
   link: "That login link has expired or was already used. Log in with your password, or ask for a new link.",
   expired: "You were signed out to keep your account safe. Please log in again.",
-  setup: "Scalency OS isn't connected to its database yet. Add the Supabase settings in Netlify, then redeploy.",
+  setup: "Scalency isn't connected to its database yet. Add the Supabase settings in Netlify, then redeploy.",
 };
 
 function plain(message: string) {
@@ -144,7 +144,7 @@ export function LoginForm() {
         )}
       </div>
       <p className="border-t border-line pt-4 text-sm text-muted">
-        New to Scalency OS? <Link href="/signup" className="font-semibold text-brand">Create an account</Link>
+        New to Scalency? <Link href="/signup" className="font-semibold text-brand">Create an account</Link>
       </p>
     </form>
   );

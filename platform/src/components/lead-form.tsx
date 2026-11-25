@@ -640,7 +640,20 @@ export function LeadForm({ formId, def, preview = false, embed = false }: { form
         if (embed && new URLSearchParams(window.location.search).get("then") === "parent") {
           window.parent?.postMessage({ scalencyForm: formId, done: true }, "*");
         } else if (d.redirect) {
-          (embed ? (window.top ?? window) : window).location.href = d.redirect;
+          if (embed) {
+            // Browsers can block a frame from moving the page it sits in, so the embed script on
+            // that page does the move. If there's no embed script, the frame tries itself.
+            const to = d.redirect;
+            window.parent?.postMessage({ scalencyForm: formId, redirect: to }, "*");
+            window.setTimeout(() => {
+              try {
+                (window.top ?? window).location.href = to;
+              } catch {
+                window.open(to, "_top");
+              }
+            }, 700);
+          } else window.location.href = d.redirect;
+          setState("busy");
           return;
         }
         setResult({ message: d.message ?? def.success });

@@ -9,9 +9,9 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://os.scalency.us"),
-  title: { default: "Scalency OS", template: "%s · Scalency OS" },
+  title: { default: "Scalency", template: "%s · Scalency" },
   description: "Leads, pipeline, tasks and your team in one place. Every enquiry answered, followed up and booked.",
-  applicationName: "Scalency OS",
+  applicationName: "Scalency",
   // Declared here (not as app/ icon files) so public form pages can replace them with the workspace's own.
   icons: { icon: [{ url: "/favicon.ico", sizes: "any" }, { url: "/icon.png", type: "image/png" }], apple: "/apple-icon.png" },
 };

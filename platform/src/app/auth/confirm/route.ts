@@ -45,7 +45,7 @@ function page(tokenHash: string, type: string, next: string) {
   const w = WORDS[type] ?? WORDS.email;
   return `<!doctype html>
 <html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${w.title} | Scalency OS</title>
+<meta name="robots" content="noindex"><title>${w.title} | Scalency</title>
 <style>
   *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#F3F6FB;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#0B1B3A;padding:24px}
   .card{width:100%;max-width:400px;background:#fff;border-radius:20px;padding:36px 28px;text-align:center;box-shadow:0 10px 30px rgba(11,27,58,.08)}

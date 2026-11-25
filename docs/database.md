@@ -332,6 +332,19 @@ Migration `20261202090000_ai_setter`. The AI itself runs in the Supabase functio
 - Team replies and audits (SQL-16, `20261208090000_team_replies_audits.sql`): `setter_turns.role` can be `team` (a message a team member sent from the command centre). `audits`: saved AI opportunity audit reports per workspace (intake answers, report, monthly total).
 - Contacts copied from GHL (SQL-11, `20261203090000_ghl_contacts.sql`): the AI setter can import a sub-account's contacts and copies each new GHL lead in, one way only. They have `source = 'GHL'` and `custom ->> 'ghl_id'` (indexed). They're matched to existing contacts by GHL ID, email or phone, and never get consent set. They don't start Scalency workflows (contact created, tag added or removed), because GHL stays in charge of messaging them.
 
+## Calendar
+
+Migration `20261209090000_calendar` (SQL-18). Scalency's own calendar: booking pages, working hours, appointments, and connections to Google Calendar (with Meet), Outlook (with Teams) and Calendly.
+
+- `calendars`: a booking page. Its name and link name (`slug`, unique per workspace), length, start-time step, gaps before and after, minimum notice, how far ahead people can book, daily limit per person, location (`google_meet`, `teams`, `phone`, `in_person`, `link` or `none`), extra `questions`, the pipeline stage a booking moves the deal to (`stage_id`), tags, the confirmation email and team alert switches, a thank-you message or redirect, colour and `status` (active, paused, archived). `kind` is `one` (always the first person) or `round_robin` (the free person booked least recently).
+- `calendar_members`: who takes bookings on each calendar, with `priority` (0 pauses them) and `last_booked_at` for the round robin.
+- `calendar_availability`: each person's working hours per workspace: `timezone`, `weekly` (weekday to time ranges) and `overrides` (days off or special hours).
+- `calendar_connections`: one per person per provider. Tokens are encrypted by the app (`token_sealed`, `refresh_sealed`), and the browser can never read those columns. `check_conflicts` blocks busy times; `add_bookings` writes bookings in. Calendly connections are read only: their bookings are imported every 5 minutes.
+- `appointments`: every booking, from a booking page, the team, Calendly or (later) the AI. Times, `status` (booked, confirmed, showed, no_show, cancelled), `source`, who it's with (`assigned_to`), the contact and deal, location and `meeting_url`, answers, notes, the matching outside event (`external_provider`, `external_id`, `external_calendar`) and `manage_token` for the booker's reschedule or cancel link (`/booking/<token>`).
+- Access: members can see calendars and appointments; "Manage calendars" (`calendars.manage`) can change booking pages and anyone's bookings and hours; people can always change their own hours and the bookings assigned to them. Connections are added and changed by the server only.
+- Workflows: new triggers `appointment_booked`, `appointment_cancelled`, `appointment_no_show` and `appointment_showed` (each with an optional `calendar_id`), fired by `workflows_on_appointment()`. Enrolments remember the appointment (`event_at`, `context.appointment_id`): a reschedule moves their timers and a cancellation ends them. New step `wait_appointment` (wait until a set time before or after the appointment, skipped if already past) in `run_due_workflows`.
+- Message fields: `{{appointment_date}}`, `{{appointment_time}}`, `{{appointment_timezone}}`, `{{appointment_with}}`, `{{appointment_title}}`, `{{appointment_location}}`, `{{meeting_link}}` and `{{manage_link}}`, filled by `render_appointment_fields()` from the contact's next booking.
+
 ## Not in this version yet
 
-Calendars and appointments (for L4 Booked Call), team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
+Team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.
