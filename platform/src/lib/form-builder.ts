@@ -25,6 +25,8 @@ export type FieldBlock = {
   type: "field";
   kind: FieldKind;
   label: string;
+  /** Phone: the country the code picker starts on (ISO code, e.g. GB). Empty: guess from the visitor. */
+  country?: string;
   placeholder?: string;
   help?: string;
   required: boolean;
@@ -420,6 +422,7 @@ function cleanBlock(raw: unknown, seen: Set<string>, once: Set<string>): Block |
   if (ph) out.placeholder = ph;
   const help = str(b.help, 300).trim();
   if (help) out.help = help;
+  if (kind === "phone" && /^[A-Z]{2}$/.test(String(b.country ?? ""))) out.country = String(b.country);
   const param = str(b.param, 40).replace(/[^a-zA-Z0-9_.-]/g, "");
   if (param && kind !== "hidden" && kind !== "file" && kind !== "signature") out.param = param;
   if (kind === "number" || kind === "money" || kind === "textarea") {

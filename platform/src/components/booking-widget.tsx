@@ -1,5 +1,6 @@
 "use client";
 
+import { PhoneInput } from "@/components/phone-input";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icon";
 import { addDays, dayLabel, timeLabel, validTimeZone } from "@/lib/calendar/time";
@@ -316,7 +317,7 @@ export function BookingWidget(p: Props) {
                   <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Last name<input autoComplete="family-name" value={form.last_name ?? ""} onChange={(e) => setForm({ ...form, last_name: e.target.value })} maxLength={80} className={field} /></label>
                 </div>
                 <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Email<input required type="email" autoComplete="email" value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} maxLength={200} className={field} /></label>
-                <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Mobile<input type="tel" autoComplete="tel" value={form.phone ?? ""} onChange={(e) => setForm({ ...form, phone: e.target.value })} maxLength={30} placeholder="07700 900123" className={field} /></label>
+                <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Mobile<PhoneInput value={form.phone ?? ""} onChange={(v) => setForm({ ...form, phone: v })} style={{}} className={field} /></label>
                 {p.questions.map((q) => (
                   <label key={q.id} className="flex flex-col gap-1.5 text-[13px] font-semibold">
                     {q.label}{q.required ? "" : " (optional)"}
