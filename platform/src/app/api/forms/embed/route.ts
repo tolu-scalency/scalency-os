@@ -27,7 +27,7 @@ var color=s.getAttribute("data-color")||"#0a5fe3";
 var once=s.getAttribute("data-once")==="true";
 var key="scalency-form-shown-"+id;
 function src(){var q=location.search?location.search.slice(1)+"&":"";return base+"/f/"+id+"?embed=1&"+q+"page="+encodeURIComponent(location.href)}
-function frame(minH){var f=document.createElement("iframe");f.src=src();f.title="Form";f.loading="lazy";f.setAttribute("allow","clipboard-write");f.style.cssText="width:100%;border:0;display:block;min-height:"+minH+"px;background:transparent";window.addEventListener("message",function(e){if(e.origin!==base||!e.data||e.data.scalencyForm!==id)return;if(e.data.height)f.style.height=e.data.height+"px";if(typeof e.data.redirect==="string"&&/^https:\/\//.test(e.data.redirect))location.href=e.data.redirect});return f}
+function frame(minH){var f=document.createElement("iframe");f.src=src();f.title="Form";f.loading=mode==="inline"?"eager":"lazy";f.setAttribute("allow","clipboard-write");f.style.cssText="width:100%;border:0;display:block;min-height:"+minH+"px;background:transparent";window.addEventListener("message",function(e){if(e.origin!==base||!e.data||e.data.scalencyForm!==id)return;if(e.data.height)f.style.height=e.data.height+"px";if(typeof e.data.redirect==="string"&&/^https:\/\//.test(e.data.redirect))location.href=e.data.redirect});return f}
 if(mode==="inline"){var box=document.createElement("div");box.className="scalency-form";box.appendChild(frame(480));s.parentNode.insertBefore(box,s);return}
 var open=false,wrap,panel;
 function build(){

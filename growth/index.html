@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scalency | Apply for your free AI growth audit</title>
+  <meta name="description" content="We bring you new enquiries, and AI answers, follows up and books them into your diary. Apply for a free AI growth audit.">
+  <!-- Start connecting to the form and font servers straight away, so the form appears sooner. -->
+  <link rel="preconnect" href="https://os.scalency.us">
+  <link rel="dns-prefetch" href="https://os.scalency.us">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/growth.css">
+</head>
+<body class="solo">
+
+  <header class="top">
+    <div class="wrap">
+      <a class="logo" href="/"><img src="/assets/scalency-logo.png" alt="Scalency" width="132" height="48"></a>
+    </div>
+  </header>
+
+  <!-- Hero only (Tolu, 26 Nov): eyebrow, headline, sub-headline and the application form. -->
+  <main class="hero-solo">
+    <div class="wrap">
+      <span class="eyebrow"><span class="dot"></span>For business owners doing £10k+ a month</span>
+      <h1>A <span class="grad">Full Diary Of Booked Customers</span>, Without Chasing Leads Yourself</h1>
+      <p class="lead">We bring you new enquiries, and AI answers, follows up and books every one into your diary, without slow replies, missed calls or leads going cold.</p>
+
+      <div class="form-card" id="apply">
+        <!-- Skeleton shown while the form loads, so the box never sits empty. -->
+        <div class="skeleton" id="skeleton" aria-hidden="true">
+          <div class="sk-bar"></div>
+          <div class="sk-line w60"></div>
+          <div class="sk-line w90"></div>
+          <div class="sk-row"><div class="sk-input"></div><div class="sk-input"></div></div>
+          <div class="sk-row"><div class="sk-input"></div><div class="sk-input"></div></div>
+          <div class="sk-btn"></div>
+        </div>
+        <!-- The application lives in Scalency (form "Scalency Application"). Loaded straight away
+             rather than through the embed script, so it starts loading with the page. -->
+        <iframe id="scalency-form" title="Application form" allow="clipboard-write"
+          style="width:100%;border:0;display:block;min-height:520px;background:transparent"></iframe>
+        <script>
+          // Load the form straight away (with the ad's utm_ tags and this page's address), grow the
+          // frame to fit it, and follow it to the booked page when it's done.
+          (function () {
+            var f = document.getElementById("scalency-form"), sk = document.getElementById("skeleton");
+            var base = "https://os.scalency.us", id = "29344e7a-2f77-4345-94c4-ea6fc136a2f8";
+            f.src = base + "/f/" + id + "?embed=1&" + (location.search ? location.search.slice(1) + "&" : "") + "page=" + encodeURIComponent(location.href);
+            f.addEventListener("load", function () { setTimeout(function () { sk.classList.add("gone"); }, 150); });
+            window.addEventListener("message", function (e) {
+              if (e.origin !== base || !e.data || e.data.scalencyForm !== id) return;
+              if (e.data.height) { f.style.height = e.data.height + "px"; sk.classList.add("gone"); }
+              if (typeof e.data.redirect === "string" && /^https:\/\//.test(e.data.redirect)) location.href = e.data.redirect;
+            });
+          })();
+        </script>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="row">
+        <img src="/assets/scalency-logo.png" alt="Scalency" width="104" height="38">
+        <span class="links"><a href="https://scalency.us/privacy">Privacy</a></span>
+      </div>
+      <p>© 2026 Scalency. All rights reserved.</p>
+      <p>Results are not typical and will vary depending on individual effort, budget and circumstances. Running a business is real work.</p>
+      <p>This site is not a part of Facebook or Meta Platforms, Inc. Additionally, this site is not endorsed by Facebook or Meta in any way. Facebook and Meta are trademarks of Meta Platforms, Inc. Scalency does not guarantee income or results. Individual outcomes vary based on effort, experience, and execution.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
