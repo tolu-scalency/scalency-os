@@ -48,6 +48,8 @@ export type ShellUser = {
   canCreateWorkspace: boolean;
   /** What this person may use here; the menu only shows those parts. */
   permissions: string[];
+  /** Set while the workspace is in test mode: where lead messages go instead. */
+  testMode?: { email: string | null; phone: string | null } | null;
 };
 
 const allHrefs = [...NAV, SETTINGS_NAV].flatMap((g) => [g.href, ...(g.links ?? []).map((l) => l.href)]);
@@ -138,6 +140,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: React.
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={user} onMenu={() => setMobileOpen(true)} onCommand={() => setCommandOpen(true)} />
         <CommandBar open={commandOpen} onClose={() => setCommandOpen(false)} permissions={user.permissions} />
+        {user.testMode && <TestModeBar t={user.testMode} canChange={user.permissions.includes("settings.manage")} />}
         <div className="app-grid flex-1 pb-[var(--nav-h)]">
           <div key={pathname} className="page-in">
             {page}
@@ -267,6 +270,25 @@ function Sidebar({ pathname, user, collapsed, onToggle, mobile = false }: { path
         </form>
       </div>
     </nav>
+  );
+}
+
+/** Shown on every screen while test mode is on, so nobody expects a lead to get a message. */
+function TestModeBar({ t, canChange }: { t: { email: string | null; phone: string | null }; canChange: boolean }) {
+  const where = [t.email, t.phone].filter(Boolean).join(" and ");
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[#f5d48a] bg-[#fff7e0] px-4 py-2 text-[13px] text-[#7a5200] sm:px-6">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5c451] px-2 py-0.5 text-[11.5px] font-bold uppercase tracking-wide text-[#4a3200]">Test mode</span>
+      <span className="min-w-0 flex-1">
+        Emails and texts to leads are not sent to them.{" "}
+        {where ? <>They go to <strong>{where}</strong> instead.</> : <>They&apos;re held, because no test email or mobile is set.</>}
+      </span>
+      {canChange && (
+        <Link href="/settings" className="font-semibold text-[#7a5200] underline underline-offset-2 hover:text-[#4a3200]">
+          Change in Settings
+        </Link>
+      )}
+    </div>
   );
 }
 
