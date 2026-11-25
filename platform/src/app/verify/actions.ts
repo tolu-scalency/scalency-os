@@ -53,15 +53,15 @@ export async function sendLoginCode(force = false): Promise<Result> {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, "content-type": "application/json" },
     body: JSON.stringify({
-      from: `Scalency OS <${process.env.EMAIL_FROM}>`,
+      from: `Scalency <${process.env.EMAIL_FROM}>`,
       to: [me.email],
       subject: `${code} is your Scalency sign-in code`,
-      text: `Your Scalency OS sign-in code is ${code}\n\nIt works for 10 minutes. If you didn't just sign in, change your password.`,
+      text: `Your Scalency sign-in code is ${code}\n\nIt works for 10 minutes. If you didn't just sign in, change your password.`,
       html: `<!DOCTYPE html><html><body style="margin:0;background:#F4F7FB;font-family:-apple-system,Segoe UI,Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;background:#fff;border-radius:16px;">
 <tr><td style="padding:32px;color:#1F2D45;font-size:15px;line-height:24px;">
-<p style="margin:0 0 12px;">Your Scalency OS sign-in code:</p>
+<p style="margin:0 0 12px;">Your Scalency sign-in code:</p>
 <p style="margin:0 0 16px;font-size:32px;font-weight:700;letter-spacing:8px;color:#0A1F44;">${code}</p>
 <p style="margin:0;color:#5B6B82;font-size:13px;">It works for 10 minutes. If you didn't just sign in, change your password.</p>
 </td></tr></table></td></tr></table></body></html>`,

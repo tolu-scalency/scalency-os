@@ -1,4 +1,4 @@
-// Scalency OS: AI setup assistant.
+// Scalency: AI setup assistant.
 //
 // Reads what a business tells us about itself (pasted text, a voice note
 // transcript or a PDF) and proposes a workspace setup: pipeline stages,
@@ -112,7 +112,7 @@ const TOOL = {
   },
 };
 
-const SYSTEM = `You set up CRM workspaces for small businesses in Scalency OS.
+const SYSTEM = `You set up CRM workspaces for small businesses in Scalency.
 Read what the business shares and propose a practical setup they can use on day one.
 
 Rules:

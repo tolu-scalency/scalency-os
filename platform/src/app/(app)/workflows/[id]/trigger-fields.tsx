@@ -31,8 +31,10 @@ export const TRIGGERS: TriggerDef[] = [
   { type: "call_status", label: "Call completed or missed", hint: "An inbound or outbound call ends", group: "Conversations", icon: "phone", soon: true },
 
   { type: "form_submitted", label: "Form submitted", hint: "One of your forms is filled in", group: "Forms and bookings", icon: "file" },
-  { type: "appointment_booked", label: "Appointment booked", hint: "A booking is made on a calendar", group: "Forms and bookings", icon: "calendar", soon: true },
-  { type: "appointment_status", label: "Appointment cancelled or no-show", hint: "A booking changes status", group: "Forms and bookings", icon: "calendar", soon: true },
+  { type: "appointment_booked", label: "Appointment booked", hint: "Someone books on a calendar, or it comes in from Calendly", group: "Forms and bookings", icon: "calendar" },
+  { type: "appointment_cancelled", label: "Appointment cancelled", hint: "A booking is cancelled", group: "Forms and bookings", icon: "calendar" },
+  { type: "appointment_no_show", label: "Appointment no-show", hint: "A booking is marked no-show", group: "Forms and bookings", icon: "calendar" },
+  { type: "appointment_showed", label: "Appointment showed", hint: "A booking is marked showed", group: "Forms and bookings", icon: "calendar" },
   { type: "trigger_link", label: "Trigger link clicked", hint: "A tracked link is clicked", group: "Forms and bookings", icon: "link", soon: true },
 
   { type: "payment_received", label: "Payment received", hint: "A Stripe payment comes in", group: "Payments", icon: "pound", soon: true },
@@ -117,12 +119,14 @@ export function TriggerFilters({
   stages,
   pipelines,
   forms = [],
+  calendars = [],
 }: {
   trigger: WorkflowTrigger;
   onChange: (t: WorkflowTrigger) => void;
   stages: Stage[];
   pipelines: Option[];
   forms?: Option[];
+  calendars?: Option[];
 }) {
   const pipelineSelect = (value: string | undefined, set: (v: string | undefined) => void) => (
     <label className="flex flex-col gap-1.5 text-[12px] font-medium text-muted">
@@ -154,6 +158,25 @@ export function TriggerFilters({
     case "deal_won":
     case "deal_lost":
       return pipelineSelect(trigger.pipeline_id, (v) => onChange({ type: trigger.type, ...(v ? { pipeline_id: v } : {}) }));
+    case "appointment_booked":
+    case "appointment_cancelled":
+    case "appointment_no_show":
+    case "appointment_showed":
+      return (
+        <label className="flex flex-col gap-1.5 text-[12px] font-medium text-muted">
+          Which calendar
+          <select
+            value={trigger.calendar_id ?? "any"}
+            onChange={(e) => onChange(e.target.value === "any" ? { type: trigger.type } : { type: trigger.type, calendar_id: e.target.value })}
+            className="field h-10 text-[13.5px] font-normal text-ink"
+          >
+            <option value="any">Any calendar (and Calendly)</option>
+            {calendars.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+      );
     case "form_submitted":
       return (
         <label className="flex flex-col gap-1.5 text-[12px] font-medium text-muted">

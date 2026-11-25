@@ -22,6 +22,7 @@ export const kinds: Kind[] = [
   { type: "wait", label: "Wait", icon: "clock", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
   { type: "wait_until", label: "Wait until a time", icon: "calendar", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
   { type: "wait_for_reply", label: "Wait for a reply", icon: "inbox", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
+  { type: "wait_appointment", label: "Wait for the appointment", icon: "calendar", tone: "from-[#cbd5e1] to-[#64748b]", group: "Timing" },
   { type: "if_else", label: "If / else (branches)", icon: "branch", tone: "from-[#c4b5fd] to-[#7c3aed]", group: "Logic" },
   { type: "end", label: "End workflow", icon: "stop", tone: "from-[#fca5a5] to-[#dc2626]", group: "Logic" },
   { type: "add_tag", label: "Add a tag", icon: "tag", tone: "from-[#93c5fd] to-[#2563eb]", group: "Contact" },
@@ -47,6 +48,7 @@ export function blank(type: StepType, stages: Stage[], members: Option[], workfl
     case "wait": return { id, type, amount: 1, unit: "hours" };
     case "wait_until": return { id, type, hour: 9, minute: 0, weekdays_only: true };
     case "wait_for_reply": return { id, type, amount: 1, unit: "days" };
+    case "wait_appointment": return { id, type, amount: 24, unit: "hours", when: "before" };
     case "email": return { id, type, subject: "", body: "", html: "", mode: "design" };
     case "email_team": return { id, type, to: "owner", subject: "Update on {{name}}", body: "{{name}} ({{phone}}) needs a call." };
     case "update_field": return { id, type, field: "source", value: "" };
@@ -68,10 +70,10 @@ export function blank(type: StepType, stages: Stage[], members: Option[], workfl
   }
 }
 
-function Amount({ amount, unit, onChange }: { amount: number; unit: string; onChange: (p: { amount?: number; unit?: "hours" }) => void }) {
+function Amount({ amount, unit, onChange, min = 1 }: { amount: number; unit: string; onChange: (p: { amount?: number; unit?: "hours" }) => void; min?: number }) {
   return (
     <>
-      <input type="number" min={1} max={365} value={amount} onChange={(e) => onChange({ amount: Number(e.target.value) })} className="field h-10 w-24" aria-label="Amount" />
+      <input type="number" min={min} max={365} value={amount} onChange={(e) => onChange({ amount: Number(e.target.value) })} className="field h-10 w-24" aria-label="Amount" />
       <select value={unit} onChange={(e) => onChange({ unit: e.target.value as "hours" })} className="field h-10 w-32" aria-label="Unit">
         <option value="minutes">minutes</option>
         <option value="hours">hours</option>
@@ -116,6 +118,20 @@ export function StepFields({
             Wait up to <Amount amount={step.amount} unit={step.unit} onChange={onChange} /> for a reply.
           </div>
           <span className="text-[12px] text-faint">Carries on as soon as they reply, or when the time is up. Add an If / else “has replied” after it to choose what happens.</span>
+        </>
+      );
+    case "wait_appointment":
+      return (
+        <>
+          <div className="flex flex-wrap items-center gap-2 text-[14px]">
+            Wait until <Amount amount={step.amount} unit={step.unit} onChange={onChange} min={0} />
+            <select value={step.when} onChange={(e) => onChange({ when: e.target.value === "after" ? "after" : "before" })} className="field h-10 w-32" aria-label="Before or after">
+              <option value="before">before</option>
+              <option value="after">after</option>
+            </select>
+            the appointment.
+          </div>
+          <span className="text-[12px] text-faint">Follows the appointment if it&apos;s moved, and stops if it&apos;s cancelled. Skipped if that time has already passed. Use it for reminders and no-show follow-ups.</span>
         </>
       );
     case "wait_until":
@@ -307,6 +323,8 @@ export function summary(step: WorkflowStep, ctx: { stages: Stage[]; members: Opt
       return `Wait ${step.amount} ${step.amount === 1 ? step.unit.replace(/s$/, "") : step.unit}`;
     case "wait_for_reply":
       return `Up to ${step.amount} ${step.amount === 1 ? step.unit.replace(/s$/, "") : step.unit}`;
+    case "wait_appointment":
+      return `${step.amount} ${step.amount === 1 ? step.unit.replace(/s$/, "") : step.unit} ${step.when} the appointment`;
     case "wait_until":
       return `Until ${String(step.hour).padStart(2, "0")}:${String(step.minute).padStart(2, "0")}${step.weekdays_only ? ", Monday to Friday" : ""}`;
     case "email":

@@ -40,6 +40,7 @@ export function WorkflowEditor({
   customFields,
   customValues,
   forms = [],
+  calendars = [],
   statusBar,
   settingsExtra,
 }: {
@@ -54,6 +55,7 @@ export function WorkflowEditor({
   customFields: CustomField[];
   customValues: CustomValue[];
   forms?: Option[];
+  calendars?: Option[];
   /** On, paused or draft, with Approve or Pause: shown in the toolbar so the canvas gets the space. */
   statusBar?: React.ReactNode;
   /** Shown at the bottom of Workflow settings (the workflow's ID, Archive). */
@@ -554,7 +556,7 @@ export function WorkflowEditor({
                   <button type="button" onClick={() => setChoosingTrigger(true)} className="btn-ghost inline-flex min-h-9 items-center rounded-xl px-3 text-[12.5px] font-semibold">Change</button>
                 )}
               </div>
-              <TriggerFilters trigger={trigger} onChange={(t) => change(() => setTrigger(t))} stages={stages} pipelines={pipelines} forms={forms} />
+              <TriggerFilters trigger={trigger} onChange={(t) => change(() => setTrigger(t))} stages={stages} pipelines={pipelines} forms={forms} calendars={calendars} />
               {trigger.type === "webhook" && (
                 <div className="rounded-xl bg-surface p-3 text-[13px]">
                   {hookUrl ? (
@@ -745,7 +747,7 @@ export function WorkflowEditor({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-brand">Trigger</div>
-                  <div className="truncate text-[13.5px] font-semibold">{trigger.type === "none" ? "Add a trigger" : triggerLabel(trigger, stages, pipelines, forms)}</div>
+                  <div className="truncate text-[13.5px] font-semibold">{trigger.type === "none" ? "Add a trigger" : triggerLabel(trigger, stages, pipelines, forms, calendars)}</div>
                 </div>
               </div>
             </button>

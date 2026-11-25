@@ -35,7 +35,7 @@ export default async function AiSetupPage({ searchParams }: { searchParams: Prom
   return (
     <Page>
       <PageHeader
-        eyebrow={welcome ? "Welcome to Scalency OS" : "AI setup"}
+        eyebrow={welcome ? "Welcome to Scalency" : "AI setup"}
         title={welcome ? "Let's set up your workspace" : "Set up your workspace with AI"}
         subtitle="Tell us how your business works. We'll suggest your pipeline, fields, tags and starter workflows. You check everything before it's built."
         actions={welcome ? <Button href="/dashboard">Skip for now</Button> : undefined}

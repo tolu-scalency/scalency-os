@@ -18,10 +18,6 @@ export const SOON_PAGES: SoonPage[] = [
   { slug: "whatsapp", group: "inbox", icon: "inbox", title: "WhatsApp", tagline: "WhatsApp conversations next to email and texts.", bullets: ["One thread per person", "Templates for first messages", "Workflows can send WhatsApp"] },
   { slug: "social-dms", group: "inbox", icon: "inbox", title: "Social messages", tagline: "Facebook, Instagram and Google messages in the inbox.", bullets: ["Reply without leaving Scalency", "Leads created automatically", "Assign threads to the team"] },
   // Calendar
-  { slug: "calendars", group: "calendar", icon: "calendar", title: "Calendars", tagline: "Team, round-robin and personal calendars.", bullets: ["Round-robin across the sales team", "Buffers and daily limits", "Working hours per person"] },
-  { slug: "appointments", group: "calendar", icon: "clock", title: "Appointments", tagline: "Every booked call in one list.", bullets: ["Confirm, reschedule or cancel", "No-show tracking", "Reminders by text and email"] },
-  { slug: "booking-pages", group: "calendar", icon: "link", title: "Booking pages", tagline: "Links leads use to pick a time.", bullets: ["Branded pages", "Questions before booking", "Bookings start workflows"] },
-  { slug: "meeting-apps", group: "calendar", icon: "video", title: "Meeting apps", tagline: "Connect Zoom, Google Meet and Microsoft Teams.", bullets: ["Meeting link added to every booking", "Google and Outlook calendar sync", "Busy times blocked automatically"] },
   // Contacts
   { slug: "smart-lists", group: "contacts", icon: "filter", title: "Smart lists", tagline: "Saved filters that update themselves.", bullets: ["Filter by tags, fields and activity", "Bulk email, text or tag", "Share lists with the team"] },
   { slug: "import", group: "contacts", icon: "upload", title: "Import contacts", tagline: "Bring contacts in from a spreadsheet.", bullets: ["Map columns to fields", "Skip duplicates", "Tag everyone you import"] },
@@ -100,7 +96,18 @@ export const NAV: NavGroup[] = [
     links: [{ label: "Conversations", href: "/inbox" }, { label: "Team chat", href: "/chat" }, ...soonLinks("inbox")],
   },
   { key: "tasks", label: "Tasks", icon: "tasks", href: "/tasks" },
-  { key: "calendar", label: "Calendar", icon: "calendar", href: "/calendar", soon: true, links: [{ label: "Overview", href: "/calendar", soon: true }, ...soonLinks("calendar")] },
+  {
+    key: "calendar",
+    label: "Calendar",
+    icon: "calendar",
+    href: "/calendar",
+    links: [
+      { label: "Calendar", href: "/calendar" },
+      { label: "Booking pages", href: "/calendar/booking-pages" },
+      { label: "Availability", href: "/calendar/availability" },
+      { label: "Connections", href: "/calendar/connections" },
+    ],
+  },
 
   {
     key: "contacts",
@@ -203,7 +210,6 @@ export function activeLink(pathname: string, links: NavLink[]) {
 
 /** Access a whole menu group needs. Groups not listed are open to everyone in the workspace. */
 const GROUP_PERM: Record<string, Permission> = {
-  calendar: "calendars.manage",
   payments: "payments.manage",
   marketing: "marketing.manage",
   sites: "sites.manage",
@@ -216,6 +222,7 @@ const GROUP_PERM: Record<string, Permission> = {
 /** Access a single page needs. */
 export const PAGE_PERM: Record<string, Permission> = {
   "/workflows": "workflows.manage",
+  "/calendar/booking-pages": "calendars.manage",
   "/ai-builder": "settings.manage",
   "/forms": "sites.manage",
   "/funnels": "sites.manage",

@@ -1,7 +1,7 @@
 import type { WorkflowTrigger } from "@/lib/data";
 
 /** Plain-English description of what starts a workflow. */
-export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: string }[], pipelines: { id: string; name: string }[] = [], forms: { id: string; name: string }[] = []) {
+export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: string }[], pipelines: { id: string; name: string }[] = [], forms: { id: string; name: string }[] = [], calendars: { id: string; name: string }[] = []) {
   const pipe = (id?: string) => (id && id !== "any" ? pipelines.find((p) => p.id === id)?.name : undefined);
   switch (t.type) {
     case "none":
@@ -11,6 +11,14 @@ export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: str
     case "form_submitted": {
       const f = t.form_id ? forms.find((x) => x.id === t.form_id)?.name : undefined;
       return f ? `When “${f}” is submitted` : "When a form is submitted";
+    }
+    case "appointment_booked":
+    case "appointment_cancelled":
+    case "appointment_no_show":
+    case "appointment_showed": {
+      const c = t.calendar_id ? calendars.find((x) => x.id === t.calendar_id)?.name : undefined;
+      const what = { appointment_booked: "booked", appointment_cancelled: "cancelled", appointment_no_show: "marked no-show", appointment_showed: "marked showed" }[t.type];
+      return c ? `When an appointment on “${c}” is ${what}` : `When an appointment is ${what}`;
     }
     case "deal_created":
       return pipe(t.pipeline_id) ? `When a deal is created in ${pipe(t.pipeline_id)}` : "When a deal is created";
@@ -38,6 +46,7 @@ export function triggerLabel(t: WorkflowTrigger, stages: { id: string; name: str
 export const actionLabel: Record<string, string> = {
   wait: "Wait",
   wait_until: "Wait until",
+  wait_appointment: "Wait for the appointment",
   wait_for_reply: "Wait for reply",
   email: "Email",
   sms: "Text",

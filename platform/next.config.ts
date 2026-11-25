@@ -7,12 +7,14 @@ const nextConfig: NextConfig = {
     NETLIFY_SITE_NAME: process.env.SITE_NAME ?? "",
     NETLIFY_BUILD_SITE_ID: process.env.SITE_ID ?? "",
   },
-  // Nothing in the app may be shown inside another website, except public forms,
-  // which are made to be embedded.
+  // Nothing in the app may be shown inside another website, except public forms and
+  // booking pages, which are made to be embedded.
   async headers() {
     return [
-      { source: "/:path((?!f/).*)", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
+      { source: "/:path((?!f/|book/).*)", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
       { source: "/f/:path*", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors *" }] },
+      // Booking pages can be embedded on any website too. The manage link (/booking/...) can't.
+      { source: "/book/:path*", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors *" }] },
     ];
   },
   turbopack: {

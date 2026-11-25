@@ -52,7 +52,7 @@ export async function finishOnboarding(_prev: OnboardingState, fd: FormData): Pr
   if (businessName.length < 2) return { error: "Add your business name." };
   if (website === "invalid") return { error: "That website address doesn't look right." };
   if (!industry || !teamSize) return { error: !industry ? "Tell us your industry or niche." : "Choose your team size." };
-  if (goals.length === 0) return { error: "Choose at least one thing you want Scalency OS to help with." };
+  if (goals.length === 0) return { error: "Choose at least one thing you want Scalency to help with." };
   if (!monthlyLeads) return { error: "Choose roughly how many leads you get each month." };
 
   const supabase = await createClient();

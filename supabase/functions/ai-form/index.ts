@@ -1,4 +1,4 @@
-// Scalency OS: "Build with AI" for Form Studio.
+// Scalency: "Build with AI" for Form Studio.
 //
 // Someone describes the form they want in plain words. Claude drafts it as a
 // simple outline (steps and questions) using only our field types. The app
@@ -90,7 +90,7 @@ const TOOL = {
   },
 };
 
-const SYSTEM = `You design lead capture forms for small businesses using Scalency OS, a CRM.
+const SYSTEM = `You design lead capture forms for small businesses using Scalency, a CRM.
 Rules:
 - Use only the field kinds in the tool. Contact kinds (first_name, last_name, full_name, email, phone, company, website, address, city, state, postcode, country, date_of_birth) may appear once each. Use money for amounts in pounds, file for documents or photos, signature for agreements.
 - Every form must collect an email or a phone number so the business can reply.

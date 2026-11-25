@@ -66,12 +66,36 @@ export const TEMPLATES: Record<string, WorkflowTemplate> = {
     trigger: { type: "contact_created" },
     steps: [{ id: "a1", type: "notify_team", text: "New lead: {{name}} · {{email}} · {{phone}}" }],
   },
+  booked: {
+    name: "Appointment reminders",
+    description: "When someone books: alert the team, then remind them the day before and an hour before, with the meeting link. Stops if they cancel.",
+    trigger: { type: "appointment_booked" },
+    steps: [
+      { id: "b1", type: "notify_team", text: "New booking: {{name}}, {{appointment_date}} at {{appointment_time}} with {{appointment_with}}" },
+      { id: "b2", type: "wait_appointment", amount: 24, unit: "hours", when: "before" },
+      { id: "b3", type: "sms", body: "Hi {{first_name}}, a reminder of your call with {{workspace}} tomorrow at {{appointment_time}}. Join here: {{meeting_link}} Reply YES to confirm." },
+      { id: "b4", type: "email", subject: "Tomorrow: {{appointment_title}}", body: "Hi {{first_name}},\n\nA reminder that we're speaking {{appointment_date}} at {{appointment_time}} ({{appointment_timezone}}).\n\nJoin here: {{meeting_link}}\n\nNeed to change it? {{manage_link}}\n\n{{workspace}}" },
+      { id: "b5", type: "wait_appointment", amount: 1, unit: "hours", when: "before" },
+      { id: "b6", type: "sms", body: "Hi {{first_name}}, we're speaking in an hour at {{appointment_time}}. Join here: {{meeting_link}}" },
+    ],
+  },
+  missed: {
+    name: "Missed appointment",
+    description: "When a booking is marked no-show: text them to rebook, then create a call task if they don't reply.",
+    trigger: { type: "appointment_no_show" },
+    steps: [
+      { id: "m1", type: "sms", body: "Hi {{first_name}}, sorry we missed you today. Would you like to pick a new time? {{manage_link}}" },
+      { id: "m2", type: "wait_for_reply", amount: 1, unit: "days" },
+      { id: "m3", type: "if_else", condition: { field: "replied", negate: true }, else: "end" },
+      { id: "m4", type: "task", title: "Call {{first_name}} to rebook", due_in_days: 0 },
+    ],
+  },
   blank: { name: "Untitled workflow", description: "", trigger: { type: "none" }, steps: [] },
 };
 
 
 /** Keys the AI setup assistant may choose from (not the blank one). */
-export const SETUP_TEMPLATE_KEYS = ["speed", "reply", "noshow", "won", "hook", "alert"] as const;
+export const SETUP_TEMPLATE_KEYS = ["speed", "reply", "noshow", "won", "hook", "alert", "booked", "missed"] as const;
 
 /** A random token for webhook-triggered workflows. */
 export function newHookToken() {

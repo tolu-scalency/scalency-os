@@ -684,6 +684,7 @@ export type WorkflowStep = StepBase &
     | { type: "wait"; amount: number; unit: WaitUnit }
     | { type: "wait_until"; hour: number; minute: number; weekdays_only: boolean }
     | { type: "wait_for_reply"; amount: number; unit: WaitUnit }
+    | { type: "wait_appointment"; amount: number; unit: WaitUnit; when: "before" | "after" }
     | { type: "email"; subject: string; body: string; html?: string; mode?: "text" | "design" | "code" }
     | { type: "sms"; body: string }
     | { type: "task"; title: string; due_in_days: number }
@@ -712,6 +713,10 @@ export type WorkflowTrigger =
   | { type: "stage_entered"; stage_id: string; pipeline_id?: string }
   | { type: "deal_created"; pipeline_id?: string }
   | { type: "form_submitted"; form_id?: string }
+  | { type: "appointment_booked"; calendar_id?: string }
+  | { type: "appointment_cancelled"; calendar_id?: string }
+  | { type: "appointment_no_show"; calendar_id?: string }
+  | { type: "appointment_showed"; calendar_id?: string }
   | { type: "tag_added"; tag: string }
   | { type: "tag_removed"; tag: string }
   | { type: "deal_won"; pipeline_id?: string }

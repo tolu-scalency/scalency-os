@@ -33,7 +33,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
       <div className="sidebar-blue relative hidden min-w-0 flex-[1_1_480px] flex-col justify-center gap-8 overflow-hidden p-14 text-white md:flex">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[length:40px_40px]" />
         <div className="relative max-w-[460px]">
-          <div className="font-mono text-xs font-semibold tracking-[0.12em] text-[#a8f3f7]">SCALENCY OS</div>
+          <div className="font-mono text-xs font-semibold tracking-[0.12em] text-[#a8f3f7]">SCALENCY</div>
           <h2 className="mt-3 text-[30px] font-semibold leading-tight tracking-[-0.03em]">Every enquiry answered, followed up and booked.</h2>
         </div>
         <ul className="relative flex max-w-[460px] flex-col gap-3">

@@ -12,7 +12,7 @@ export { shortId } from "@/lib/short-id-shared";
 const FULL = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SHORT = /^[0-9a-f]{8}$/i;
 
-type Table = "setter_agents" | "contacts" | "forms" | "sites" | "workflows";
+type Table = "setter_agents" | "contacts" | "forms" | "sites" | "workflows" | "calendars";
 
 /** The full ID for a link's ID (short or full), in this workspace. Shows "not found" if there's none. */
 export async function fullId(table: Table, raw: string): Promise<string> {

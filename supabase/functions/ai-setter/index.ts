@@ -1,4 +1,4 @@
-// Scalency OS: the AI setter.
+// Scalency: the AI setter.
 //
 // An AI patient coordinator that works inside a client's GoHighLevel sub-account,
 // following Tolu's setter SOP ("Contacting and Following Up With Leads as a Setter"):

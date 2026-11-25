@@ -1,4 +1,4 @@
-// Scalency OS: "Build with AI" for Page Studio.
+// Scalency: "Build with AI" for Page Studio.
 //
 // Someone describes the business and the offer. Claude drafts a landing page as an
 // outline of ready-made sections (hero, features, testimonials, pricing, FAQ...)
@@ -84,7 +84,7 @@ const TOOL = {
   },
 };
 
-const SYSTEM = `You write high-converting landing pages for small businesses using Scalency OS.
+const SYSTEM = `You write high-converting landing pages for small businesses using Scalency.
 Rules:
 - Use only the section types in the tool, in a sensible order. One clear goal per page.
 - Headlines promise a specific outcome. Body text is short, plain and concrete. UK English, £ prices, no em dashes, no hype words like "revolutionary" or "game-changing".
