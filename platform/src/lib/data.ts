@@ -673,7 +673,8 @@ export type ConditionField =
   | "has_tag" | "has_email" | "has_phone" | "replied" | "in_stage" | "deal_status" | "source_is" | "has_owner"
   | "contact_field" | "owner_is" | "deal_value" | "in_pipeline" | "day_of_week" | "time_of_day"
   | "email_unsubscribed" | "sms_unsubscribed" | "contact_age" | "reply_contains" | "reply_channel" | "submitted_form"
-  | "in_workflow" | "finished_workflow" | "has_open_deal" | "deal_owner_is" | "day_of_month" | "date_is";
+  | "in_workflow" | "finished_workflow" | "has_open_deal" | "deal_owner_is" | "day_of_month" | "date_is"
+  | "has_appointment" | "appointment_status";
 export type ConditionOp = "is" | "is_not" | "contains" | "not_contains" | "empty" | "not_empty" | "gt" | "lt";
 export type Condition = { field: ConditionField; value?: string; negate?: boolean; op?: ConditionOp; key?: string };
 export type CompiledRoute = { name: string; match: "all" | "any"; conditions: Condition[]; goto: string };
@@ -713,6 +714,7 @@ export type WorkflowTrigger =
   | { type: "stage_entered"; stage_id: string; pipeline_id?: string }
   | { type: "deal_created"; pipeline_id?: string }
   | { type: "form_submitted"; form_id?: string }
+  | { type: "form_started"; form_id?: string }
   | { type: "appointment_booked"; calendar_id?: string }
   | { type: "appointment_cancelled"; calendar_id?: string }
   | { type: "appointment_no_show"; calendar_id?: string }

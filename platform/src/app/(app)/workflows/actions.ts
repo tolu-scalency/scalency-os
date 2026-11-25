@@ -37,6 +37,7 @@ const STEP_TYPES = new Set([
 const CONDITIONS = new Set([
   "has_tag", "has_email", "has_phone", "replied", "in_stage", "deal_status", "source_is", "has_owner", "contact_field", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day",
   "email_unsubscribed", "sms_unsubscribed", "contact_age", "reply_contains", "reply_channel", "submitted_form", "in_workflow", "finished_workflow", "has_open_deal", "deal_owner_is", "day_of_month", "date_is",
+  "has_appointment", "appointment_status",
 ]);
 const OPS = new Set(["is", "is_not", "contains", "not_contains", "empty", "not_empty", "gt", "lt"]);
 const UNITS = ["minutes", "hours", "days"];
@@ -207,7 +208,7 @@ function cleanCondition(raw: unknown, ctx: Ctx, where: string): Condition | stri
   const out: Condition = { field: field as Condition["field"], negate: Boolean(c.negate) || undefined, op, value: value || undefined };
   const needsValue =
     ["has_tag", "source_is", "in_stage", "deal_status", "owner_is", "deal_value", "in_pipeline", "day_of_week", "time_of_day",
-     "contact_age", "reply_contains", "reply_channel", "submitted_form", "in_workflow", "finished_workflow", "deal_owner_is", "day_of_month", "date_is"].includes(field) ||
+     "contact_age", "reply_contains", "reply_channel", "submitted_form", "in_workflow", "finished_workflow", "deal_owner_is", "day_of_month", "date_is", "appointment_status"].includes(field) ||
     (field === "contact_field" && op !== "empty" && op !== "not_empty");
   if (needsValue && !value) return `${where}: finish the condition.`;
   if (field === "in_stage" && !ctx.stageIds.has(value)) return `${where}: choose a stage.`;
@@ -229,6 +230,8 @@ function cleanCondition(raw: unknown, ctx: Ctx, where: string): Condition | stri
     if (op !== "gt" && op !== "lt" && op !== "is") out.op = "is";
   }
   if (field === "deal_status" && !["open", "won", "lost"].includes(value)) return `${where}: choose a deal status.`;
+  if (field === "appointment_status" && !["booked", "showed", "no_show", "cancelled"].includes(value)) return `${where}: choose an appointment status.`;
+  if (field === "has_appointment") out.value = undefined;
   if ((field === "deal_value" || ((op === "gt" || op === "lt") && field === "contact_field")) && Number.isNaN(Number(value))) return `${where}: enter a number.`;
   if (field === "deal_value" && !op) out.op = "gt";
   if (field === "day_of_week" && !/^[1-7](,[1-7])*$/.test(value)) return `${where}: pick at least one day.`;
@@ -341,13 +344,14 @@ export async function saveWorkflow(
     case "deal_lost":
       trigger = { type: t.type, ...pipeFilter() };
       break;
-    case "form_submitted": {
+    case "form_submitted":
+    case "form_started": {
       const fid = String(t.form_id ?? "");
       if (fid) {
         const { data: f } = await supabase.from("forms").select("id").eq("id", fid).eq("account_id", ws.account.id).maybeSingle();
         if (!f) return { error: "Choose a form that still exists." };
-        trigger = { type: "form_submitted", form_id: fid };
-      } else trigger = { type: "form_submitted" };
+        trigger = { type: t.type, form_id: fid };
+      } else trigger = { type: t.type };
       break;
     }
     case "appointment_booked":
