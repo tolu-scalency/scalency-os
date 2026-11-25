@@ -341,10 +341,10 @@ async function formAnswers(contactId: string, accountId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("form_submissions")
-    .select("id, form_id, status, answers, created_at, completed_at, forms(name)")
+    .select("id, form_id, status, answers, started_at, completed_at, forms(name)")
     .eq("account_id", accountId)
     .eq("contact_id", contactId)
-    .order("created_at", { ascending: false })
+    .order("started_at", { ascending: false })
     .limit(5);
   return (data ?? []).map((r) => {
     const a = (r.answers ?? {}) as { fields?: { id: string; label: string; value: string }[]; booking?: unknown };
@@ -355,7 +355,7 @@ async function formAnswers(contactId: string, accountId: string) {
       formName: form?.name ?? "Form",
       status: r.status as string,
       booked: Boolean(a.booking),
-      at: (r.completed_at ?? r.created_at) as string,
+      at: (r.completed_at ?? r.started_at) as string,
       fields: (a.fields ?? []).filter((f) => f && String(f.value ?? "").trim() !== "").slice(0, 30),
     };
   });
