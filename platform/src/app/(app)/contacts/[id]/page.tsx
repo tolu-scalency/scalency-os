@@ -14,6 +14,7 @@ import { addNote, saveCustomFields, setDealStatus, setOwner, setStage, setValue 
 import { ContactEditor } from "./contact-editor";
 import { TagEditor } from "./tag-editor";
 import { CopyId } from "@/components/copy-id";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Contact" };
 
@@ -49,12 +50,13 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
   const { id: raw } = await params;
   const id = await fullId("contacts", raw);
   const ws = await getWorkspace();
-  const [c, workflows, names, allTags, customFields] = await Promise.all([
+  const [c, workflows, names, allTags, customFields, submissions] = await Promise.all([
     getContactDetail(id, ws.account.id),
     listWorkflows(ws.account.id),
     memberNames(ws.account.id),
     listTags(ws.account.id),
     listCustomFields(ws.account.id),
+    formAnswers(id, ws.account.id),
   ]);
   if (!c) notFound();
   const liveWorkflows = workflows.filter((w) => w.status === "active");
@@ -217,6 +219,32 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
         </section>
 
         <div className="flex flex-col gap-4">
+          {submissions.length > 0 && (
+            <section className="card p-5">
+              <h2 className="mb-1 text-[16px] font-semibold">Form answers</h2>
+              <div className="flex flex-col divide-y divide-line">
+                {submissions.map((s) => (
+                  <div key={s.id} className="py-3 first:pt-1">
+                    <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                      <Link href={`/forms/${s.formId}?tab=submissions`} className="font-semibold hover:text-[var(--a)]">{s.formName}</Link>
+                      <span className={`rounded-full px-2 py-0.5 text-[11.5px] font-semibold ${s.status === "started" ? "bg-warn-bg text-warn" : "bg-[#e8f7ef] text-[#147a42]"}`}>
+                        {s.status === "started" ? "Didn't finish" : s.booked ? "Finished and booked" : "Finished"}
+                      </span>
+                      <span className="text-muted">{timeAgo(s.at)}</span>
+                    </div>
+                    <dl className="mt-1.5 text-[13.5px]">
+                      {s.fields.map((f) => (
+                        <div key={f.id} className="flex justify-between gap-4 py-1">
+                          <dt className="text-muted">{f.label}</dt>
+                          <dd className="min-w-0 text-right">{f.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <section className="card p-5">
             <h2 className="mb-2 text-[16px] font-semibold">Tags</h2>
             <TagEditor contactId={c.id} tags={c.tags} allTags={allTags} />
@@ -306,6 +334,31 @@ async function ContactRecord({ params }: { params: Promise<{ id: string }> }) {
       </div>
     </>
   );
+}
+
+/** This contact's answers on forms, newest first (partial ones too). */
+async function formAnswers(contactId: string, accountId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("form_submissions")
+    .select("id, form_id, status, answers, created_at, completed_at, forms(name)")
+    .eq("account_id", accountId)
+    .eq("contact_id", contactId)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  return (data ?? []).map((r) => {
+    const a = (r.answers ?? {}) as { fields?: { id: string; label: string; value: string }[]; booking?: unknown };
+    const form = (Array.isArray(r.forms) ? r.forms[0] : r.forms) as { name?: string } | null;
+    return {
+      id: r.id as string,
+      formId: r.form_id as string,
+      formName: form?.name ?? "Form",
+      status: r.status as string,
+      booked: Boolean(a.booking),
+      at: (r.completed_at ?? r.created_at) as string,
+      fields: (a.fields ?? []).filter((f) => f && String(f.value ?? "").trim() !== "").slice(0, 30),
+    };
+  });
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
