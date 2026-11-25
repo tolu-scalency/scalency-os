@@ -45,6 +45,20 @@ export const LOCATIONS: { id: LocationType; label: string; hint: string }[] = [
   { id: "none", label: "No location", hint: "" },
 ];
 
+/** What the person booking sees for "where": never the admin wording ("Your own link"). */
+export function bookerLocation(type: LocationType, value: string): string {
+  if (type === "link") {
+    const v = value.toLowerCase();
+    if (v.includes("zoom.")) return "Zoom";
+    if (v.includes("meet.google.")) return "Google Meet";
+    if (v.includes("teams.microsoft.") || v.includes("teams.live.")) return "Microsoft Teams";
+    if (v.includes("whereby.")) return "Whereby";
+    return "Video call";
+  }
+  if (type === "none") return "";
+  return LOCATIONS.find((l) => l.id === type)?.label ?? "";
+}
+
 export const STATUS_LOOK: Record<AppointmentStatus, { label: string; tone: "blue" | "green" | "amber" | "red" | "neutral" }> = {
   booked: { label: "Booked", tone: "blue" },
   confirmed: { label: "Confirmed", tone: "green" },

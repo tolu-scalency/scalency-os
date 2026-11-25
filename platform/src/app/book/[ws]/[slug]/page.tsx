@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { adminClient } from "@/lib/admin";
 import { loadCalendar, loadMembers } from "@/lib/calendar/booking";
-import { LOCATIONS } from "@/lib/calendar/types";
+import { bookerLocation } from "@/lib/calendar/types";
 import { BookingWidget } from "@/components/booking-widget";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +52,7 @@ export default async function PublicBooking({ params, searchParams }: Props) {
       name={cal.name}
       description={cal.description}
       durationMin={cal.durationMin}
-      location={LOCATIONS.find((l) => l.id === cal.locationType)?.label ?? ""}
+      location={bookerLocation(cal.locationType, cal.locationValue)}
       color={cal.color}
       questions={cal.questions}
     />
