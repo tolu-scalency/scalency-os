@@ -269,7 +269,7 @@ export function FormEditor({
   );
 
   return (
-    <div className="flex w-full min-w-0 flex-col overflow-x-clip">
+    <div className={`flex w-full min-w-0 flex-col overflow-x-clip ${tab === "design" ? "h-dvh overflow-y-hidden" : "min-h-dvh"}`}>
       {/* Header */}
       <div className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
         <div className="flex flex-wrap items-center gap-2 px-4 pt-3 sm:px-6">
@@ -325,7 +325,7 @@ export function FormEditor({
       )}
 
       {tab === "design" && (
-        <div className="relative flex h-[calc(100vh-86px-var(--chrome-h,64px))] min-h-[560px] overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
           {/* Left: elements */}
           <aside className={`${panel === "add" ? "absolute inset-y-0 left-0 z-20 flex shadow-2xl" : "hidden"} w-[264px] flex-none flex-col border-r border-line bg-[#f8fafd] lg:static lg:flex lg:shadow-none`}>
             <div className="flex items-center justify-between px-4 pt-3 text-[11px] font-bold uppercase tracking-[0.12em] text-faint">
