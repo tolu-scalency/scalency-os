@@ -6,7 +6,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionForm, SubmitButton } from "@/components/action-form";
 import { Icon } from "@/components/icon";
-import { Page, Pill } from "@/components/ui";
+import { Pill } from "@/components/ui";
 import { headers } from "next/headers";
 import { getWorkflow, getWorkspace, listCustomFields, listCustomValues, listTags, listWorkflows, memberNames, timeAgo, listAllStages, listPipelines } from "@/lib/data";
 import { runDueNow, setWorkflowStatus } from "../actions";
@@ -30,6 +30,7 @@ function runText(detail: Record<string, unknown>) {
 
 export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) {
   const { id: raw } = await props.params;
+  const tab = (await props.searchParams).tab === "history" ? "history" : "builder";
   const id = await fullId("workflows", raw);
   const ws = await getWorkspace();
   const [wf, pipeline, names, flows, tags, h, customFields, customValues, pipes, { data: formRows }, { data: calRows }] = await Promise.all([
@@ -49,13 +50,32 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "os.scalency.us";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
 
-  return (
-    <Page wide>
-      <Link href="/workflows" className="-mb-2 inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-muted hover:text-brand">
-        <Icon name="arrowLeft" size={15} /> Workflows
-      </Link>
+  const tabCls = (on: boolean) =>
+    `inline-flex h-9 items-center gap-1.5 rounded-[10px] px-3.5 text-[13px] font-semibold transition ${on ? "bg-white text-navy shadow-[var(--shadow-card)]" : "text-muted hover:text-navy"}`;
 
+  // One screen: the builder fills it and only the canvas moves, so scrolling the page never
+  // fights with scrolling the builder. The run history is its own tab.
+  return (
+    <main className="flex h-dvh flex-col gap-3 overflow-hidden px-3 pb-3 pt-3 sm:px-5">
+      <div className="flex flex-none flex-wrap items-center gap-3">
+        <Link href="/workflows" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-muted hover:text-brand">
+          <Icon name="arrowLeft" size={15} /> Workflows
+        </Link>
+        <nav className="inline-flex rounded-xl border border-line bg-surface p-[3px]" aria-label="Workflow sections">
+          <Link href={`/workflows/${shortId(wf.id)}`} className={tabCls(tab === "builder")} aria-current={tab === "builder" ? "page" : undefined}>
+            <Icon name="zap" size={14} /> Builder
+          </Link>
+          <Link href={`/workflows/${shortId(wf.id)}?tab=history`} className={tabCls(tab === "history")} aria-current={tab === "history" ? "page" : undefined}>
+            <Icon name="activity" size={14} /> Run history
+            {wf.enrollments.length > 0 && <span className="rounded-full bg-chip px-1.5 text-[11px] text-brand">{wf.enrollments.length}</span>}
+          </Link>
+        </nav>
+      </div>
+
+      {tab === "builder" ? (
+      <div className="min-h-0 flex-1">
       <WorkflowEditor
+        fill
         key={wf.id}
         workflow={{ id: wf.id, name: wf.name, description: wf.description, trigger: wf.trigger, steps: wf.steps, graph: wf.graph, stopOnReply: wf.stopOnReply }}
         stages={pipeline.map((s, i) => ({ id: s.id, name: s.name, position: i + 1, pipelineId: s.pipelineId }))}
@@ -105,7 +125,9 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
           </>
         }
       />
-
+      </div>
+      ) : (
+      <div className="min-h-0 flex-1 overflow-y-auto">
       <section className="card p-5 sm:p-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -152,6 +174,8 @@ export default async function WorkflowPage(props: PageProps<"/workflows/[id]">) 
           </ul>
         )}
       </section>
-    </Page>
+      </div>
+      )}
+    </main>
   );
 }

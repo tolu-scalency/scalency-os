@@ -29,6 +29,7 @@ function initialTree(w: Editable): FlowNode[] {
 }
 
 export function WorkflowEditor({
+  fill = false,
   workflow,
   stages,
   pipelines,
@@ -44,6 +45,8 @@ export function WorkflowEditor({
   statusBar,
   settingsExtra,
 }: {
+  /** Fill the space it sits in (the page gives it the whole screen), instead of a fixed height. */
+  fill?: boolean;
   workflow: Editable;
   stages: Stage[];
   pipelines: Option[];
@@ -656,7 +659,7 @@ export function WorkflowEditor({
   // ---------------------------------------------------------------- page
   const zbtn = "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px] font-semibold text-navy transition-colors hover:bg-surface disabled:opacity-40";
   return (
-    <div className={full ? "fixed inset-0 z-50 flex flex-col gap-3 bg-canvas p-3" : "flex flex-col gap-3"}>
+    <div className={full ? "fixed inset-0 z-50 flex flex-col gap-3 bg-canvas p-3" : fill ? "flex h-full min-h-0 flex-col gap-3" : "flex flex-col gap-3"}>
       <datalist id="wf-tags">
         {tags.map((t) => (
           <option key={t} value={t} />
@@ -730,7 +733,7 @@ export function WorkflowEditor({
         onPointerMove={onPanMove}
         onPointerUp={onPanEnd}
         onPointerCancel={onPanEnd}
-        className={`relative cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing ${full ? "min-h-0 flex-1" : "h-[calc(100vh-112px-var(--chrome-h,64px))] min-h-[600px]"}`}
+        className={`relative cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing ${full || fill ? "min-h-0 flex-1" : "h-[calc(100vh-112px-var(--chrome-h,64px))] min-h-[600px]"}`}
         style={{ backgroundColor: "#f6f8fc", backgroundImage: "radial-gradient(#d5dbe6 1.2px, transparent 1.2px)", backgroundSize: `${22 * zoom}px ${22 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}
       >
         <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }} className="absolute left-0 top-0">

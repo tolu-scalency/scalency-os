@@ -9,6 +9,20 @@ import { archiveCalendar, saveCalendar } from "../../actions";
 import { CopyLink } from "../copy-link";
 
 type TeamMember = { id: string; name: string; on: boolean; priority: number; connected: string[] };
+export type OpenCheck = { next: string[]; total?: number; reasons: string[]; tz: string };
+
+const AHEAD = [
+  [7, "1 week"],
+  [14, "2 weeks"],
+  [30, "1 month"],
+  [60, "2 months"],
+  [90, "3 months"],
+  [180, "6 months"],
+  [365, "1 year"],
+] as const;
+
+/** Booking tools people paste by mistake: these are booking pages, not a room to meet in. */
+const BOOKING_LINK = /calendar\.app\.google|calendar\.google\.com\/calendar\/appointments|calendly\.com|cal\.com\/|youcanbook\.me|acuityscheduling/i;
 
 const field = "field h-10 w-full text-[13.5px]";
 const label = "flex flex-col gap-1.5 text-[12.5px] font-semibold text-navy";
@@ -39,7 +53,7 @@ const NOTICE = [
   [4320, "3 days"],
 ] as const;
 
-export function BookingPageEditor({ id, initial, base, team: teamIn, stages }: { id: string; initial: CalendarSettings; base: string; team: TeamMember[]; stages: { id: string; name: string }[] }) {
+export function BookingPageEditor({ id, initial, base, team: teamIn, stages, check }: { id: string; initial: CalendarSettings; base: string; team: TeamMember[]; stages: { id: string; name: string }[]; check?: OpenCheck }) {
   const [s, setS] = useState(initial);
   const [team, setTeam] = useState(teamIn);
   const [pending, start] = useTransition();
@@ -61,7 +75,10 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages }: {
         team.filter((m) => m.on).map((m) => ({ userId: m.id, priority: m.priority })),
       );
       if (r.error) notify(r.error, "bad");
-      else notify(r.ok ?? "Saved");
+      else {
+        notify(r.ok ?? "Saved");
+        router.refresh();
+      }
     });
 
   const setQ = (i: number, p: Partial<Question>) => set({ questions: s.questions.map((q, j) => (j === i ? { ...q, ...p } : q)) });
@@ -90,6 +107,29 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages }: {
           </div>
         </div>
       </div>
+
+      {check && (
+        <div className={`card flex flex-col gap-2 border p-5 ${check.next.length ? "border-[#bfe7d1]" : "border-[#f3c9c4]"}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`grid h-7 w-7 place-items-center rounded-full ${check.next.length ? "bg-ok-bg text-ok" : "bg-bad-bg text-bad"}`}>
+              <Icon name={check.next.length ? "check" : "x"} size={15} />
+            </span>
+            <h2 className="text-[15px] font-semibold">
+              {check.next.length ? `People can book: ${check.total ?? check.next.length} open times in the next 60 days` : "People can't book yet: there are no open times"}
+            </h2>
+          </div>
+          {check.next.length > 0 ? (
+            <p className="text-[13px] text-muted">
+              Next free: {check.next.join(" · ")} <span className="text-faint">({check.tz.replace(/_/g, " ")} time)</span>
+            </p>
+          ) : (
+            <ul className="ml-9 list-disc text-[13.5px] text-navy">
+              {check.reasons.map((r) => <li key={r}>{r}</li>)}
+            </ul>
+          )}
+          <p className="text-[12px] text-faint">Checked with the saved settings. Press Save after a change to check again.</p>
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-5">
@@ -131,7 +171,15 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages }: {
               <label className={`${label} mt-4`}>
                 {s.locationType === "link" ? "Meeting link" : "Address"}
                 <input value={s.locationValue} onChange={(e) => set({ locationValue: e.target.value })} maxLength={300} placeholder={s.locationType === "link" ? "https://zoom.us/j/…" : "128 City Road, London"} className={field} />
+                {s.locationType === "link" && <span className={hint}>The room people join for the call, e.g. your Zoom room or a fixed Google Meet link. Everyone booked gets this link.</span>}
               </label>
+            )}
+            {s.locationType === "link" && BOOKING_LINK.test(s.locationValue) && (
+              <p className="mt-3 rounded-xl bg-[#fff8e6] px-3 py-2.5 text-[12.5px] leading-relaxed text-[#8a5a00]">
+                That&apos;s a booking page link (Google appointment schedule or Calendly), not a meeting room. Scalency can&apos;t read the times from it.
+                The times people can book come from <strong>Availability</strong> on this page&apos;s team, and busy times from a connected calendar. Paste a meeting room link here instead,
+                or to use Calendly for booking, add it to your form&apos;s Booking calendar step.
+              </p>
             )}
             {missing.length > 0 && (
               <p className="mt-3 rounded-xl bg-[#fff8e6] px-3 py-2 text-[12.5px] text-[#8a5a00]">
@@ -182,8 +230,11 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages }: {
                 </select>
               </label>
               <label className={label}>
-                Book up to (days ahead)
-                <input type="number" min={1} max={365} {...num("maxDaysAhead")} className={field} />
+                How far ahead they can book
+                <select value={s.maxDaysAhead} onChange={(e) => set({ maxDaysAhead: Number(e.target.value) })} className={field}>
+                  {!AHEAD.some(([d]) => d === s.maxDaysAhead) && <option value={s.maxDaysAhead}>{s.maxDaysAhead} days</option>}
+                  {AHEAD.map(([d, l]) => <option key={d} value={d}>{l}</option>)}
+                </select>
               </label>
               <label className={label}>
                 Most bookings a day, per person
