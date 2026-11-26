@@ -708,7 +708,10 @@ export type WorkflowStep = StepBase &
   );
 export type StepType = WorkflowStep["type"];
 
-export type WorkflowTrigger =
+/** Filters on a trigger: the contact only enters if these pass when the trigger fires. */
+export type TriggerFilterBits = { filters?: Condition[]; filter_match?: "all" | "any" };
+
+export type WorkflowTrigger = TriggerFilterBits & (
   | { type: "none" }
   | { type: "contact_created" }
   | { type: "stage_entered"; stage_id: string; pipeline_id?: string }
@@ -725,7 +728,8 @@ export type WorkflowTrigger =
   | { type: "deal_lost"; pipeline_id?: string }
   | { type: "message_received"; channel: "any" | "sms" | "email" }
   | { type: "webhook"; token: string }
-  | { type: "manual" };
+  | { type: "manual" }
+);
 
 export type WorkflowRow = {
   id: string;

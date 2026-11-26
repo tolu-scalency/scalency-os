@@ -13,7 +13,7 @@ import { mergeFields } from "@/lib/merge-fields";
 import { cloneNode, countNodes, findNode, insertNode, locate, MAX_NODES, moveNode, newId, removeNode, toTree, updateNode, type BranchNode, type FlowNode } from "@/lib/flow";
 import { saveWorkflow } from "../actions";
 import { blank, groups, kinds, problem, StepFields, summary, type Option } from "./step-fields";
-import { BranchFields, conditionText, newRoute } from "./branch-fields";
+import { BranchFields, conditionText, newRoute, TriggerConditions } from "./branch-fields";
 import { FloatingPanel } from "./panel";
 import { newTrigger, triggerDef, TriggerFilters, TriggerPicker } from "./trigger-fields";
 import { triggerLabel } from "../labels";
@@ -559,7 +559,27 @@ export function WorkflowEditor({
                   <button type="button" onClick={() => setChoosingTrigger(true)} className="btn-ghost inline-flex min-h-9 items-center rounded-xl px-3 text-[12.5px] font-semibold">Change</button>
                 )}
               </div>
-              <TriggerFilters trigger={trigger} onChange={(t) => change(() => setTrigger(t))} stages={stages} pipelines={pipelines} forms={forms} calendars={calendars} />
+              <TriggerFilters
+                trigger={trigger}
+                onChange={(t) => change(() => setTrigger({ ...t, filters: trigger.filters, filter_match: trigger.filter_match } as WorkflowTrigger))}
+                stages={stages}
+                pipelines={pipelines}
+                forms={forms}
+                calendars={calendars}
+              />
+              {trigger.type !== "manual" && (
+                <TriggerConditions
+                  filters={trigger.filters ?? []}
+                  match={trigger.filter_match ?? "all"}
+                  onChange={(filters, filter_match) => change(() => setTrigger({ ...trigger, filters: filters.length ? filters : undefined, filter_match: filters.length > 1 ? filter_match : undefined } as WorkflowTrigger))}
+                  stages={stages}
+                  pipelines={pipelines}
+                  members={members}
+                  customFields={customFields}
+                  forms={forms}
+                  workflows={others}
+                />
+              )}
               {trigger.type === "webhook" && (
                 <div className="rounded-xl bg-surface p-3 text-[13px]">
                   {hookUrl ? (
@@ -751,6 +771,11 @@ export function WorkflowEditor({
                 <div className="min-w-0 flex-1">
                   <div className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-brand">Trigger</div>
                   <div className="truncate text-[13.5px] font-semibold">{trigger.type === "none" ? "Add a trigger" : triggerLabel(trigger, stages, pipelines, forms, calendars)}</div>
+                  {!!trigger.filters?.length && (
+                    <div className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-[#ede9fe] px-2 py-0.5 text-[11px] font-semibold text-[#6d28d9]">
+                      <Icon name="filter" size={11} /> {trigger.filters.length} filter{trigger.filters.length === 1 ? "" : "s"}
+                    </div>
+                  )}
                 </div>
               </div>
             </button>
