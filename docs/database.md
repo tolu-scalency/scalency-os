@@ -350,6 +350,11 @@ Migration `20261209090000_calendar` (SQL-18). Scalency's own calendar: booking p
 
 - `wf_condition` gains two If / else checks: `has_appointment` (a booking still to come, status booked or confirmed; optional `value` = calendar id) and `appointment_status` (their latest appointment by start time is `booked`, `showed`, `no_show` or `cancelled`; confirmed counts as booked).
 
+## Trigger filters (20261211090000_trigger_filters.sql)
+
+- A workflow's `trigger` can carry `filters` (a list of If / else conditions, same shape as `wf_condition` uses) and `filter_match` (`all` or `any`). `workflow_enrollment_filters`, a before-insert trigger on `workflow_enrollments`, drops the enrolment when the filters don't pass at that moment. Every trigger enrols through `enroll_contact`, so this covers them all.
+- `enroll_contact_by_hand(workflow, contact)`: adding someone by hand skips the filters (sets `scalency.by_hand` for the call).
+
 ## Not in this version yet
 
 Team notifications settings (Slack), payments and the inbox screens. They'll be added as new migrations when we build those parts.

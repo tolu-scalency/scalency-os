@@ -316,7 +316,7 @@ export async function saveWorkflow(
   // The builder sends a tree; older pages may still send a flat list.
   const rawTree = Array.isArray(input.graph) ? input.graph : toTree(Array.isArray(input.steps) ? (input.steps as WorkflowStep[]) : []);
   if (countNodes(rawTree as FlowNode[]) > MAX_NODES) return { error: `Keep it to ${MAX_NODES} steps or fewer.` };
-  const graph = cleanTree(rawTree, {
+  const ctx: Ctx = {
     stageIds,
     pipelineIds: new Set((pipes ?? []).map((p) => p.id as string)),
     memberIds: new Set((members ?? []).map((m) => m.user_id as string)),
@@ -324,7 +324,8 @@ export async function saveWorkflow(
     formIds: new Set((formList ?? []).map((f) => f.id as string)),
     fieldKeys: new Set((cf ?? []).map((f) => f.key as string)),
     selfId: id,
-  }, new Set());
+  };
+  const graph = cleanTree(rawTree, ctx, new Set());
   if (typeof graph === "string") return { error: graph };
   const steps = compile(graph);
 
@@ -394,6 +395,17 @@ export async function saveWorkflow(
     }
   }
 
+  // Trigger filters: only let people in who match these when the trigger fires.
+  if (trigger.type !== "none" && Array.isArray(t.filters) && t.filters.length) {
+    const filters: Condition[] = [];
+    for (const [i, raw] of (t.filters as unknown[]).slice(0, 10).entries()) {
+      const c = cleanCondition(raw, ctx, `Trigger filter ${i + 1}`);
+      if (typeof c === "string") return { error: c };
+      filters.push(c);
+    }
+    trigger = { ...trigger, filters, filter_match: t.filter_match === "any" ? "any" : "all" };
+  }
+
   const { error } = await supabase
     .from("workflows")
     .update({ name, description: String(input.description ?? "").slice(0, 300) || null, trigger, steps, graph, stop_on_reply: input.stopOnReply !== false })
@@ -439,7 +451,8 @@ export async function enrollContact(_prev: ActionResult, fd: FormData): Promise<
   const { data: wf } = await supabase.from("workflows").select("status").eq("id", workflowId).eq("account_id", ws.account.id).maybeSingle();
   if (!wf) return { error: "Choose a workflow." };
   if (wf.status !== "active") return { error: "Turn the workflow on first." };
-  const { data, error } = await supabase.rpc("enroll_contact", { target_workflow: workflowId, target_contact: contactId });
+  // Added by hand: the trigger's filters don't apply.
+  const { data, error } = await supabase.rpc("enroll_contact_by_hand", { target_workflow: workflowId, target_contact: contactId });
   if (error) return { error: "We couldn't add them." };
   if (!data) return { error: "They're already in this workflow." };
   await supabase.rpc("run_due_workflows", { target_account: ws.account.id });

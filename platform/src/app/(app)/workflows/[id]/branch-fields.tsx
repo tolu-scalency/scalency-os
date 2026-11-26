@@ -578,3 +578,65 @@ function ConditionTypePicker({ value, onPick }: { value: ConditionField; onPick:
     </>
   );
 }
+
+/** Filters on a trigger (like GHL): people only enter the workflow if these pass when it fires. */
+export function TriggerConditions({
+  filters,
+  match,
+  onChange,
+  stages,
+  pipelines,
+  members,
+  customFields,
+  forms = [],
+  workflows = [],
+}: {
+  filters: Condition[];
+  match: "all" | "any";
+  onChange: (filters: Condition[], match: "all" | "any") => void;
+  stages: Stage[];
+  pipelines: Option[];
+  members: Option[];
+  customFields: CustomField[];
+  forms?: Option[];
+  workflows?: Option[];
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
+      <div>
+        <div className="text-[13px] font-semibold">Filters</div>
+        <p className="text-[12px] text-muted">Only start for contacts who match these at the moment it fires. For example: in pipeline “AI growth sales”, or has the tag “VIP”.</p>
+      </div>
+      {filters.length > 1 && (
+        <div className="inline-flex w-fit rounded-lg bg-white p-0.5 text-[12px] font-semibold ring-1 ring-line">
+          {(["all", "any"] as const).map((m) => (
+            <button key={m} type="button" onClick={() => onChange(filters, m)} className={`rounded-md px-2.5 py-1 ${match === m ? "bg-navy text-white" : "text-muted"}`}>
+              {m === "all" ? "Match all (AND)" : "Match any (OR)"}
+            </button>
+          ))}
+        </div>
+      )}
+      {filters.map((c, i) => (
+        <div key={i}>
+          {i > 0 && <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-[#7c3aed]">{match === "all" ? "and" : "or"}</div>}
+          <ConditionRow
+            c={c}
+            onChange={(nc) => onChange(filters.map((x, j) => (j === i ? nc : x)), match)}
+            onRemove={() => onChange(filters.filter((_, j) => j !== i), match)}
+            stages={stages}
+            pipelines={pipelines}
+            members={members}
+            customFields={customFields}
+            forms={forms}
+            workflows={workflows}
+          />
+        </div>
+      ))}
+      {filters.length < 10 && (
+        <button type="button" onClick={() => onChange([...filters, newCondition("in_stage", stages)], match)} className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-semibold text-brand">
+          <Icon name="plus" size={13} /> Add filter
+        </button>
+      )}
+    </div>
+  );
+}
