@@ -91,6 +91,25 @@ export async function saveGhlChoices(
   return { ok: "Saved" };
 }
 
+/** Where the setter works: inside Scalency (its contacts, inbox and a booking page) or in a GHL sub-account. */
+export async function saveSetterEngine(id: string, input: { engine: "scalency" | "ghl"; calendarId: string }): Promise<Result> {
+  const ws = await getWorkspace();
+  if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
+  const engine = input.engine === "ghl" ? "ghl" : "scalency";
+  const supabase = await createClient();
+  let calendarId: string | null = null;
+  if (engine === "scalency" && input.calendarId) {
+    // Only a booking page in this workspace.
+    const { data: cal } = await supabase.from("calendars").select("id").eq("id", input.calendarId).eq("account_id", ws.account.id).maybeSingle();
+    if (!cal) return { error: "That booking page isn't in this workspace." };
+    calendarId = cal.id as string;
+  }
+  const { error } = await supabase.from("setter_agents").update({ engine, calendar_id: calendarId }).eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "We couldn't save that. Try again." };
+  refresh();
+  return { ok: engine === "scalency" ? "Saved. The AI works inside Scalency." : "Saved. The AI works in GHL." };
+}
+
 /** Hand a conversation back to the AI, or stop it. */
 export async function setThread(threadId: string, to: "active" | "stopped" | "opener"): Promise<Result> {
   const ws = await getWorkspace();

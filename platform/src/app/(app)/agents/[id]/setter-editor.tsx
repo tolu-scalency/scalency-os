@@ -15,7 +15,7 @@ import { Pill } from "@/components/ui";
 import { callSetter } from "@/lib/call-setter";
 import { cleanBusiness, cleanRules, STAGE_KEYS, BUSINESS_TYPES, DAY_NAMES, THREAD_LOOK, TIMEZONES, businessTypeOf, type SetterBusiness, type SetterRules, type SetterStatus, type ThreadState } from "@/lib/setter";
 import { JourneyTab, KnowledgeTab, RetentionTab, ShowUpTab, VersionsPanel, VoiceTab, type CallItem, type KnowledgeItem, type VersionItem } from "./growth-tabs";
-import { deleteSetter, newWebhookAddresses, saveGhlChoices, saveSetter, setSetterStatus, setThread } from "../actions";
+import { deleteSetter, newWebhookAddresses, saveGhlChoices, saveSetter, saveSetterEngine, setSetterStatus, setThread } from "../actions";
 
 export type ThreadView = {
   id: string;
@@ -35,7 +35,8 @@ export type ThreadView = {
 };
 
 type Ghl = { locationId: string; locationName: string; calendarId: string; calendarName: string; pipelineId: string; stages: Record<string, string>; checkedAt: string | null; error: string | null };
-type Setter = { id: string; name: string; status: SetterStatus; business: SetterBusiness; rules: SetterRules; ghl: Ghl };
+type Setter = { id: string; name: string; status: SetterStatus; engine: "scalency" | "ghl"; calendarId: string; business: SetterBusiness; rules: SetterRules; ghl: Ghl };
+type BookingPage = { id: string; name: string; active: boolean };
 export type Tab = "clinic" | "knowledge" | "rules" | "journey" | "showup" | "retention" | "voice" | "ghl" | "test" | "reactivate" | "conversations";
 type Options = { calendars: { id: string; name: string }[]; pipelines: { id: string; name: string; stages: { id: string; name: string }[] }[] };
 
@@ -55,7 +56,9 @@ export function SetterEditor({
   initialTab,
   versions = [],
   calls = [],
+  bookingPages = [],
 }: {
+  bookingPages?: BookingPage[];
   setter: Setter;
   threads: ThreadView[];
   accountId: string;
@@ -67,7 +70,7 @@ export function SetterEditor({
   calls?: CallItem[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>(initialTab ?? (setter.ghl.checkedAt ? "test" : "clinic"));
+  const [tab, setTab] = useState<Tab>(initialTab ?? (setter.ghl.checkedAt || (setter.engine === "scalency" && setter.calendarId) ? "test" : "clinic"));
   const [name, setName] = useState(setter.name);
   const [b, setB] = useState<SetterBusiness>(setter.business);
   const [r, setR] = useState<SetterRules>(setter.rules);
@@ -116,7 +119,7 @@ export function SetterEditor({
     ["showup", "Show-up and consent", "calendar"],
     ["retention", "Reviews and rebooking", "star"],
     ["voice", "Voice AI", "phone"],
-    ["ghl", "Connect GHL", "link"],
+    ["ghl", "Where it works", "link"],
     ["test", "Test chat", "mail"],
     ["reactivate", "Reactivation", "refresh"],
     ["conversations", `Conversations ${threads.length ? `(${threads.length})` : ""}`, "inbox"],
@@ -162,7 +165,15 @@ export function SetterEditor({
       </div>
       {setter.status === "test" && (
         <p className="rounded-xl bg-warn-bg px-4 py-2.5 text-[13px] text-warn">
-          Test mode: the AI only talks to contacts tagged <strong>ai-test</strong> in GHL. Add that tag to yourself, then text the business&apos;s number or send yourself in as a new lead.
+          {setter.engine === "scalency" ? (
+            <>
+              Test mode: every message the AI writes goes to the test email or phone in <strong>Settings</strong>, not to the lead. Tag a contact <strong>AI setter</strong> to try it.
+            </>
+          ) : (
+            <>
+              Test mode: the AI only talks to contacts tagged <strong>ai-test</strong> in GHL. Add that tag to yourself, then text the business&apos;s number or send yourself in as a new lead.
+            </>
+          )}
         </p>
       )}
 
@@ -194,7 +205,7 @@ export function SetterEditor({
           }}
         />
       )}
-      {tab === "ghl" && <GhlTab setter={setter} ro={ro} />}
+      {tab === "ghl" && <WhereTab setter={setter} ro={ro} pages={bookingPages} />}
       {tab === "test" && <TestTab setterId={setter.id} b={b} r={r} />}
       {tab === "reactivate" && <ReactivateTab setterId={setter.id} b={b} set={setBiz} ro={ro} connected={Boolean(setter.ghl.locationId)} live={setter.status !== "off"} stats={reactivation} />}
       {tab === "conversations" && <ConversationsTab threads={threads} ro={ro} timezone={b.timezone} />}
@@ -662,6 +673,82 @@ function CopyBox({ text }: { text: string }) {
       >
         <Icon name={done ? "check" : "copy"} size={13} /> {done ? "Copied" : "Copy"}
       </button>
+    </div>
+  );
+}
+
+/** Where the setter works: inside Scalency (no GHL needed) or in a GHL sub-account. */
+function WhereTab({ setter, ro, pages }: { setter: Setter; ro: boolean; pages: BookingPage[] }) {
+  const router = useRouter();
+  const [engine, setEngine] = useState(setter.engine);
+  const [cal, setCal] = useState(setter.calendarId);
+  const [pending, start] = useTransition();
+  const changed = engine !== setter.engine || (engine === "scalency" && cal !== setter.calendarId);
+  const save = () =>
+    start(async () => {
+      const res = await saveSetterEngine(setter.id, { engine, calendarId: cal });
+      notify(res.error ?? res.ok ?? "Saved", res.error ? "bad" : "ok");
+      if (!res.error) router.refresh();
+    });
+  const choice = (k: "scalency" | "ghl", title: string, text: string) => (
+    <button
+      type="button"
+      disabled={ro}
+      onClick={() => setEngine(k)}
+      className={`flex flex-1 flex-col gap-1 rounded-xl p-4 text-left ring-1 transition-colors ${engine === k ? "bg-[#0a5fe3]/5 ring-2 ring-[#0a5fe3]" : "bg-white ring-line hover:ring-[#0a5fe3]/40"}`}
+    >
+      <span className="text-[14px] font-semibold text-navy">{title}</span>
+      <span className="text-[12.5px] text-muted">{text}</span>
+    </button>
+  );
+  return (
+    <div className="flex flex-col gap-4">
+      <Section title="Where the AI works" text="Pick one. You can switch later; conversations already running stay where they started.">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          {choice("scalency", "Inside Scalency", "Uses your Scalency contacts, inbox and a booking page. Emails go from your own mailbox or domain (Settings, Email). No GHL needed.")}
+          {choice("ghl", "In GoHighLevel", "Uses a GHL sub-account's contacts, calendar, phone number and inbox.")}
+        </div>
+        {engine === "scalency" && (
+          <>
+            <label className={label}>
+              Booking page the AI books into
+              <select value={cal} disabled={ro} onChange={(e) => setCal(e.target.value)} className={field}>
+                <option value="">Choose a booking page</option>
+                {pages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.active ? "" : " (not taking bookings)"}
+                  </option>
+                ))}
+              </select>
+              <span className={hint}>The AI only offers this page&apos;s open times. Use a page with no required extra questions, so the AI can book on the lead&apos;s behalf.</span>
+            </label>
+            {!pages.length && <p className="rounded-xl bg-warn-bg px-3 py-2 text-[12.5px] text-warn">You don&apos;t have a booking page yet. Make one under Calendar, Booking pages, then come back.</p>}
+          </>
+        )}
+        {!ro && (
+          <div>
+            <button type="button" disabled={pending || !changed || (engine === "scalency" && !cal)} onClick={save} className="btn-primary inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold disabled:opacity-50">
+              <Icon name="check" size={14} /> {pending ? "Saving…" : "Save"}
+            </button>
+          </div>
+        )}
+      </Section>
+      {engine === "scalency" && setter.engine === "scalency" && (
+        <Section title="How leads reach the AI" text="Any contact tagged AI setter gets a first message, then replies and follow-ups, until they book or say no.">
+          <ol className="list-decimal space-y-1.5 pl-5 text-[13px] text-navy">
+            <li>
+              Open the workflow that runs after your form, and in the branch for people who <strong>didn&apos;t book</strong>, add an <strong>Add tag</strong> step with the tag <strong>AI setter</strong>.
+            </li>
+            <li>You can also tag a contact by hand from their contact page.</li>
+            <li>The AI texts if they gave a phone number, otherwise it emails. Their replies land in the Scalency inbox and the AI answers within about a minute.</li>
+            <li>When they book, the AI stops and your booking workflows (confirmations, reminders) take over. Removing the tag stops the AI.</li>
+            <li>If it needs a person, it adds a task on the contact and posts in the team&apos;s Leads chat.</li>
+          </ol>
+          <p className="text-[12.5px] text-muted">The AI sends messages during the hours set in Hours and alerts. Keep it in Test mode until you&apos;ve tried it on yourself.</p>
+        </Section>
+      )}
+      {engine === "ghl" && <GhlTab setter={setter} ro={ro} />}
     </div>
   );
 }
