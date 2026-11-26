@@ -15,10 +15,10 @@ export default async function SetterRoute({ params, searchParams }: { params: Pr
   const [{ id: raw }, ws, sp] = await Promise.all([params, getWorkspace(), searchParams]);
   const id = await fullId("setter_agents", raw);
   const supabase = await createClient();
-  const [{ data: a }, { data: threads }, { data: knowledge }, { data: versions }, { data: calls }] = await Promise.all([
+  const [{ data: a }, { data: threads }, { data: knowledge }, { data: versions }, { data: calls }, { data: pages }] = await Promise.all([
     supabase
       .from("setter_agents")
-      .select("id, name, status, business, rules, ghl_location_id, ghl_location_name, ghl_calendar_id, ghl_calendar_name, ghl_pipeline_id, ghl_stages, ghl_checked_at, ghl_error")
+      .select("id, name, status, engine, calendar_id, business, rules, ghl_location_id, ghl_location_name, ghl_calendar_id, ghl_calendar_name, ghl_pipeline_id, ghl_stages, ghl_checked_at, ghl_error")
       .eq("id", id)
       .eq("account_id", ws.account.id)
       .maybeSingle(),
@@ -32,6 +32,7 @@ export default async function SetterRoute({ params, searchParams }: { params: Pr
     supabase.from("setter_knowledge").select("id, question, answer, source, approved").eq("agent_id", id).eq("account_id", ws.account.id).order("created_at").limit(300),
     supabase.from("setter_versions").select("id, name, created_at, business, rules").eq("agent_id", id).eq("account_id", ws.account.id).order("created_at", { ascending: false }).limit(40),
     supabase.from("setter_calls").select("id, direction, purpose, duration_seconds, summary, created_at, recording_url").eq("agent_id", id).eq("account_id", ws.account.id).order("created_at", { ascending: false }).limit(20),
+    supabase.from("calendars").select("id, name, status").eq("account_id", ws.account.id).order("name").limit(100),
   ]);
   if (!a) notFound();
   // Lead reactivation numbers, across every old lead it has queued (not just the 40 shown).
@@ -70,6 +71,8 @@ export default async function SetterRoute({ params, searchParams }: { params: Pr
         id: a.id as string,
         name: a.name as string,
         status: a.status as SetterStatus,
+        engine: a.engine === "scalency" ? "scalency" : "ghl",
+        calendarId: (a.calendar_id as string) ?? "",
         business: cleanBusiness(a.business),
         rules: cleanRules(a.rules),
         ghl: {
@@ -84,6 +87,7 @@ export default async function SetterRoute({ params, searchParams }: { params: Pr
         },
       }}
       threads={views}
+      bookingPages={(pages ?? []).map((p) => ({ id: p.id as string, name: (p.name as string) || "Booking page", active: p.status === "active" }))}
       accountId={ws.account.id}
       canEdit={can(ws, "ai.manage")}
       knowledge={(knowledge ?? []) as KnowledgeItem[]}

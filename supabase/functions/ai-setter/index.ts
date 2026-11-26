@@ -1436,7 +1436,7 @@ export async function unseal(box: string) {
 // ---------------------------------------------------------------------------
 
 type Db = SupabaseClient;
-const AGENT_COLS = "id, account_id, name, status, business, rules, ghl_location_id, ghl_calendar_id, ghl_pipeline_id, ghl_stages, ghl_token, webhook_key";
+const AGENT_COLS = "id, account_id, name, status, business, rules, ghl_location_id, ghl_calendar_id, ghl_pipeline_id, ghl_stages, ghl_token, webhook_key, engine, calendar_id";
 
 /** What the AI knows about the lead before writing: source, ad, form answers (with their real field
  *  names), tags, and anything extra saved on their Scalency contact. */
@@ -2548,7 +2548,7 @@ async function tick() {
   if (!claimed) return json({ ok: true, skipped: "ran less than a minute ago" });
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY isn't set" }, 500);
-  background(runDue(db, apiKey));
+  background(runReplies(db, apiKey).then(() => runDue(db, apiKey)));
   return json({ ok: true }, 202);
 }
 
@@ -2601,11 +2601,274 @@ async function runDue(db: Db, apiKey: string) {
         await update(db, fresh as Thread, { next_action_at: nextOpening(new Date(), rules, tz).toISOString() });
         continue;
       }
-      await work(db, agent, fresh as Thread, mode, { claude: claudeClient(apiKey), ghl: await ghlFor(agent) });
+      if ((agent as Agent & { engine?: string }).engine === "scalency") await nativeWork(db, agent, fresh as Thread, mode, { claude: claudeClient(apiKey) });
+      else await work(db, agent, fresh as Thread, mode, { claude: claudeClient(apiKey), ghl: await ghlFor(agent) });
     } catch (e) {
       console.error("Follow-up failed", t.id, e);
       // Try again in an hour.
       await update(db, fresh as Thread, { next_action_at: new Date(Date.now() + 3_600_000).toISOString(), note: String((e as Error).message ?? e).slice(0, 300) });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The setter inside Scalency (no GHL): contacts, messages and booking pages are Scalency's own.
+// A thread starts when a contact gets the "AI setter" tag (see the setter_in_scalency migration),
+// replies arrive in the messages table, and bookings go through the Scalency booking page.
+// ---------------------------------------------------------------------------
+
+const appUrl = () => (Deno.env.get("APP_URL") || "https://os.scalency.us").replace(/\/+$/, "");
+
+type ScContact = { id: string; account_id: string; first_name: string | null; last_name: string | null; email: string | null; phone: string | null; source: string | null; custom: Record<string, unknown> | null; created_at: string; email_unsubscribed_at: string | null; sms_unsubscribed_at: string | null };
+type ScMessage = { id: string; direction: "inbound" | "outbound"; channel: "email" | "sms"; subject: string | null; body: string; created_at: string };
+
+/** The conversation so far, from Scalency's messages: the AI's own messages are "ai", anything else the business sent is "auto". */
+export function nativeTurns(rows: ScMessage[], sentIds: string[]): Turn[] {
+  const mine = new Set(sentIds);
+  return rows.map((m) => ({
+    who: m.direction === "inbound" ? "lead" : mine.has(m.id) ? "ai" : "auto",
+    text: m.direction === "inbound" && m.channel === "email" ? emailReplyText(m.body) : m.body,
+    at: m.created_at,
+    channel: m.channel === "email" ? "Email" : "SMS",
+    id: m.id,
+    subject: m.subject ?? undefined,
+  }));
+}
+
+/** What the AI knows about a Scalency contact: source, tags, saved details and their latest form answers. */
+export function nativeLead(c: ScContact, tags: string[], answers: Record<string, unknown> | null): Lead {
+  const bits: string[] = [];
+  const add = (k: string, v: unknown) => {
+    if (v == null || v === "" || typeof v === "object") return;
+    bits.push(`${k}: ${String(v)}`.replace(/\s+/g, " ").slice(0, 300));
+  };
+  add("Last name", c.last_name);
+  add("Has phone", c.phone ? "yes" : "no");
+  add("Has email", c.email ? "yes" : "no");
+  add("Source", c.source);
+  add("Added", c.created_at?.slice(0, 10));
+  if (tags.length) add("Tags", tags.join(", "));
+  for (const [k, v] of Object.entries(c.custom ?? {}).slice(0, 20)) add(`Detail: ${k.replace(/_/g, " ")}`, Array.isArray(v) ? v.join(", ") : v);
+  for (const [k, v] of Object.entries(answers ?? {}).slice(0, 25)) {
+    if (/^(first[ _]?name|last[ _]?name|full[ _]?name|name|email|e-mail|phone|mobile|consent)$/i.test(k.trim())) continue;
+    add(`Form: ${k}`, Array.isArray(v) ? v.join(", ") : v);
+  }
+  return { firstName: (c.first_name ?? "").trim(), details: bits.slice(0, 45).join("\n") };
+}
+
+/** An email address or phone number the lead typed in their message, so the AI can book with it. */
+export function contactDetailsIn(text: string): { email?: string; phone?: string } {
+  const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  const digits = text.match(/\+?\d[\d ()-]{7,18}\d/)?.[0]?.replace(/[^\d+]/g, "");
+  return { ...(email ? { email: email.toLowerCase() } : {}), ...(digits && digits.replace(/\D/g, "").length >= 8 ? { phone: digits } : {}) };
+}
+
+/** Works one step of a Scalency conversation: the first message, a reply or a follow-up. */
+export async function nativeWork(db: Db, agent: Agent, thread: Thread, modeIn: Mode, deps: { claude: BrainDeps["claude"]; now?: Date; fetch?: typeof fetch }) {
+  const now = deps.now ?? new Date();
+  const get = deps.fetch ?? fetch;
+  const rules = rulesOf(agent.rules);
+  const tz = tzOf(agent.business ?? {});
+  const b = agent.business ?? {};
+  let mode = modeIn;
+  const contactId = (thread as Thread & { contact_id?: string }).contact_id;
+  if (!contactId) return { skipped: "no Scalency contact" };
+
+  const [{ data: c }, { data: acc }, { data: tagRows }, { data: sub }, { data: msgs }] = await Promise.all([
+    db.from("contacts").select("id, account_id, first_name, last_name, email, phone, source, custom, created_at, email_unsubscribed_at, sms_unsubscribed_at").eq("id", contactId).maybeSingle(),
+    db.from("accounts").select("name, test_mode, test_email, test_phone").eq("id", agent.account_id).maybeSingle(),
+    db.from("contact_tags").select("tags(name)").eq("contact_id", contactId),
+    db.from("form_submissions").select("answers").eq("contact_id", contactId).order("started_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("messages").select("id, direction, channel, subject, body, created_at").eq("contact_id", contactId).order("created_at", { ascending: true }).limit(60),
+  ]);
+  const contact = c as ScContact | null;
+  if (!contact) {
+    await update(db, thread, { state: "stopped", next_action: null, next_action_at: null, note: "The contact was deleted." });
+    return { skipped: "contact deleted" };
+  }
+  const name = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "Lead";
+  const tags = ((tagRows ?? []) as unknown as { tags: { name: string } | { name: string }[] | null }[]).map((r) => (Array.isArray(r.tags) ? r.tags[0]?.name : r.tags?.name) ?? "").filter(Boolean);
+  const history = nativeTurns((msgs ?? []) as ScMessage[], thread.sent_ids ?? []);
+  const lead = nativeLead(contact, tags, (sub?.answers as Record<string, unknown>) ?? null);
+
+  // A follow-up isn't needed if they've replied since: the reply is answered instead.
+  const lastLead = [...history].reverse().find((t) => t.who === "lead");
+  const lastAi = [...history].reverse().find((t) => t.who === "ai");
+  if (mode.kind === "followup" && lastLead && (!lastAi || lastLead.at > lastAi.at)) mode = { kind: "reply" };
+  if (mode.kind === "reply" && !lastLead) return { skipped: "nothing to answer" };
+  if (mode.kind === "reply" && lastAi && lastLead!.at <= lastAi.at) return { skipped: "already answered" };
+
+  if (mode.kind === "reply" && isOptOut(lastLead!.text)) {
+    const col = lastLead!.channel === "Email" ? "email_unsubscribed_at" : "sms_unsubscribed_at";
+    await db.from("contacts").update({ [col]: now.toISOString() }).eq("id", contact.id);
+    await update(db, thread, { state: "stopped", next_action: null, next_action_at: null });
+    await logTurn(db, { agent, thread, role: "event", body: "They asked not to be contacted, so the AI stopped." });
+    return { stopped: "opt out" };
+  }
+  if (mode.kind === "reply") {
+    // They may have typed their email or number: save it so the booking can use it.
+    const found = contactDetailsIn(lastLead!.text);
+    const patch: Record<string, string> = {};
+    if (found.email && !contact.email) patch.email = contact.email = found.email;
+    if (found.phone && !contact.phone) patch.phone = contact.phone = found.phone;
+    if (Object.keys(patch).length) await db.from("contacts").update(patch).eq("id", contact.id);
+  }
+
+  // Answer on the channel they used; otherwise the thread's channel, or whichever detail exists.
+  let channel = (mode.kind === "reply" && lastLead?.channel) || thread.channel || "SMS";
+  if (channel === "SMS" && !contact.phone && contact.email) channel = "Email";
+  if (channel === "Email" && !contact.email && contact.phone) channel = "SMS";
+  const step = mode.kind === "followup" ? rules.journey[mode.touch] : undefined;
+  if (step?.action === "sms" && contact.phone) channel = "SMS";
+  if (step?.action === "email" && contact.email) channel = "Email";
+  const blocked = channel === "Email" ? !contact.email || contact.email_unsubscribed_at : !contact.phone || contact.sms_unsubscribed_at;
+  if (blocked) {
+    await update(db, thread, { state: "stopped", next_action: null, next_action_at: null, note: "No way to reach them: no email or phone, or they unsubscribed." });
+    await logTurn(db, { agent, thread, role: "event", body: "Stopped: there's no email or phone to use, or they unsubscribed." });
+    return { stopped: "unreachable" };
+  }
+  if (mode.kind === "followup" && step && step.action !== "sms" && step.action !== "email" && step.action !== "whatsapp") {
+    // Calls and setter steps: a task for the team, then the next step.
+    const touch = mode.touch + 1;
+    await db.from("tasks").insert({ account_id: agent.account_id, contact_id: contact.id, title: `Call ${name} (AI setter step ${touch})`.slice(0, 200), due_on: now.toISOString().slice(0, 10) });
+    await logTurn(db, { agent, thread, role: "event", body: `Journey step ${touch}: a call task was added.` });
+    const next = followUpAt(now, touch, rules, tz);
+    await update(db, thread, { touches: touch, total_touches: (thread.total_touches ?? 0) + 1, next_action: next ? "followup" : null, next_action_at: next?.toISOString() ?? null, ...(next ? {} : { state: "finished" }) });
+    return { journey: step.action };
+  }
+
+  const calendarId = (agent as Agent & { calendar_id?: string | null }).calendar_id;
+  const { brain, guard } = await guardedBrain(
+    agent,
+    { mode, turns: history, lead, now },
+    {
+      claude: deps.claude,
+      freeSlots: async (o) => {
+        if (!calendarId) throw new Error("no booking page chosen");
+        const from = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(now);
+        const r = await get(`${appUrl()}/api/book/${calendarId}/slots?from=${from}&days=14&tz=${encodeURIComponent(tz)}`);
+        if (!r.ok) throw new Error(`booking page answered ${r.status}`);
+        const j = (await r.json()) as { byDay?: Record<string, string[]> };
+        return pickSlots(Object.values(j.byDay ?? {}).flat(), tz, o, now, rules.minNoticeHours);
+      },
+      book: async (iso) => {
+        if (!calendarId) return { ok: false, error: "No booking page is chosen for the AI setter. Hand this to the team." };
+        if (!contact.email) return { ok: false, error: "We need their email address to book. Ask for it, then book." };
+        const r = await get(`${appUrl()}/api/book/${calendarId}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ start: iso, tz, first_name: contact.first_name || "Guest", last_name: contact.last_name ?? "", email: contact.email, phone: contact.phone ?? "", answers: {}, consent: true, website: "", t: 10_000 }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        if (!r.ok || !j.ok) return { ok: false, error: j.error || "That time couldn't be booked. Offer another." };
+        return { ok: true, label: slotLabel(iso, tz) };
+      },
+    },
+  );
+  for (const g of guard) await logTurn(db, { agent, thread, role: "event", body: g });
+
+  let state: Thread["state"] = thread.state === "finished" || thread.state === "paused" ? "active" : thread.state;
+  const patch: Partial<Thread> & Record<string, unknown> = { last_outbound_at: now.toISOString() };
+  const note = async (type: string, summary: string) => {
+    await db.from("activity").insert({ account_id: agent.account_id, contact_id: contact.id, type, summary: summary.slice(0, 300) });
+  };
+  if (brain.qualification) patch.qualification = { ...((thread.qualification ?? {}) as Qualification), ...brain.qualification };
+  if (brain.booked) {
+    state = "booked";
+    Object.assign(patch, { booked_at: now.toISOString(), appointment_at: brain.booked.iso });
+    await note("setter.booked", `AI setter booked a call: ${brain.booked.label}`);
+    await logTurn(db, { agent, thread, role: "event", body: `Booked: ${brain.booked.label}` });
+  }
+  if (brain.handover) {
+    state = "handed_over";
+    const priority = handoffPriority(brain.handover.category);
+    await db.from("tasks").insert({ account_id: agent.account_id, contact_id: contact.id, title: `${priority === "urgent" ? "URGENT: " : ""}AI setter handed over ${name}: ${brain.handover.reason}`.slice(0, 200), due_on: now.toISOString().slice(0, 10) });
+    await note("setter.handover", `AI setter handed this lead to the team: ${brain.handover.reason}`);
+    await raiseHandoff(db, agent, thread, brain.handover, name, contact.id);
+    try {
+      const { data: room } = await db.rpc("chat_channel_for", { target_account: agent.account_id, channel_name: "leads" });
+      if (room) await db.from("chat_messages").insert({ account_id: agent.account_id, channel_id: room, body: `${priority === "urgent" ? "URGENT: " : ""}The AI setter handed over ${name}: ${brain.handover.reason}`.slice(0, 2000), contact_id: contact.id });
+    } catch (e) {
+      console.error("Team chat alert failed", (e as Error).message);
+    }
+  }
+  if (brain.stop) {
+    state = "stopped";
+    await note("setter.stopped", `AI setter stopped: ${brain.stop.reason}`);
+  }
+
+  if (brain.message) {
+    const sent = await nativeSend(db, agent, thread, contact, channel, brain.message, history, { test: agent.status === "test" || Boolean(acc?.test_mode), testEmail: acc?.test_email ?? null, testPhone: acc?.test_phone ?? null, workspace: b.clinicName || acc?.name || "us" });
+    if ("error" in sent) {
+      await logTurn(db, { agent, thread, role: "event", body: `Not sent: ${sent.error}` });
+      await update(db, thread, { note: sent.error, next_action: null, next_action_at: null });
+      return { error: sent.error };
+    }
+    patch.sent_ids = [...(thread.sent_ids ?? []), sent.id].slice(-200);
+    patch.channel = channel;
+    await logTurn(db, { agent, thread, role: "ai", body: brain.message, channel, test: sent.test });
+    await note(`message.${channel === "Email" ? "email" : "sms"}`, `AI setter: ${brain.message.slice(0, 80)}${sent.test ? " (test mode)" : ""}`);
+  }
+
+  patch.state = state;
+  if (state === "active") {
+    const touch = mode.kind === "followup" ? mode.touch + 1 : mode.kind === "reply" ? 0 : 0;
+    const next = followUpAt(now, touch, rules, tz);
+    patch.touches = touch;
+    patch.total_touches = (thread.total_touches ?? 0) + (mode.kind === "followup" ? 1 : 0);
+    patch.next_action = next ? "followup" : null;
+    patch.next_action_at = next?.toISOString() ?? null;
+    if (!next) patch.state = "finished";
+  } else {
+    // Booked, handed over or stopped: no more chasing. The workspace's own workflows send the reminders.
+    patch.next_action = null;
+    patch.next_action_at = null;
+  }
+  if (brain.message && !thread.first_reply_at) patch.first_reply_at = now.toISOString();
+  await update(db, thread, patch);
+  return { sent: brain.message, booked: brain.booked?.label, handover: brain.handover?.reason };
+}
+
+/** Puts the AI's message in Scalency's outbox: the platform sends it from the workspace's own mailbox
+ *  or domain (Settings > Email) or by text. Test mode sends it to the test inbox or phone instead. */
+async function nativeSend(db: Db, agent: Agent, thread: Thread, contact: ScContact, channel: string, text: string, history: Turn[], o: { test: boolean; testEmail: string | null; testPhone: string | null; workspace: string }): Promise<{ id: string; test: boolean } | { error: string }> {
+  const email = channel === "Email";
+  const to = o.test ? (email ? o.testEmail : o.testPhone) : email ? contact.email : contact.phone;
+  if (!to) return { error: o.test ? `Test mode is on but there's no test ${email ? "email" : "phone"} in Settings.` : `This contact has no ${email ? "email" : "phone number"}.` };
+  let subject: string | null = null;
+  if (email) {
+    const last = [...history].reverse().find((t) => t.channel === "Email" && t.subject);
+    const base = (last?.subject || `Your enquiry with ${o.workspace}`).replace(/^(re:\s*)+/i, "");
+    subject = last || thread.last_outbound_at ? `Re: ${base}` : base;
+  }
+  const { data, error } = await db
+    .from("messages")
+    .insert({ account_id: agent.account_id, contact_id: contact.id, direction: "outbound", channel: email ? "email" : "sms", to_address: to, subject, body: text, status: o.test ? "held_test_mode" : "queued" })
+    .select("id")
+    .single();
+  if (error || !data) return { error: `Couldn't save the message (${error?.message ?? "unknown"}).` };
+  return { id: data.id as string, test: o.test };
+}
+
+/** Replies waiting for an answer: claimed one at a time (so two clocks never answer twice), after a short pause. */
+async function runReplies(db: Db, apiKey: string) {
+  const { data: waiting } = await db
+    .from("setter_threads")
+    .select("*")
+    .not("pending_reply_at", "is", null)
+    .lte("pending_reply_at", new Date(Date.now() - 15_000).toISOString())
+    .order("pending_reply_at")
+    .limit(15);
+  for (const t of (waiting ?? []) as (Thread & { pending_reply_at: string })[]) {
+    const { data: fresh } = await db.from("setter_threads").update({ pending_reply_at: null }).eq("id", t.id).eq("pending_reply_at", t.pending_reply_at).select("*").maybeSingle();
+    if (!fresh || !["active", "finished", "paused"].includes((fresh as Thread).state)) continue;
+    const { data: agent } = await db.from("setter_agents").select(AGENT_COLS).eq("id", t.agent_id).maybeSingle();
+    if (!agent || (agent as Agent).status === "off" || (agent as Agent & { engine?: string }).engine !== "scalency") continue;
+    try {
+      await nativeWork(db, agent as Agent, fresh as Thread, { kind: "reply" }, { claude: claudeClient(apiKey) });
+    } catch (e) {
+      console.error("Reply failed", t.id, e);
+      await update(db, fresh as Thread, { pending_reply_at: new Date(Date.now() + 60_000).toISOString(), note: String((e as Error).message ?? e).slice(0, 300) });
     }
   }
 }
@@ -3660,7 +3923,7 @@ export async function opportunityAudit(claude: BrainDeps["claude"], answers: Rec
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v16: safer urgent reply (clinic first, no NHS 111, no repeats), alerts email workspace owners when no alert email is set; v15: team replies and AI drafts in the command centre, health monitor, AI opportunity audit; v14: show-up reminders and no-shows, spec journeys, consent check, pipeline stages, waitlist, behaviour triggers, voice calls (Vapi or Retell), QA scoring, test lab, creative studio, diary capacity";
+export const VERSION = "v17: works inside Scalency without GHL (AI setter tag, Scalency inbox and booking pages); v16: safer urgent reply (clinic first, no NHS 111, no repeats), alerts email workspace owners when no alert email is set; v15: team replies and AI drafts in the command centre, health monitor, AI opportunity audit; v14: show-up reminders and no-shows, spec journeys, consent check, pipeline stages, waitlist, behaviour triggers, voice calls (Vapi or Retell), QA scoring, test lab, creative studio, diary capacity";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {
