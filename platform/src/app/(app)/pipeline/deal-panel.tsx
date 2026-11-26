@@ -2,6 +2,7 @@
 
 import { shortId } from "@/lib/short-id-shared";
 import { ask } from "@/components/confirm";
+import { notify } from "@/components/toast";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
@@ -159,7 +160,11 @@ function DeleteDeal({ id, onDone }: { id: string; onDone: () => void }) {
           const fd = new FormData();
           fd.set("id", id);
           const res = await deleteDeal({}, fd);
-          if (!res.error) onDone();
+          if (res.error) notify(res.error, "bad");
+          else {
+            notify("Deal deleted.");
+            onDone();
+          }
         })
       }
       className="text-[13px] font-semibold text-bad hover:underline"

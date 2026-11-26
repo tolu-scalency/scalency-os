@@ -16,7 +16,12 @@ let show: ((p: Pending) => void) | null = null;
 /** Asks the person to confirm. Resolves true if they confirm, false if they cancel or close it. */
 export function ask(opts: AskOptions): Promise<boolean> {
   return new Promise((resolve) => {
-    if (show) show({ danger: true, confirm: "Delete", cancel: "Cancel", ...opts, resolve });
+    // Shown on the next tick: when ask() is called inside a transition (start(async () => …)),
+    // React would otherwise hold the box back until that transition ends, which never happens.
+    if (show) {
+      const open = show;
+      window.setTimeout(() => open({ danger: true, confirm: "Delete", cancel: "Cancel", ...opts, resolve }), 0);
+    }
     // No host on this page (for example a public page): fall back to the browser's own box.
     else resolve(window.confirm([opts.title, opts.text].filter(Boolean).join("\n\n")));
   });

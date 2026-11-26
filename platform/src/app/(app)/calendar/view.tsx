@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { Pill } from "@/components/ui";
@@ -85,9 +85,9 @@ export function CalendarView(props: {
   const selected = appts.find((a) => a.id === open) ?? null;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3 lg:min-h-0 lg:flex-1">
       {/* Toolbar */}
-      <div className="card flex flex-wrap items-center gap-3 p-3">
+      <div className="card flex flex-none flex-wrap items-center gap-3 p-3">
         <div className="flex items-center gap-1.5">
           <Link href={href({ date: today })} className="btn-ghost inline-flex h-9 items-center rounded-xl px-3 text-[13px] font-semibold">Today</Link>
           <Link href={href({ date: prev })} aria-label="Previous" className="btn-ghost inline-flex h-9 w-9 items-center justify-center rounded-xl"><Icon name="chevronLeft" size={16} /></Link>
@@ -142,7 +142,11 @@ export function CalendarView(props: {
         <TimeGrid first={first} days={days} today={today} tz={tz} appts={shown} busy={props.busy} color={color} onOpen={setOpen} onSlot={(d, t) => calendars.length && setCreating({ date: d, time: t })} />
       )}
       {view === "month" && <MonthGrid first={first} month={date.slice(0, 7)} today={today} tz={tz} appts={shown} color={color} onOpen={setOpen} dayHref={(d) => href({ view: "day", date: d })} />}
-      {view === "list" && <ListView tz={tz} appts={shown} color={color} memberName={memberName} onOpen={setOpen} />}
+      {view === "list" && (
+        <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+          <ListView tz={tz} appts={shown} color={color} memberName={memberName} onOpen={setOpen} />
+        </div>
+      )}
 
       {selected && <Drawer a={selected} tz={tz} color={color(selected.calendarId)} calName={calendars.find((c) => c.id === selected.calendarId)?.name ?? null} memberName={memberName(selected.assignedTo)} onClose={() => setOpen(null)} />}
       {creating && <NewBooking init={creating} tz={tz} calendars={calendars} members={members} me={props.me} canManage={props.canManage} onClose={() => setCreating(null)} />}
@@ -210,13 +214,20 @@ function TimeGrid(p: {
   const maxH = Math.min(24, Math.max(20, ...inView.map((a) => Math.ceil(hourOf(a.end) || 24))));
   const hours = Array.from({ length: maxH - minH }, (_, i) => minH + i);
   const now = nowMs();
+  // Open the grid at the first booking (or 8am), so the day's appointments are in view.
+  const scroller = useRef<HTMLDivElement>(null);
+  const firstHour = inView.length ? Math.min(...inView.map((a) => hourOf(a.start))) : 8;
+  useEffect(() => {
+    const el = scroller.current;
+    if (el) el.scrollTop = Math.max(0, (Math.min(firstHour, 8) - minH) * HOUR - 12);
+  }, [firstHour, minH]);
   const nowDate = dateIn(now, p.tz);
   const nowTop = (hourOf(now) - minH) * HOUR;
 
   return (
-    <div className="card overflow-hidden p-0">
-      <div className="overflow-x-auto">
-        <div style={{ minWidth: p.days > 1 ? 860 : 0 }}>
+    <div className="card overflow-hidden p-0 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+      <div className="overflow-x-auto lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+        <div style={{ minWidth: p.days > 1 ? 860 : 0 }} className="lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
           <div className="grid border-b border-line bg-surface/70" style={{ gridTemplateColumns: `64px repeat(${p.days}, minmax(0, 1fr))` }}>
             <div />
             {dates.map((d) => {
@@ -230,7 +241,7 @@ function TimeGrid(p: {
               );
             })}
           </div>
-          <div className="relative grid max-h-[68vh] overflow-y-auto" style={{ gridTemplateColumns: `64px repeat(${p.days}, minmax(0, 1fr))` }}>
+          <div ref={scroller} className="relative grid max-h-[68vh] overflow-y-auto lg:max-h-none lg:min-h-0 lg:flex-1" style={{ gridTemplateColumns: `64px repeat(${p.days}, minmax(0, 1fr))` }}>
             <div className="relative">
               {hours.map((h) => (
                 <div key={h} style={{ height: HOUR }} className="relative pr-2 text-right text-[11px] tabular-nums text-faint">
@@ -310,18 +321,18 @@ function TimeGrid(p: {
 function MonthGrid(p: { first: string; month: string; today: string; tz: string; appts: ApptView[]; color: (id: string | null) => string; onOpen: (id: string) => void; dayHref: (d: string) => string }) {
   const dates = Array.from({ length: 42 }, (_, i) => addDays(p.first, i));
   return (
-    <div className="card overflow-hidden p-0">
-      <div className="grid grid-cols-7 border-b border-line bg-surface/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+    <div className="card overflow-hidden p-0 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+      <div className="grid flex-none grid-cols-7 border-b border-line bg-surface/70 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div key={d} className="px-3 py-2">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 lg:min-h-0 lg:flex-1 lg:grid-rows-6 lg:overflow-y-auto">
         {dates.map((d, i) => {
           const list = p.appts.filter((a) => dateIn(a.start, p.tz) === d && a.status !== "cancelled");
           const inMonth = d.startsWith(p.month);
           return (
-            <div key={d} className={`min-h-[118px] border-line p-1.5 ${i % 7 ? "border-l" : ""} ${i >= 7 ? "border-t" : ""} ${inMonth ? "" : "bg-surface/50"}`}>
+            <div key={d} className={`min-h-[118px] border-line p-1.5 lg:min-h-0 lg:overflow-hidden ${i % 7 ? "border-l" : ""} ${i >= 7 ? "border-t" : ""} ${inMonth ? "" : "bg-surface/50"}`}>
               <Link href={p.dayHref(d)} className={`mb-1 inline-grid h-7 min-w-7 place-items-center rounded-full px-1 text-[12.5px] font-semibold tabular-nums ${d === p.today ? "bg-brand text-white" : inMonth ? "text-navy hover:bg-surface" : "text-faint"}`}>
                 {Number(d.slice(8))}
               </Link>

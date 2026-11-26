@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Page, PageHeader } from "@/components/ui";
 import { adminClient } from "@/lib/admin";
 import { can, getWorkspace, memberNames } from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
@@ -108,14 +107,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     };
   });
 
+  // On a laptop the calendar fits the screen: no page scroll, the grid fills the space.
   return (
-    <Page>
-      <PageHeader
-        eyebrow="Calendar"
-        title="Calendar"
-        subtitle="Every booking in one place: from your booking pages, Calendly, and bookings made by the team or the AI. Bookings create the contact, move the deal and start your workflows."
-      />
-      <CalendarTabs />
+    <main className="fade-in mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 pb-4 pt-4 sm:px-7 lg:h-[calc(100dvh-var(--chrome-h,64px))] lg:overflow-hidden">
+      <div className="flex flex-none flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Calendar</h1>
+        <CalendarTabs />
+      </div>
       <CalendarView
         view={view}
         date={date}
@@ -132,6 +130,6 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         calFilter={calFilter}
         canManage={can(ws, "calendars.manage")}
       />
-    </Page>
+    </main>
   );
 }
