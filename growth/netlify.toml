@@ -1,0 +1,13 @@
+# Netlify settings for the AI growth landing page (its own Netlify project).
+# Set that project's "Base directory" to `growth` so it reads this file and
+# publishes only this folder. No build step: these are plain HTML files.
+
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "DENY"
