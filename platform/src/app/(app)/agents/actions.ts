@@ -54,16 +54,18 @@ export async function setSetterStatus(id: string, status: SetterStatus): Promise
   if (!can(ws, "ai.manage")) return { error: NO_ACCESS };
   if (!["off", "test", "live"].includes(status)) return { error: "Unknown status." };
   const supabase = await createClient();
-  const { data: a } = await supabase.from("setter_agents").select("ghl_location_id, ghl_checked_at, ghl_error, ghl_calendar_id").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
+  const { data: a } = await supabase.from("setter_agents").select("engine, calendar_id, ghl_location_id, ghl_checked_at, ghl_error, ghl_calendar_id").eq("id", id).eq("account_id", ws.account.id).maybeSingle();
   if (!a) return { error: "We couldn't find that AI setter." };
-  if (status !== "off") {
-    if (!a.ghl_location_id || !a.ghl_checked_at || a.ghl_error) return { error: "Connect GHL first (the Connect GHL tab)." };
-    if (!a.ghl_calendar_id) return { error: "Choose the calendar to book into first (the Connect GHL tab)." };
+  const inScalency = a.engine === "scalency";
+  if (status !== "off" && inScalency && !a.calendar_id) return { error: "Choose the booking page the AI books into first (the Where it works tab)." };
+  if (status !== "off" && !inScalency) {
+    if (!a.ghl_location_id || !a.ghl_checked_at || a.ghl_error) return { error: "Connect GHL first, or choose Inside Scalency (the Where it works tab)." };
+    if (!a.ghl_calendar_id) return { error: "Choose the calendar to book into first (the Where it works tab)." };
   }
   const { error } = await supabase.from("setter_agents").update({ status }).eq("id", id).eq("account_id", ws.account.id);
   if (error) return { error: "We couldn't change that. Try again." };
   refresh();
-  return { ok: status === "live" ? "Live: the AI setter now works every new lead." : status === "test" ? "Test mode: it only talks to contacts tagged ai-test." : "Switched off." };
+  return { ok: status === "live" ? (inScalency ? "Live: the AI setter now messages every contact tagged AI setter." : "Live: the AI setter now works every new lead.") : status === "test" ? (inScalency ? "Test mode: messages go to your test email or phone (Settings), not to the lead." : "Test mode: it only talks to contacts tagged ai-test.") : "Switched off." };
 }
 
 /** The calendar to book into and the pipeline stages to move deals to. */
