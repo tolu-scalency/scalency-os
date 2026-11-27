@@ -226,7 +226,7 @@ export function EmailDesigner({ value, onChange, fields }: { value: EmailValue; 
             aria-label="Email design"
             onInput={sync}
             onBlur={sync}
-            className="email-canvas min-h-[220px] bg-white px-6 py-5 text-[15px] leading-[1.6] text-[#1F2D45] outline-none [&_a]:text-brand [&_a]:underline [&_h1]:text-[26px] [&_h1]:font-bold [&_h2]:text-[20px] [&_h2]:font-bold [&_li]:ml-5 [&_ol]:list-decimal [&_p]:mb-3 [&_ul]:list-disc"
+            className="email-canvas min-h-[220px] bg-white px-6 py-5 text-[15px] leading-[1.6] text-[#1F2D45] outline-none [&_a]:text-brand [&_a]:underline [&_h1]:text-[22px] [&_h1]:font-bold [&_h2]:text-[20px] [&_h2]:font-bold [&_li]:ml-5 [&_ol]:list-decimal [&_p]:mb-3 [&_ul]:list-disc"
           />
         </div>
       )}

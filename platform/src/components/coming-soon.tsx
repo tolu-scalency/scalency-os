@@ -29,7 +29,7 @@ export function ComingSoonView({ f, bare = false }: { f: Feature; bare?: boolean
             </span>
             <div className="mt-5 flex items-center gap-3">
               <Tile icon={f.icon} tone={f.tone} size={48} />
-              <h1 className="text-[32px] font-semibold tracking-[-0.035em]">{f.title}</h1>
+              <h1 className="text-[22px] font-semibold tracking-[-0.035em]">{f.title}</h1>
             </div>
             <p className="mt-3 max-w-[460px] text-[17px] leading-relaxed text-muted">{f.tagline}</p>
             {f.meanwhile && (
@@ -63,7 +63,7 @@ function Bare({ children }: { children: React.ReactNode }) {
 function Preview({ icon }: { icon: Parameters<typeof Icon>[0]["name"] }) {
   return (
     <div aria-hidden className="relative mx-auto w-full max-w-[420px]">
-      <div className="rounded-2xl border border-line bg-white p-4 shadow-[var(--shadow-pop)]">
+      <div className="rounded-xl border border-line bg-white p-4 shadow-[var(--shadow-pop)]">
         <div className="mb-4 flex gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />

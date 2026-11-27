@@ -153,3 +153,21 @@ Deno.test("native helpers: turns, lead details, typed contact details", () => {
   ok(l.details.includes("Form: Monthly revenue: £20k") && !l.details.includes("x@y.com"));
   deepStrictEqual(contactDetailsIn("call me on +44 7700 900123 or ben@x.co"), { email: "ben@x.co", phone: "+447700900123" });
 });
+
+Deno.test("native: an AI call journey step phones them through Retell and logs it on the contact", async () => {
+  Deno.env.set("RETELL_API_KEY", "k");
+  Deno.env.set("RETELL_AGENT_ID", "agent");
+  Deno.env.set("RETELL_FROM_NUMBER", "+447700900000");
+  const calls: { url: string; body: Record<string, unknown> }[] = [];
+  const fetcher = (async (url: string | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+    return new Response(JSON.stringify({ call_id: "c1" }));
+  }) as typeof fetch;
+  const voiceAgent = { ...agent, rules: { ...(agent.rules as Record<string, unknown>), voiceProvider: "retell", journey: [{ day: 1, action: "ai_call" }, { day: 3, action: "message" }] } } as unknown as Agent;
+  const { db, writes } = fakeDb(base());
+  const r = await nativeWork(db, voiceAgent, thread({ sent_ids: ["m1"] }), { kind: "followup", touch: 0 }, { claude: async () => { throw new Error("no AI text on a call step"); }, now, fetch: fetcher });
+  deepStrictEqual(r, { journey: "ai_call" });
+  deepStrictEqual([calls[0].url, calls[0].body.to_number, calls[0].body.from_number], ["https://api.retellai.com/v2/create-phone-call", "+447700900123", "+447700900000"]);
+  ok(writes.some((w) => w.table === "activity" && w.data.type === "call.ai"));
+  ok(writes.some((w) => w.table === "setter_calls"));
+});

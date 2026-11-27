@@ -130,14 +130,14 @@ export function Studio({ items, setterId, canApprove }: { items: Creative[]; set
           <div className="flex min-h-[320px] flex-col gap-3 bg-surface/60 p-5 sm:p-6">
             {variants.length === 0 ? (
               <div className="m-auto max-w-[340px] text-center text-[13px] text-muted">
-                <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-brand ring-1 ring-line">
+                <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-white text-brand ring-1 ring-line">
                   <Icon name="image" size={20} />
                 </span>
                 Your 3 versions appear here, each with its UK ad-rules check. Keep the ones you like.
               </div>
             ) : (
               variants.map((v, i) => (
-                <article key={i} className="flex flex-col gap-2.5 rounded-2xl bg-white p-4 ring-1 ring-line">
+                <article key={i} className="flex flex-col gap-2.5 rounded-xl bg-white p-4 ring-1 ring-line">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-faint">Version {i + 1}</span>
                     <button type="button" disabled={pending} onClick={() => keep(v)} className="btn-primary inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-[12px] font-semibold">
@@ -165,7 +165,7 @@ export function Studio({ items, setterId, canApprove }: { items: Creative[]; set
               <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${col.tone}`}>{col.label}</span>
               <span className="font-mono text-[12px] text-faint">{byStatus[col.key].length}</span>
             </div>
-            {byStatus[col.key].length === 0 && <div className="rounded-2xl border border-dashed border-line-strong p-5 text-center text-[12.5px] text-muted">Nothing here.</div>}
+            {byStatus[col.key].length === 0 && <div className="rounded-xl border border-dashed border-line-strong p-5 text-center text-[12.5px] text-muted">Nothing here.</div>}
             {byStatus[col.key].map((c) => (
               <article key={c.id} className="card flex flex-col gap-2 p-4">
                 <div className="flex items-start justify-between gap-2">

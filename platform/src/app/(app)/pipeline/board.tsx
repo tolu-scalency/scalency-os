@@ -83,7 +83,7 @@ export function Board({ columns: initial, children, onOpen, fields }: { columns:
                   setDragging(null);
                   if (id) move(id, col.id);
                 }}
-                className={`flex min-h-[300px] w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col gap-2 rounded-2xl p-2.5 transition-colors sm:max-h-full sm:min-h-[420px] sm:w-[280px] sm:overflow-y-auto sm:[scrollbar-width:thin] ${
+                className={`flex min-h-[300px] w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col gap-2 rounded-xl p-2.5 transition-colors sm:max-h-full sm:min-h-[420px] sm:w-[280px] sm:overflow-y-auto sm:[scrollbar-width:thin] ${
                   over === col.id ? "bg-chip ring-2 ring-sky/50" : "bg-[#eaeff6]"
                 }`}
               >
@@ -118,7 +118,7 @@ export function Board({ columns: initial, children, onOpen, fields }: { columns:
                       setDragging(null);
                       setOver(null);
                     }}
-                    className={`block cursor-grab rounded-xl border border-line bg-white p-3 shadow-[0_1px_2px_rgba(11,36,71,0.05)] transition-all hover:-translate-y-px hover:border-sky/60 hover:shadow-[0_10px_24px_-14px_rgba(11,36,71,0.35)] active:cursor-grabbing ${
+                    className={`block cursor-grab rounded-xl border border-line bg-white p-3 transition-all hover:-translate-y-px hover:border-sky/60 active:cursor-grabbing ${
                       dragging === card.opportunityId ? "opacity-40" : ""
                     }`}
                   >

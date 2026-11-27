@@ -125,7 +125,7 @@ export function CalendarView(props: {
       </div>
 
       {calendars.length === 0 && (
-        <div className="card relative overflow-hidden p-8">
+        <div className="card relative overflow-hidden p-5">
           <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(47,168,235,0.25),transparent_70%)]" />
           <div className="relative max-w-xl">
             <h2 className="text-[20px] font-semibold tracking-[-0.02em]">Set up your first booking page</h2>
@@ -236,7 +236,7 @@ function TimeGrid(p: {
               return (
                 <div key={d} className="border-l border-line px-3 py-2.5">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">{new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" }).format(dt)}</div>
-                  <div className={`mt-0.5 inline-grid h-8 min-w-8 place-items-center rounded-full px-1 text-[17px] font-semibold tabular-nums ${isToday ? "bg-brand text-white shadow-[0_6px_16px_-6px_rgba(4,101,199,0.7)]" : ""}`}>{dt.getUTCDate()}</div>
+                  <div className={`mt-0.5 inline-grid h-8 min-w-8 place-items-center rounded-full px-1 text-[17px] font-semibold tabular-nums ${isToday ? "bg-brand text-white" : ""}`}>{dt.getUTCDate()}</div>
                 </div>
               );
             })}
@@ -285,7 +285,7 @@ function TimeGrid(p: {
                         key={a.id}
                         type="button"
                         onClick={() => p.onOpen(a.id)}
-                        className={`group absolute overflow-hidden rounded-xl border px-2.5 py-1.5 text-left shadow-[0_8px_20px_-14px_rgba(11,36,71,0.6)] transition hover:z-10 hover:-translate-y-px hover:shadow-[0_14px_28px_-14px_rgba(11,36,71,0.6)] ${off ? "opacity-50" : ""}`}
+                        className={`group absolute overflow-hidden rounded-xl border px-2.5 py-1.5 text-left transition hover:z-10 hover:-translate-y-px ${off ? "opacity-50" : ""}`}
                         style={{
                           top,
                           height,
@@ -360,7 +360,7 @@ function ListView(p: { tz: string; appts: ApptView[]; color: (id: string | null)
     const d = dateIn(a.start, p.tz);
     groups.set(d, [...(groups.get(d) ?? []), a]);
   }
-  if (!p.appts.length) return <div className="card p-10 text-center text-[14px] text-muted">Nothing booked in the next 60 days yet.</div>;
+  if (!p.appts.length) return <div className="card p-6 text-center text-[14px] text-muted">Nothing booked in the next 60 days yet.</div>;
   return (
     <div className="flex flex-col gap-4">
       {[...groups.entries()].map(([d, list]) => (
@@ -408,7 +408,7 @@ function Drawer({ a, tz, color, calName, memberName, onClose }: { a: ApptView; t
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(8,15,30,0.35)] backdrop-blur-[2px]" onClick={onClose}>
-      <aside className="fade-in flex h-full w-full max-w-[440px] flex-col overflow-y-auto bg-white shadow-[0_30px_80px_-20px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()} aria-label="Booking">
+      <aside className="fade-in flex h-full w-full max-w-[440px] flex-col overflow-y-auto bg-white" onClick={(e) => e.stopPropagation()} aria-label="Booking">
         <div className="relative overflow-hidden px-6 pb-5 pt-6" style={{ background: `linear-gradient(135deg, ${color}22, transparent 70%)` }}>
           <button type="button" onClick={onClose} aria-label="Close" className="absolute right-4 top-4 inline-grid h-9 w-9 place-items-center rounded-xl text-muted hover:bg-white/70"><Icon name="x" size={16} /></button>
           <Pill tone={STATUS_LOOK[a.status].tone}>{STATUS_LOOK[a.status].label}</Pill>
@@ -515,7 +515,7 @@ function NewBooking({ init, tz, calendars, members, me, canManage, onClose }: { 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(8,15,30,0.45)] p-4 backdrop-blur-[2px]" onClick={onClose}>
       <form
-        className="fade-in w-full max-w-[520px] rounded-2xl bg-white p-6 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.45)]"
+        className="fade-in w-full max-w-[520px] rounded-xl bg-white p-6"
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();

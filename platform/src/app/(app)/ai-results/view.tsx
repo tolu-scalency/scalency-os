@@ -145,7 +145,7 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-navy px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#55e3ec]" /> Live
           </div>
-          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.03em]">AI results</h1>
+          <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.03em]">AI results</h1>
           <p className="mt-1 text-[14px] text-muted">{all ? `All ${clinics} clinics` : name} · last {days} days</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -170,7 +170,7 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
       </div>
 
       {/* The command centre */}
-      <section className="relative overflow-hidden rounded-[22px] sidebar-blue text-white shadow-[0_30px_70px_-30px_rgba(10,63,166,0.55)] ring-1 ring-white/10">
+      <section className="relative overflow-hidden rounded-[22px] sidebar-blue text-white ring-1 ring-white/10">
         <div className="pointer-events-none absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:28px_28px]" />
         <div className="relative grid gap-px bg-white/5 lg:grid-cols-[280px_1fr_320px]">
           <div className="flex flex-col gap-4 bg-white/[0.04] p-5">
@@ -187,7 +187,7 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
                 <div className="font-mono text-[18px] font-semibold">{n}</div>
               </div>
             ))}
-            <div className="mt-auto rounded-2xl bg-white/[0.04] p-4 ring-1 ring-white/10">
+            <div className="mt-auto rounded-xl bg-white/[0.04] p-4 ring-1 ring-white/10">
               <div className="text-[11.5px] text-white/75">Leads per day</div>
               <div className="mt-1 h-14">
                 <Spark values={leadsPerDay} />
@@ -208,7 +208,7 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
               feed.slice(0, 7).map((f, n) => {
                 const look = FEED[f.kind as keyof typeof FEED];
                 return (
-                  <div key={f.id} className={`flex items-center gap-3 rounded-2xl bg-white/[0.04] px-3.5 py-2.5 ring-1 ring-white/[0.07] ${n === 0 ? "ring-white/30" : ""}`} style={{ opacity: 1 - n * 0.08 }}>
+                  <div key={f.id} className={`flex items-center gap-3 rounded-xl bg-white/[0.04] px-3.5 py-2.5 ring-1 ring-white/[0.07] ${n === 0 ? "ring-white/30" : ""}`} style={{ opacity: 1 - n * 0.08 }}>
                     <div className="min-w-0 flex-1">
                       <div className="font-mono text-[10px] font-semibold tracking-[0.14em] text-white/65">{look.tag}</div>
                       <div className="truncate text-[13.5px] font-semibold">
@@ -284,7 +284,7 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-[30px] font-semibold tracking-tight text-navy">{g.booked}</span>
+                  <span className="font-mono text-[22px] font-semibold tracking-tight text-navy">{g.booked}</span>
                   <span className="text-[13px] text-muted">of {g.target} booked · {left} days left</span>
                 </div>
                 <div className="relative h-2.5 overflow-hidden rounded-full bg-surface">
@@ -303,7 +303,7 @@ export function Results({ days, all, clinics, many, name, now, threads, handoffs
         {kpis.map(([k, v, s]) => (
           <div key={k} className="card p-4">
             <div className="text-[12px] font-medium text-muted">{k}</div>
-            <div className="mt-1 font-mono text-[26px] font-semibold tracking-tight text-navy">{v}</div>
+            <div className="mt-1 font-mono text-[22px] font-semibold tracking-tight text-navy">{v}</div>
             <div className="mt-0.5 text-[11.5px] text-muted">{s}</div>
           </div>
         ))}

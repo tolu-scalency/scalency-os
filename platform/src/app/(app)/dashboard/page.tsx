@@ -49,7 +49,7 @@ async function Home() {
       <Link href={href} className="card group flex flex-col-reverse items-start justify-between gap-3 p-4 transition-shadow hover:shadow-[var(--shadow-pop)] sm:flex-row sm:p-5">
         <div className="min-w-0">
           <div className="text-[13px] font-medium text-muted">{label}</div>
-          <div className="mt-2 truncate text-[24px] font-semibold leading-none tracking-[-0.04em] sm:text-[30px]">{value}</div>
+          <div className="mt-2 truncate text-[22px] font-semibold leading-none tracking-[-0.04em] sm:text-[22px]">{value}</div>
           <div className="mt-2 text-[12.5px] text-faint">{note}</div>
         </div>
         <Tile icon={icon} tone={tone} size={38} />
@@ -200,7 +200,7 @@ async function Home() {
         ));
       case "shortcuts":
         return (
-          <section className="relative overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#0a3fa6,#0a5fe3_60%,#29b0f8)] p-5 text-white shadow-[var(--shadow-card)] sm:p-6">
+          <section className="relative overflow-hidden rounded-xl bg-[linear-gradient(135deg,#0a3fa6,#0a5fe3_60%,#29b0f8)] p-5 text-white shadow-[var(--shadow-card)] sm:p-6">
             <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-[radial-gradient(closest-side,rgba(85,227,236,0.45),transparent)]" />
             <h2 className="relative text-[16px] font-semibold">Shortcuts</h2>
             <div className="relative mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
@@ -243,7 +243,7 @@ async function Home() {
         <>
           <div>
             <div className="text-[13px] text-muted">{today}</div>
-            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.035em] sm:text-[32px]">
+            <h1 className="mt-1 text-[22px] font-semibold tracking-[-0.035em] sm:text-[22px]">
               {greeting()}, <span className="text-gradient">{ws.firstName}</span>
             </h1>
           </div>

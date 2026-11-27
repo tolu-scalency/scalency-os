@@ -73,7 +73,7 @@ export async function AiInbox({ accountId, selectedId, canManage }: { accountId:
           <InboxTabs view="ai" />
         </div>
         {threads.length === 0 ? (
-          <div className="m-4 rounded-2xl border border-dashed border-line-strong p-6 text-center text-[13.5px] text-muted">
+          <div className="m-4 rounded-xl border border-dashed border-line-strong p-6 text-center text-[13.5px] text-muted">
             No AI setter conversations yet. When a new lead comes in through GHL, the conversation shows here.
           </div>
         ) : (
@@ -106,7 +106,7 @@ export async function AiInbox({ accountId, selectedId, canManage }: { accountId:
       <section className={`min-w-0 flex-1 flex-col bg-canvas ${selected ? "flex" : "hidden md:flex"}`}>
         {!selected ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-            <span className="tile h-12 w-12 rounded-2xl"><Icon name="spark" size={20} /></span>
+            <span className="tile h-12 w-12 rounded-xl"><Icon name="spark" size={20} /></span>
             <div className="text-[15px] font-semibold">Pick a conversation</div>
             <p className="max-w-[340px] text-[13.5px] text-muted">See what each lead said and how the AI answered.</p>
           </div>
@@ -142,7 +142,7 @@ export async function AiInbox({ accountId, selectedId, canManage }: { accountId:
                   </li>
                 ) : (
                   <li key={m.id} className={`flex ${m.role === "ai" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[88%] rounded-2xl px-4 py-3 shadow-sm sm:max-w-[560px] ${m.role === "ai" ? "rounded-br-md bg-[linear-gradient(135deg,#1a86ee,#0a5fe3)] text-white" : "rounded-bl-md border border-line bg-white"}`}>
+                    <div className={`max-w-[88%] rounded-xl px-4 py-3 shadow-sm sm:max-w-[560px] ${m.role === "ai" ? "rounded-br-md bg-[linear-gradient(135deg,#1a86ee,#0a5fe3)] text-white" : "rounded-bl-md border border-line bg-white"}`}>
                       <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{m.body}</p>
                       <div className={`mt-2 flex items-center gap-1.5 text-[11px] ${m.role === "ai" ? "text-white/75" : "text-faint"}`}>
                         <Icon name={m.role === "ai" ? "spark" : m.channel === "Email" || m.channel === "TYPE_EMAIL" ? "mail" : "phone"} size={11} />

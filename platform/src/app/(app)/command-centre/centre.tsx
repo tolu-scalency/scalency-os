@@ -107,11 +107,11 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
           ] as const
         ).map(([k, v, icon, c]) => (
           <div key={k} className="card flex items-center gap-3 px-4 py-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface">
               <Icon name={icon} size={17} />
             </span>
             <div>
-              <div className={`font-mono text-[24px] font-semibold leading-none tracking-tight ${c}`}>{v}</div>
+              <div className={`font-mono text-[22px] font-semibold leading-none tracking-tight ${c}`}>{v}</div>
               <div className="mt-1 text-[12px] text-muted">{k}</div>
             </div>
           </div>
@@ -132,7 +132,7 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {list.length === 0 ? (
-              <div className="p-8 text-center text-[13px] text-muted">No conversations here yet. As soon as the AI messages a lead, it shows up live.</div>
+              <div className="p-5 text-center text-[13px] text-muted">No conversations here yet. As soon as the AI messages a lead, it shows up live.</div>
             ) : (
               list.map((t) => {
                 const last = t.turns.filter((x) => x.role !== "event").at(-1);
@@ -161,7 +161,7 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
 
         <section className="card flex h-[75dvh] min-h-0 flex-col overflow-hidden lg:h-auto">
           {!open ? (
-            <div className="flex flex-1 items-center justify-center p-8 text-center text-[13px] text-muted">Choose a conversation to read along.</div>
+            <div className="flex flex-1 items-center justify-center p-5 text-center text-[13px] text-muted">Choose a conversation to read along.</div>
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3.5">
@@ -205,7 +205,7 @@ export function CommandCentre({ items }: { items: LiveThread[] }) {
                       </div>
                     ) : (
                       <div key={i} className={`flex max-w-[78%] flex-col ${m.role === "lead" ? "self-start" : "self-end items-end"}`}>
-                        <div className={`whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${m.role === "lead" ? "bg-white text-navy ring-1 ring-line" : m.role === "team" ? "bg-navy text-white" : "bg-brand text-white"}`}>{m.body}</div>
+                        <div className={`whitespace-pre-line rounded-xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${m.role === "lead" ? "bg-white text-navy ring-1 ring-line" : m.role === "team" ? "bg-navy text-white" : "bg-brand text-white"}`}>{m.body}</div>
                         <div className="mt-1 px-1 font-mono text-[10.5px] text-faint">
                           {m.role === "ai" ? `${open.assistant} (AI)` : m.role === "team" ? "Team" : open.name.split(" ")[0]} · {clock(m.at)}
                         </div>

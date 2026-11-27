@@ -44,7 +44,7 @@ export function AccessPreview({
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={title ?? `What ${role.label} can do`}>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]" />
-      <div className="rise relative flex max-h-[90vh] w-full max-w-[640px] flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+      <div className="rise relative flex max-h-[90vh] w-full max-w-[640px] flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-xl">
         <div className="flex items-start gap-3 border-b border-line p-5">
           <span className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-chip text-brand">
             <Icon name="shield" size={19} />

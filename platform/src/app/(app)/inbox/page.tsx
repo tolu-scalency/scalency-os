@@ -38,7 +38,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
           <InboxTabs view="contacts" />
         </div>
         {threads.length === 0 ? (
-          <div className="m-4 rounded-2xl border border-dashed border-line-strong p-6 text-center text-[13.5px] text-muted">
+          <div className="m-4 rounded-xl border border-dashed border-line-strong p-6 text-center text-[13.5px] text-muted">
             No conversations yet. Messages from workflows and from contact pages appear here.
           </div>
         ) : (
@@ -70,7 +70,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
       <section className={`min-w-0 flex-1 flex-col bg-canvas ${picked && selected ? "flex" : "hidden md:flex"}`}>
         {!selected ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
-            <span className="tile h-12 w-12 rounded-2xl"><Icon name="inbox" size={20} /></span>
+            <span className="tile h-12 w-12 rounded-xl"><Icon name="inbox" size={20} /></span>
             <div className="text-[15px] font-semibold">Pick a conversation</div>
             <p className="max-w-[340px] text-[13.5px] text-muted">Or open a contact and send them a message.</p>
           </div>
@@ -85,7 +85,7 @@ export default async function InboxPage(props: PageProps<"/inbox">) {
             <ul className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5">
               {messages.map((m) => (
                 <li key={m.id} className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[88%] rounded-2xl sm:max-w-[560px] px-4 py-3 shadow-sm ${m.direction === "outbound" ? "rounded-br-md bg-[linear-gradient(135deg,#1a86ee,#0a5fe3)] text-white" : "rounded-bl-md border border-line bg-white"}`}>
+                  <div className={`max-w-[88%] rounded-xl sm:max-w-[560px] px-4 py-3 shadow-sm ${m.direction === "outbound" ? "rounded-br-md bg-[linear-gradient(135deg,#1a86ee,#0a5fe3)] text-white" : "rounded-bl-md border border-line bg-white"}`}>
                     {m.subject && <div className="mb-1 text-[13px] font-semibold">{m.subject}</div>}
                     <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{m.body}</p>
                     <div className={`mt-2 flex items-center gap-1.5 text-[11px] ${m.direction === "outbound" ? "text-white/75" : "text-faint"}`}>

@@ -36,7 +36,7 @@ function Block({ eyebrow, title, text, children, aside }: { eyebrow?: string; ti
 
 function Toggle({ on, onChange, disabled, title, text }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean; title: string; text?: string }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-surface p-3.5">
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-surface p-3.5">
       <button
         type="button"
         role="switch"
@@ -148,7 +148,7 @@ export function KnowledgeTab({ setterId, items, b, setBiz, ro }: { setterId: str
         </div>
         {scanning && <p className="text-[12.5px] text-muted">This takes up to a minute.</p>}
         {scan && (
-          <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4">
+          <div className="flex flex-col gap-3 rounded-xl bg-surface p-4">
             <div className="text-[12.5px] text-muted">
               Read {scan.pages.length} page{scan.pages.length === 1 ? "" : "s"}. Tick what to use: ticked details replace what&apos;s in the Business tab.
             </div>
@@ -196,7 +196,7 @@ export function KnowledgeTab({ setterId, items, b, setBiz, ro }: { setterId: str
         aside={<span className="rounded-full bg-chip px-3 py-1 font-mono text-[12px] font-semibold text-brand">{approved.length} live</span>}
       >
         {approved.length === 0 ? (
-          <p className="rounded-2xl bg-surface p-4 text-[13px] text-muted">No approved answers yet. Scan the website or add one below.</p>
+          <p className="rounded-xl bg-surface p-4 text-[13px] text-muted">No approved answers yet. Scan the website or add one below.</p>
         ) : (
           <div className="flex flex-col gap-2.5">
             {approved.map((k) => (
@@ -205,7 +205,7 @@ export function KnowledgeTab({ setterId, items, b, setBiz, ro }: { setterId: str
           </div>
         )}
         {!ro && (
-          <div className="grid gap-3 rounded-2xl bg-surface p-4 sm:grid-cols-[1fr_1.4fr_auto] sm:items-end">
+          <div className="grid gap-3 rounded-xl bg-surface p-4 sm:grid-cols-[1fr_1.4fr_auto] sm:items-end">
             <label className={label}>
               Question
               <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={300} placeholder="Is there any downtime after lip filler?" className={field} />
@@ -270,7 +270,7 @@ function QaRow({ item, ro }: { item: KnowledgeItem; ro: boolean }) {
       else setEdit(false);
     });
   return (
-    <div className={`rounded-2xl bg-white p-3.5 ring-1 ${item.approved ? "ring-line" : "ring-warn/40"}`}>
+    <div className={`rounded-xl bg-white p-3.5 ring-1 ${item.approved ? "ring-line" : "ring-warn/40"}`}>
       {edit ? (
         <div className="flex flex-col gap-2">
           <input value={q} onChange={(e) => setQ(e.target.value)} maxLength={300} className={field} />
@@ -379,7 +379,7 @@ export function JourneyTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Se
       <Block eyebrow="Journey" title="What happens until they book" text="The AI messages every new lead straight away. If they go quiet, these steps run in order (within your hours), and stop the moment they reply or book.">
         <div className="flex flex-wrap gap-2">
           {PRESETS.map((p) => (
-            <button key={p.name} type="button" disabled={ro} onClick={() => put(p.steps)} className="rounded-2xl bg-surface px-3.5 py-2.5 text-left ring-1 ring-line hover:ring-sky disabled:opacity-50">
+            <button key={p.name} type="button" disabled={ro} onClick={() => put(p.steps)} className="rounded-xl bg-surface px-3.5 py-2.5 text-left ring-1 ring-line hover:ring-sky disabled:opacity-50">
               <div className="text-[13px] font-semibold text-navy">{p.name}</div>
               <div className="text-[11.5px] text-muted">{p.text}</div>
             </button>
@@ -390,7 +390,7 @@ export function JourneyTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Se
             <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-[var(--gradient)] font-mono text-[12px] font-semibold text-white" style={{ background: "var(--gradient)" }}>
               0
             </span>
-            <div className="flex-1 rounded-2xl bg-chip px-4 py-3">
+            <div className="flex-1 rounded-xl bg-chip px-4 py-3">
               <div className="text-[13.5px] font-semibold text-navy">Lead comes in</div>
               <div className="text-[12px] text-muted">AI first message within a minute{r.teamTasks ? ", and a task for the team to call twice" : ""}.</div>
             </div>
@@ -399,7 +399,7 @@ export function JourneyTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Se
             <li key={i} className="relative flex items-center gap-3 pb-3">
               <span className="absolute left-[17px] top-[-12px] h-3 w-px bg-line-strong" />
               <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-white font-mono text-[12px] font-semibold text-brand ring-1 ring-line-strong">{i + 1}</span>
-              <div className="flex flex-1 flex-wrap items-center gap-2 rounded-2xl bg-white px-3 py-2.5 ring-1 ring-line">
+              <div className="flex flex-1 flex-wrap items-center gap-2 rounded-xl bg-white px-3 py-2.5 ring-1 ring-line">
                 <select
                   value={s.day === 0 ? `m${s.minutes ?? 5}` : `d${s.day}`}
                   disabled={ro}
@@ -501,7 +501,7 @@ export function RetentionTab({ r, set, b, setBiz, ro }: { r: SetterRules; set: (
         <Toggle on={r.rebookOn} disabled={ro} onChange={(v) => set({ rebookOn: v })} title="Remind clients when they're due again" text="Starts a short conversation (up to 2 follow-ups). Booking goes into the GHL calendar as usual." />
         <div className="flex flex-col gap-2">
           {items.map((it, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2 rounded-2xl bg-white px-3 py-2.5 ring-1 ring-line">
+            <div key={i} className="flex flex-wrap items-center gap-2 rounded-xl bg-white px-3 py-2.5 ring-1 ring-line">
               <input value={it.treatment} disabled={ro} onChange={(e) => set({ rebookItems: items.map((x, j) => (j === i ? { ...x, treatment: e.target.value.slice(0, 60) } : x)) })} placeholder="Treatment" className="field h-9 min-w-0 flex-[1_1_200px] text-[13px]" />
               <span className="text-[12.5px] text-muted">due again after</span>
               <input type="number" min={7} max={730} value={it.days} disabled={ro} onChange={(e) => set({ rebookItems: items.map((x, j) => (j === i ? { ...x, days: Number(e.target.value) || 90 } : x)) })} className="field h-9 w-[80px] text-center font-mono text-[13px]" />
@@ -581,14 +581,14 @@ export function VoiceTab({ r, set, ro, setterId, calls = [] }: { r: SetterRules;
   ];
   return (
     <div className="flex flex-col gap-4">
-      <div className={`flex flex-wrap items-start gap-3 rounded-2xl px-4 py-3 text-[13px] ${status?.ready ? "bg-ok-bg text-ok" : "bg-warn-bg text-warn"}`}>
+      <div className={`flex flex-wrap items-start gap-3 rounded-xl px-4 py-3 text-[13px] ${status?.ready ? "bg-ok-bg text-ok" : "bg-warn-bg text-warn"}`}>
         <Icon name={status?.ready ? "checkCircle" : "warning"} size={16} />
         <span className="min-w-0 flex-1">
           {status?.ready ? (
             <strong>Connected: the AI can make and take calls.</strong>
           ) : (
             <>
-              <strong>Not live yet.</strong> Choose Vapi or Retell below and add its keys in Supabase (Edge Functions, Secrets). Vapi: VAPI_API_KEY, VAPI_PHONE_NUMBER_ID, VAPI_ASSISTANT_ID. Retell: RETELL_API_KEY, RETELL_AGENT_ID, RETELL_FROM_NUMBER. In the provider, set the webhook to the &quot;voice calls&quot; address from Connect GHL.
+              <strong>Not live yet.</strong> Choose Vapi or Retell below and add its keys in Supabase (Edge Functions, Secrets). Vapi: VAPI_API_KEY, VAPI_PHONE_NUMBER_ID, VAPI_ASSISTANT_ID. Retell: RETELL_API_KEY, RETELL_AGENT_ID, RETELL_FROM_NUMBER. In the provider, set the webhook to the call report address in Where it works.
             </>
           )}
         </span>
@@ -601,7 +601,7 @@ export function VoiceTab({ r, set, ro, setterId, calls = [] }: { r: SetterRules;
       <Block eyebrow="Voice AI" title="Answering calls" text="The same AI brain as the setter, on the phone: it answers questions from the Knowledge bank, books into the GHL calendar, and passes the call to a person when it should.">
         <div className="grid gap-2 sm:grid-cols-2">
           {modes.map(([id, t, d]) => (
-            <button key={id} type="button" disabled={ro} onClick={() => set({ voiceMode: id })} className={`rounded-2xl p-3.5 text-left ring-1 ${r.voiceMode === id ? "bg-chip ring-brand" : "bg-white ring-line hover:ring-sky"}`}>
+            <button key={id} type="button" disabled={ro} onClick={() => set({ voiceMode: id })} className={`rounded-xl p-3.5 text-left ring-1 ${r.voiceMode === id ? "bg-chip ring-brand" : "bg-white ring-line hover:ring-sky"}`}>
               <div className="text-[13.5px] font-semibold text-navy">{t}</div>
               <div className="text-[12px] text-muted">{d}</div>
             </button>
@@ -631,11 +631,11 @@ export function VoiceTab({ r, set, ro, setterId, calls = [] }: { r: SetterRules;
           In the provider&apos;s assistant, use these variables in the prompt: {"{{clinic_name}}, {{assistant_name}}, {{lead_first_name}}, {{purpose}}, {{appointment}}, {{what_we_know}}, {{services}}, {{transfer_number}}"}. Use a British voice, say it&apos;s the clinic&apos;s AI assistant and that calls are recorded.
         </p>
       </Block>
-      <Block eyebrow="Calls" title="Recent AI calls" text="Every call's summary also goes on the conversation and as a note in GHL.">
+      <Block eyebrow="Calls" title="Recent AI calls" text="Every call's summary also goes on the conversation, and on the contact (in Scalency, or as a note in GHL).">
         {calls.length === 0 ? (
-          <p className="rounded-2xl bg-surface p-4 text-[13px] text-muted">No calls yet.</p>
+          <p className="rounded-xl bg-surface p-4 text-[13px] text-muted">No calls yet.</p>
         ) : (
-          <ul className="flex flex-col divide-y divide-line rounded-2xl ring-1 ring-line">
+          <ul className="flex flex-col divide-y divide-line rounded-xl ring-1 ring-line">
             {calls.map((c) => (
               <li key={c.id} className="flex flex-wrap items-start gap-3 px-4 py-3 text-[13px]">
                 <span className="flex h-8 w-8 flex-none items-center justify-center rounded-xl bg-chip text-brand">
@@ -678,7 +678,7 @@ export function ShowUpTab({ r, set, ro }: { r: SetterRules; set: (p: Partial<Set
         <Toggle on={r.remindersOn} disabled={ro} onChange={(v) => set({ remindersOn: v })} title="Send reminders before each appointment" text="Turn off GHL's own reminder workflow for these calendars, so people don't get both." />
         <ol className="grid gap-2 sm:grid-cols-2">
           {REMINDER_ROWS.map(([t, d], i) => (
-            <li key={t} className="flex items-start gap-3 rounded-2xl bg-white p-3.5 ring-1 ring-line">
+            <li key={t} className="flex items-start gap-3 rounded-xl bg-white p-3.5 ring-1 ring-line">
               <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-chip font-mono text-[12px] font-semibold text-brand">{i + 1}</span>
               <span className="text-[13px]">
                 <span className="font-semibold text-navy">{t}</span>
@@ -720,7 +720,7 @@ export function VersionsPanel({ versions, onRestore, ro }: { versions: VersionIt
   return (
     <Block eyebrow="Version history" title="Every save is kept" text="Changed something and the AI got worse? Restore an earlier version, check it in the Test chat, then Save." aside={<button type="button" onClick={() => setOpen(!open)} className="btn-ghost min-h-9 rounded-xl px-3 text-[12.5px] font-semibold">{open ? "Hide" : `Show ${versions.length}`}</button>}>
       {open && (
-        <ul className="flex flex-col divide-y divide-line rounded-2xl ring-1 ring-line">
+        <ul className="flex flex-col divide-y divide-line rounded-xl ring-1 ring-line">
           {versions.map((v, i) => (
             <li key={v.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
               <span className="font-mono text-[12px] text-muted">{fmt(v.created_at)}</span>

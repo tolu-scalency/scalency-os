@@ -10,7 +10,7 @@ import { shortId } from "@/lib/short-id-shared";
 import { APPT_COLS, cancelAppointment, cleanPerson, createBooking, loadCalendar, rescheduleAppointment } from "@/lib/calendar/booking";
 import { calendlyMe } from "@/lib/calendar/providers";
 import { validTimeZone } from "@/lib/calendar/time";
-import { cleanOverrides, cleanSettings, cleanWeekly, settingsToRow, slugify, type AppointmentStatus, type CalendarSettings } from "@/lib/calendar/types";
+import { cleanOverrides, cleanSettings, cleanWeekly, LOCATIONS, settingsToRow, slugify, type AppointmentStatus, type CalendarSettings } from "@/lib/calendar/types";
 
 type Result = { error?: string; ok?: string };
 const NO_ACCESS = "You don't have access to manage calendars. Ask the workspace owner.";
@@ -148,7 +148,7 @@ export async function createCalendar(fd: FormData) {
   redirect(`/calendar/booking-pages/${shortId(data.id)}`);
 }
 
-export async function saveCalendar(id: string, raw: CalendarSettings, members: { userId: string; priority: number }[]): Promise<Result> {
+export async function saveCalendar(id: string, raw: CalendarSettings, members: { userId: string; priority: number; locationType?: string; locationValue?: string }[]): Promise<Result> {
   const { ws, manage } = await ctx();
   if (!manage) return { error: NO_ACCESS };
   const supabase = await createClient();
@@ -165,6 +165,10 @@ export async function saveCalendar(id: string, raw: CalendarSettings, members: {
   const allowed = new Set((team ?? []).map((m) => m.user_id as string));
   const chosen = members.filter((m) => allowed.has(m.userId)).slice(0, 50);
   if (!chosen.length) return { error: "Choose at least one person who takes these bookings." };
+  if (s.groupId) {
+    const { data: g } = await supabase.from("calendar_groups").select("id").eq("id", s.groupId).eq("account_id", ws.account.id).maybeSingle();
+    if (!g) s.groupId = null;
+  }
   const { error } = await supabase.from("calendars").update(settingsToRow(s)).eq("id", id);
   if (error) return { error: "That didn't save. Please try again." };
   const { data: existing } = await supabase.from("calendar_members").select("user_id").eq("calendar_id", id);
@@ -173,7 +177,17 @@ export async function saveCalendar(id: string, raw: CalendarSettings, members: {
   if (drop.length) await supabase.from("calendar_members").delete().eq("calendar_id", id).in("user_id", drop);
   await supabase
     .from("calendar_members")
-    .upsert(chosen.map((m, i) => ({ calendar_id: id, account_id: ws.account.id, user_id: m.userId, priority: Math.min(10, Math.max(0, Math.round(m.priority))) || (i === 0 ? 1 : 0) })), { onConflict: "calendar_id,user_id" });
+    .upsert(
+      chosen.map((m, i) => ({
+        calendar_id: id,
+        account_id: ws.account.id,
+        user_id: m.userId,
+        priority: Math.min(10, Math.max(0, Math.round(m.priority))) || (i === 0 ? 1 : 0),
+        location_type: LOCATIONS.some((l) => l.id === m.locationType) ? m.locationType : null,
+        location_value: String(m.locationValue ?? "").trim().slice(0, 300),
+      })),
+      { onConflict: "calendar_id,user_id" },
+    );
   refresh();
   return { ok: s.slug !== raw.slug ? `Saved. The link is now /${s.slug} because that one was taken.` : "Saved" };
 }
@@ -270,4 +284,58 @@ export async function syncCalendlyNow(): Promise<Result> {
   const n = await syncCalendly(admin, ws.account.id);
   refresh();
   return { ok: n ? `${n} new booking${n === 1 ? "" : "s"} imported` : "Up to date" };
+}
+
+// ------------------------------------------------------------------ groups
+
+export async function saveGroup(input: { id?: string; name: string }): Promise<Result & { id?: string }> {
+  const { ws, manage } = await ctx();
+  if (!manage) return { error: NO_ACCESS };
+  const name = input.name.trim().slice(0, 80);
+  if (!name) return { error: "Give the group a name." };
+  const supabase = await createClient();
+  if (input.id) {
+    const { error } = await supabase.from("calendar_groups").update({ name }).eq("id", input.id).eq("account_id", ws.account.id);
+    if (error) return { error: "That didn't save. Please try again." };
+    refresh();
+    return { ok: "Renamed", id: input.id };
+  }
+  const { data, error } = await supabase.from("calendar_groups").insert({ account_id: ws.account.id, name }).select("id").single();
+  if (error || !data) return { error: "That didn't save. Please try again." };
+  refresh();
+  return { ok: "Group added", id: data.id as string };
+}
+
+export async function deleteGroup(id: string): Promise<Result> {
+  const { ws, manage } = await ctx();
+  if (!manage) return { error: NO_ACCESS };
+  const supabase = await createClient();
+  const { error } = await supabase.from("calendar_groups").delete().eq("id", id).eq("account_id", ws.account.id);
+  if (error) return { error: "That didn't delete. Please try again." };
+  refresh();
+  return { ok: "Group deleted. Its calendars are now not grouped." };
+}
+
+export async function setCalendarGroup(calendarId: string, groupId: string | null): Promise<Result> {
+  const { ws, manage } = await ctx();
+  if (!manage) return { error: NO_ACCESS };
+  const supabase = await createClient();
+  if (groupId) {
+    const { data: g } = await supabase.from("calendar_groups").select("id").eq("id", groupId).eq("account_id", ws.account.id).maybeSingle();
+    if (!g) return { error: "That group no longer exists." };
+  }
+  const { error } = await supabase.from("calendars").update({ group_id: groupId }).eq("id", calendarId).eq("account_id", ws.account.id);
+  if (error) return { error: "That didn't save. Please try again." };
+  refresh();
+  return { ok: "Moved" };
+}
+
+export async function setCalendarStatus(calendarId: string, status: "active" | "paused"): Promise<Result> {
+  const { ws, manage } = await ctx();
+  if (!manage) return { error: NO_ACCESS };
+  const supabase = await createClient();
+  const { error } = await supabase.from("calendars").update({ status }).eq("id", calendarId).eq("account_id", ws.account.id);
+  if (error) return { error: "That didn't save. Please try again." };
+  refresh();
+  return { ok: status === "active" ? "Taking bookings" : "Paused" };
 }

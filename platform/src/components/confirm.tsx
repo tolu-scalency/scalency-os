@@ -53,7 +53,7 @@ export function ConfirmHost() {
   if (!p) return null;
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && close(false)}>
-      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
         <div className="flex items-start gap-3.5">
           <span className={`inline-flex h-10 w-10 flex-none items-center justify-center rounded-xl ${p.danger ? "bg-bad-bg text-bad" : "bg-chip text-brand"}`}>
             <Icon name={p.danger ? "trash" : "spark"} size={18} />

@@ -89,9 +89,9 @@ export default async function FunnelsPage({ searchParams }: { searchParams: Prom
       </div>
 
       {archived && !sites?.length ? (
-        <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">Nothing archived.</p>
+        <p className="rounded-xl border border-dashed border-line-strong bg-white/60 p-5 text-center text-[14px] text-muted">Nothing archived.</p>
       ) : !sites?.length && kind ? (
-        <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">No {KINDS[kind].label.toLowerCase()}s yet. Use the buttons above to make one.</p>
+        <p className="rounded-xl border border-dashed border-line-strong bg-white/60 p-5 text-center text-[14px] text-muted">No {KINDS[kind].label.toLowerCase()}s yet. Use the buttons above to make one.</p>
       ) : !sites?.length ? (
         canEdit ? (
           <div className="flex flex-col gap-3">
@@ -99,7 +99,7 @@ export default async function FunnelsPage({ searchParams }: { searchParams: Prom
             <NewPageButton accountId={ws.account.id} forms={formList} big />
           </div>
         ) : (
-          <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">No pages yet.</p>
+          <p className="rounded-xl border border-dashed border-line-strong bg-white/60 p-5 text-center text-[14px] text-muted">No pages yet.</p>
         )
       ) : (
         <div className="card divide-y divide-line">

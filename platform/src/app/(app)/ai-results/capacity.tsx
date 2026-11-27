@@ -57,7 +57,7 @@ export function Capacity({ setterId }: { setterId: string }) {
               );
             })}
           </div>
-          <p className="flex items-start gap-2 rounded-2xl bg-chip px-4 py-3 text-[13px] text-brand lg:w-[320px]">
+          <p className="flex items-start gap-2 rounded-xl bg-chip px-4 py-3 text-[13px] text-brand lg:w-[320px]">
             <Icon name="spark" size={15} /> {cap.advice}
           </p>
         </>

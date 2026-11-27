@@ -150,7 +150,7 @@ export default async function WorkflowsPage() {
       <section>
         <h2 className="mb-3 text-[15px] font-semibold">Your workflows</h2>
         {workflows.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">
+          <p className="rounded-xl border border-dashed border-line-strong bg-white/60 p-5 text-center text-[14px] text-muted">
             No workflows yet. Pick a template above.
           </p>
         ) : (

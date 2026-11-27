@@ -376,7 +376,7 @@ function VoiceRecorder({ onText, onDone, onError }: { onText: (t: string) => voi
 
   const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   return (
-    <div className="flex w-full flex-col gap-3 rounded-2xl border border-line bg-surface p-4" aria-live="polite">
+    <div className="flex w-full flex-col gap-3 rounded-xl border border-line bg-surface p-4" aria-live="polite">
       <div className="flex items-center gap-3">
         <span className="relative flex h-3 w-3">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-bad opacity-60" />
@@ -444,7 +444,7 @@ function Thinking() {
   }, []);
   return (
     <section className="card flex flex-col items-center gap-4 px-6 py-16 text-center" aria-live="polite">
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-chip text-brand">
+      <span className="grid h-14 w-14 place-items-center rounded-xl bg-chip text-brand">
         <Icon name="spark" size={26} className="animate-pulse" />
       </span>
       <div>
@@ -750,7 +750,7 @@ function Review({
       </Section>
 
       {error && <p role="alert" className="rounded-xl bg-bad-bg px-4 py-3 text-[13.5px] text-bad">{error}</p>}
-      <div className="sticky bottom-[calc(var(--nav-h)+12px)] z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white/95 p-3 shadow-lg backdrop-blur">
+      <div className="sticky bottom-[calc(var(--nav-h)+12px)] z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-white/95 p-3 shadow-lg backdrop-blur">
         <button type="button" onClick={onBack} disabled={pending} className="btn-ghost inline-flex min-h-10 items-center gap-2 rounded-xl px-4 text-[13.5px] font-semibold">
           Start again
         </button>

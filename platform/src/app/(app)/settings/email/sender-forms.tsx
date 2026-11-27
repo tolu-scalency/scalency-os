@@ -34,7 +34,7 @@ function Pill({ tone, children }: { tone: "ok" | "warn" | "bad" | "info"; childr
 export function ScalencyCard({ active, address, ready, workspace, manager }: { active: boolean; address: string; ready: boolean; workspace: string; manager: boolean }) {
   const { pending, run } = useRun();
   return (
-    <div className={`rounded-2xl border p-4 ${active ? "border-brand/40 bg-chip/40" : "border-line"}`}>
+    <div className={`rounded-xl border p-4 ${active ? "border-brand/40 bg-chip/40" : "border-line"}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-brand ring-1 ring-line">
           <Icon name="logoArrow" size={16} />
@@ -108,7 +108,7 @@ export function SenderCard({ s, manager }: { s: Sender; manager: boolean }) {
   const [editing, setEditing] = useState(false);
   const verified = s.status === "verified";
   return (
-    <div className={`rounded-2xl border p-4 ${s.is_default && verified ? "border-brand/40 bg-chip/40" : "border-line"}`}>
+    <div className={`rounded-xl border p-4 ${s.is_default && verified ? "border-brand/40 bg-chip/40" : "border-line"}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-brand ring-1 ring-line">
           <Icon name={s.kind === "smtp" ? "mail" : "globe"} size={16} />
@@ -218,11 +218,11 @@ export function AddSender({ workspace, userEmail }: { workspace: string; userEma
   if (mode === "none")
     return (
       <div className="grid gap-3 sm:grid-cols-2">
-        <button type="button" onClick={() => setMode("smtp")} className="rounded-2xl border border-dashed border-line-strong p-4 text-left transition hover:border-brand/50 hover:bg-chip/30">
+        <button type="button" onClick={() => setMode("smtp")} className="rounded-xl border border-dashed border-line-strong p-4 text-left transition hover:border-brand/50 hover:bg-chip/30">
           <span className="flex items-center gap-2 text-[14px] font-semibold"><Icon name="mail" size={15} /> Connect your mailbox</span>
           <span className="mt-1 block text-[12.5px] leading-relaxed text-muted">Google, Microsoft 365, Zoho or your host. Emails come from your real mailbox. Free, ready in a minute.</span>
         </button>
-        <button type="button" onClick={() => setMode("domain")} className="rounded-2xl border border-dashed border-line-strong p-4 text-left transition hover:border-brand/50 hover:bg-chip/30">
+        <button type="button" onClick={() => setMode("domain")} className="rounded-xl border border-dashed border-line-strong p-4 text-left transition hover:border-brand/50 hover:bg-chip/30">
           <span className="flex items-center gap-2 text-[14px] font-semibold"><Icon name="globe" size={15} /> Use your own domain</span>
           <span className="mt-1 block text-[12.5px] leading-relaxed text-muted">Like hello@yourbusiness.co.uk. Best for bigger sends. You add a few DNS records once.</span>
         </button>
@@ -231,7 +231,7 @@ export function AddSender({ workspace, userEmail }: { workspace: string; userEma
 
   if (mode === "domain")
     return (
-      <div className="rounded-2xl border border-line p-4">
+      <div className="rounded-xl border border-line p-4">
         <div className="mb-3 flex items-center gap-2">
           <span className="text-[14px] font-semibold">Use your own domain</span>
           <button type="button" onClick={() => setMode("none")} className="ml-auto text-[13px] font-semibold text-muted hover:text-navy">Cancel</button>
@@ -265,7 +265,7 @@ export function AddSender({ workspace, userEmail }: { workspace: string; userEma
     );
 
   return (
-    <div className="rounded-2xl border border-line p-4">
+    <div className="rounded-xl border border-line p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-[14px] font-semibold">Connect your mailbox</span>
         <button type="button" onClick={() => setMode("none")} className="ml-auto text-[13px] font-semibold text-muted hover:text-navy">Cancel</button>

@@ -24,7 +24,7 @@ export async function AiToday({ accountId }: { accountId: string }) {
   if (!setters) {
     return (
       <Link href="/agents" className="group relative flex w-full basis-full items-center gap-4 overflow-hidden rounded-[22px] bg-[linear-gradient(135deg,#0a3fa6,#0a5fe3_60%,#29b0f8)] p-5 text-white shadow-[var(--shadow-card)] sm:p-6">
-        <span className="flex h-12 w-12 flex-none items-center justify-center rounded-2xl bg-white text-brand">
+        <span className="flex h-12 w-12 flex-none items-center justify-center rounded-xl bg-white text-brand">
           <Icon name="spark" size={22} />
         </span>
         <span className="min-w-0 flex-1">
@@ -64,12 +64,12 @@ export async function AiToday({ accountId }: { accountId: string }) {
       </div>
       <div className="relative grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         {tiles.map(([k, v, href, icon, cta]) => (
-          <Link key={k} href={href} className="group flex items-center gap-3 rounded-2xl bg-white/10 p-3.5 ring-1 ring-white/15 transition-colors hover:bg-white/15">
+          <Link key={k} href={href} className="group flex items-center gap-3 rounded-xl bg-white/10 p-3.5 ring-1 ring-white/15 transition-colors hover:bg-white/15">
             <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-white text-brand">
               <Icon name={icon} size={18} />
             </span>
             <span className="min-w-0">
-              <span className="block font-mono text-[24px] font-semibold leading-none tracking-tight">{v}</span>
+              <span className="block font-mono text-[22px] font-semibold leading-none tracking-tight">{v}</span>
               <span className="mt-1 block truncate text-[12px] text-white/80">{k}</span>
               <span className="block truncate text-[11px] text-white/60 group-hover:text-white">{cta}</span>
             </span>

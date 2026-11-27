@@ -28,7 +28,7 @@ export function PagePalette({ readOnly, onDragStart, onDragEnd, onAdd }: { readO
       onDragEnd={onDragEnd}
       onClick={() => onAdd(drag)}
       title={`${hint}. Drag onto the page, or click to add.`}
-      className="group flex w-full items-center gap-2.5 rounded-xl border border-transparent bg-white px-2.5 py-2 text-left shadow-[0_1px_0_rgba(15,23,42,.04)] ring-1 ring-line transition hover:-translate-y-px hover:ring-brand/40 active:cursor-grabbing disabled:opacity-50"
+      className="group flex w-full items-center gap-2.5 rounded-xl border border-transparent bg-white px-2.5 py-2 text-left ring-1 ring-line transition hover:-translate-y-px hover:ring-brand/40 active:cursor-grabbing disabled:opacity-50"
       style={{ cursor: readOnly ? "default" : "grab" }}
     >
       <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-chip text-brand">

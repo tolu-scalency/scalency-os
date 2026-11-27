@@ -52,7 +52,7 @@ export function Toaster() {
         <div
           key={n.id}
           role={n.tone === "bad" ? "alert" : "status"}
-          className={`toast-in pointer-events-auto flex max-w-[min(520px,92vw)] items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold shadow-[0_10px_30px_-10px_rgba(10,30,80,.45)] ring-1 ${
+          className={`toast-in pointer-events-auto flex max-w-[min(520px,92vw)] items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold ring-1 ${
             n.tone === "bad" ? "bg-white text-bad ring-bad/25" : n.tone === "info" ? "bg-navy text-white ring-white/10" : "bg-white text-navy ring-line"
           }`}
         >

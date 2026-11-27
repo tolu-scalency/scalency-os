@@ -39,7 +39,7 @@
   --app-h: calc(100dvh - 64px - var(--nav-h));
   color-scheme: light;
   --gradient: linear-gradient(90deg, #55e3ec 0%, #29b0f8 50%, #0a5fe3 100%);
-  --shadow-card: 0 0 0 1px rgba(11, 36, 71, 0.015), 0 1px 2px rgba(11, 36, 71, 0.04), 0 12px 32px -16px rgba(11, 36, 71, 0.12);
+  --shadow-card: 0 1px 2px rgba(11, 36, 71, 0.04);
   --shadow-pop: 0 2px 6px rgba(11, 36, 71, 0.06), 0 24px 48px -16px rgba(11, 36, 71, 0.25);
 }
 
@@ -65,9 +65,9 @@ body {
 
 /* A white panel with a hairline border and a soft shadow. */
 @utility card {
-  background: linear-gradient(180deg, #ffffff 0%, #fdfeff 100%);
+  background: #ffffff;
   border: 1px solid var(--color-line);
-  border-radius: 18px;
+  border-radius: 12px;
   box-shadow: var(--shadow-card);
 }
 
@@ -104,17 +104,16 @@ body {
 
 /* Primary button: the logo gradient, with a gentle lift on hover. */
 @utility btn-primary {
-  background: linear-gradient(135deg, #29b0f8 0%, #0a5fe3 70%);
+  background: var(--color-brand);
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 6px 18px -6px rgba(10, 95, 227, 0.55);
-  transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  border: 1px solid var(--color-brand);
+  transition: background-color 0.15s ease;
   &:hover {
-    filter: brightness(1.06);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 24px -8px rgba(10, 95, 227, 0.6);
+    background: var(--color-brand-dark);
+    border-color: var(--color-brand-dark);
   }
-  &:active {
-    transform: translateY(1px);
+  &:disabled {
+    opacity: 0.6;
   }
 }
 
@@ -123,9 +122,9 @@ body {
   background: #ffffff;
   color: var(--color-navy);
   border: 1px solid var(--color-line-strong);
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
   &:hover {
-    border-color: var(--color-sky);
+    border-color: var(--color-brand);
     color: var(--color-brand);
   }
 }
@@ -133,12 +132,12 @@ body {
 /* Form fields. */
 @utility field {
   width: 100%;
-  min-height: 42px;
-  border-radius: 11px;
+  min-height: 36px;
+  border-radius: 8px;
   border: 1px solid var(--color-line-strong);
   background: #ffffff;
-  padding: 0 12px;
-  font-size: 14px;
+  padding: 0 10px;
+  font-size: 13.5px;
   color: var(--color-navy);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -146,8 +145,8 @@ body {
     color: var(--color-faint);
   }
   &:focus {
-    border-color: var(--color-sky);
-    box-shadow: 0 0 0 4px rgba(41, 176, 248, 0.15);
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 3px rgba(10, 95, 227, 0.12);
   }
 }
 
@@ -157,33 +156,32 @@ body {
   align-items: center;
   justify-content: center;
   flex: none;
-  color: #ffffff;
-  background: linear-gradient(135deg, #55e3ec, #0a5fe3);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(41, 176, 248, 0.6);
+  color: var(--color-brand);
+  background: #eaf2fc;
 }
 @utility tile-violet {
-  background: linear-gradient(135deg, #a5b4fc, #4f46e5);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(79, 70, 229, 0.5);
+  background: #eef0fe;
+  color: #4f46e5;
 }
 @utility tile-orange {
-  background: linear-gradient(135deg, #fdba74, #ea580c);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(234, 88, 12, 0.45);
+  background: #fff1e6;
+  color: #c2410c;
 }
 @utility tile-green {
-  background: linear-gradient(135deg, #6ee7b7, #059669);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(5, 150, 105, 0.45);
+  background: #e6f6ef;
+  color: #047857;
 }
 @utility tile-pink {
-  background: linear-gradient(135deg, #f0abfc, #c026d3);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(192, 38, 211, 0.4);
+  background: #fbeefd;
+  color: #a21caf;
 }
 @utility tile-red {
-  background: linear-gradient(135deg, #fca5a5, #dc2626);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(220, 38, 38, 0.4);
+  background: #fdecea;
+  color: #b42318;
 }
 @utility tile-grey {
-  background: linear-gradient(135deg, #94a3b8, #475569);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 6px 16px -6px rgba(71, 85, 105, 0.4);
+  background: #eef1f5;
+  color: #475569;
 }
 
 /* Loading placeholders that shimmer instead of sitting still. */
@@ -266,8 +264,7 @@ body {
 }
 a.card:hover,
 .card-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 36px -18px rgba(11, 36, 71, 0.35);
+  border-color: var(--color-line-strong);
 }
 .btn-primary,
 .btn-ghost {

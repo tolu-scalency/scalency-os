@@ -416,7 +416,7 @@ export function WorkflowEditor({
           setDropOver(null);
         }}
         onClick={() => setSel({ t: "node", id: node.id })}
-        className={`group relative w-[280px] cursor-pointer rounded-2xl border bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${
+        className={`group relative w-[280px] cursor-pointer rounded-xl border bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-pop)] ${
           isSel ? "border-brand ring-4 ring-[#0a5fe3]/15" : issue ? "border-warn/60" : "border-line"
         } ${dragId === node.id ? "opacity-40" : ""}`}
       >
@@ -687,7 +687,7 @@ export function WorkflowEditor({
       </datalist>
 
       {restorable && !disabled && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warn/30 bg-warn-bg p-3 text-[13.5px]">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-warn/30 bg-warn-bg p-3 text-[13.5px]">
           <Icon name="refresh" size={15} />
           <span className="min-w-0 flex-1">You have changes from last time that weren&apos;t saved.</span>
           <button type="button" onClick={restore} className="btn-primary min-h-9 rounded-lg px-3 text-[13px] font-semibold">Restore them</button>
@@ -707,7 +707,7 @@ export function WorkflowEditor({
       )}
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-white p-2 pl-3 shadow-[var(--shadow-card)]">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-white p-2 pl-3 shadow-[var(--shadow-card)]">
         <button type="button" onClick={() => setSel({ t: "settings" })} className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-surface" title="Workflow settings">
           <span className="truncate text-[15px] font-semibold">{name || "Untitled workflow"}</span>
           <Icon name="edit" size={13} className="flex-none text-faint" />
@@ -753,7 +753,7 @@ export function WorkflowEditor({
         onPointerMove={onPanMove}
         onPointerUp={onPanEnd}
         onPointerCancel={onPanEnd}
-        className={`relative cursor-grab touch-none overflow-hidden rounded-2xl border border-line active:cursor-grabbing ${full || fill ? "min-h-0 flex-1" : "h-[calc(100vh-112px-var(--chrome-h,64px))] min-h-[600px]"}`}
+        className={`relative cursor-grab touch-none overflow-hidden rounded-xl border border-line active:cursor-grabbing ${full || fill ? "min-h-0 flex-1" : "h-[calc(100vh-112px-var(--chrome-h,64px))] min-h-[600px]"}`}
         style={{ backgroundColor: "#f6f8fc", backgroundImage: "radial-gradient(#d5dbe6 1.2px, transparent 1.2px)", backgroundSize: `${22 * zoom}px ${22 * zoom}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }}
       >
         <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "0 0" }} className="absolute left-0 top-0">
@@ -762,7 +762,7 @@ export function WorkflowEditor({
               type="button"
               data-node
               onClick={() => setSel({ t: "trigger" })}
-              className={`w-[300px] rounded-2xl border-2 border-dashed bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 ${sel?.t === "trigger" ? "border-brand" : trigger.type === "none" ? "border-warn/60" : "border-sky/60"}`}
+              className={`w-[300px] rounded-xl border-2 border-dashed bg-white p-3 text-left shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 ${sel?.t === "trigger" ? "border-brand" : trigger.type === "none" ? "border-warn/60" : "border-sky/60"}`}
             >
               <div className="flex items-center gap-2.5">
                 <span className={`h-9 w-9 rounded-xl ${trigger.type === "none" ? "inline-flex items-center justify-center bg-warn-bg text-warn" : "tile"}`}>
