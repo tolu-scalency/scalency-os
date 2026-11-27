@@ -523,7 +523,7 @@ function DealList({
   const total = cards.reduce((s, c) => s + (c.valuePence ?? 0), 0);
   if (!cards.length)
     return (
-      <div className="card p-10 text-center text-[14px] text-muted">
+      <div className="card p-6 text-center text-[14px] text-muted">
         No deals match. Try clearing the filters.
       </div>
     );

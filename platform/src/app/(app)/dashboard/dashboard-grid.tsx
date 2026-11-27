@@ -94,7 +94,7 @@ export function DashboardGrid({
       </div>
 
       {editing && (
-        <div className="sticky top-2 z-30 flex flex-wrap items-center gap-2 rounded-2xl border border-sky/40 bg-white/95 p-2.5 pl-4 shadow-[var(--shadow-pop)] backdrop-blur">
+        <div className="sticky top-2 z-30 flex flex-wrap items-center gap-2 rounded-xl border border-sky/40 bg-white/95 p-2.5 pl-4 shadow-[var(--shadow-pop)] backdrop-blur">
           <span className="min-w-0 flex-1 text-[13px]">
             <span className="font-semibold">Customising the home page</span>
             <span className="text-muted"> for everyone in this workspace. Drag widgets to move them.</span>
@@ -160,7 +160,7 @@ export function DashboardGrid({
                 onDragOver(w.id);
               }}
               onDragEnd={() => setDragId(null)}
-              className={`${SPAN[w.size]} group relative min-w-0 cursor-grab rounded-2xl outline-2 outline-offset-4 outline-sky/50 transition-opacity [&>.wbody>*]:h-full ${dragId === w.id ? "opacity-40" : ""} outline-dashed`}
+              className={`${SPAN[w.size]} group relative min-w-0 cursor-grab rounded-xl outline-2 outline-offset-4 outline-sky/50 transition-opacity [&>.wbody>*]:h-full ${dragId === w.id ? "opacity-40" : ""} outline-dashed`}
             >
               <div className="absolute -top-3 right-2 z-10 flex items-center gap-1 rounded-xl border border-line bg-white p-1 shadow-[var(--shadow-pop)]">
                 <span className="inline-flex h-7 items-center gap-1 px-1.5 text-[11.5px] font-semibold text-muted">
@@ -203,7 +203,7 @@ export function DashboardGrid({
           );
         })}
         {editing && !draft.length && (
-          <div className="col-span-12 rounded-2xl border-2 border-dashed border-line-strong p-10 text-center text-[14px] text-muted">
+          <div className="col-span-12 rounded-xl border-2 border-dashed border-line-strong p-6 text-center text-[14px] text-muted">
             The home page is empty. Use <span className="font-semibold text-navy">Add widget</span> to put something here.
           </div>
         )}

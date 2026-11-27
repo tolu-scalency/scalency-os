@@ -20,6 +20,8 @@ type Props = {
   description: string;
   durationMin: number;
   location: string;
+  /** The person booking says where to meet. */
+  askLocation?: boolean;
   color: string;
   questions: Question[];
   booking?: { start: string; status: string; meetingUrl: string | null; tz: string | null; canMove: boolean };
@@ -117,7 +119,7 @@ export function BookingWidget(p: Props) {
       const r = await fetch(`/api/book/${p.calendarId}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ start: time, tz, first_name: form.first_name, last_name: form.last_name, email: form.email, phone: form.phone, answers, consent, website: form.website ?? "", t: shownAt.current ? Date.now() - shownAt.current : 0 }),
+        body: JSON.stringify({ start: time, tz, first_name: form.first_name, last_name: form.last_name, email: form.email, phone: form.phone, location: form.location ?? "", answers, consent, website: form.website ?? "", t: shownAt.current ? Date.now() - shownAt.current : 0 }),
       });
       const j = await r.json();
       if (!r.ok || j.error) {
@@ -318,6 +320,12 @@ export function BookingWidget(p: Props) {
                 </div>
                 <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Email<input required type="email" autoComplete="email" value={form.email ?? ""} onChange={(e) => setForm({ ...form, email: e.target.value })} maxLength={200} className={field} /></label>
                 <label className="flex flex-col gap-1.5 text-[13px] font-semibold">Mobile<PhoneInput value={form.phone ?? ""} onChange={(v) => setForm({ ...form, phone: v })} style={{}} className={field} /></label>
+                {p.askLocation && (
+                  <label className="flex flex-col gap-1.5 text-[13px] font-semibold">
+                    Where should we meet?
+                    <input required value={form.location ?? ""} onChange={(e) => setForm({ ...form, location: e.target.value })} maxLength={300} placeholder="An address, or a meeting link" className={field} />
+                  </label>
+                )}
                 {p.questions.map((q) => (
                   <label key={q.id} className="flex flex-col gap-1.5 text-[13px] font-semibold">
                     {q.label}{q.required ? "" : " (optional)"}

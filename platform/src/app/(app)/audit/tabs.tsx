@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function AuditTabs({ tab }: { tab: "report" | "calculator" }) {
   return (
-    <div className="flex gap-1 self-start rounded-2xl bg-white p-1 ring-1 ring-line print:hidden">
+    <div className="flex gap-1 self-start rounded-xl bg-white p-1 ring-1 ring-line print:hidden">
       {(
         [
           ["report", "AI audit report"],

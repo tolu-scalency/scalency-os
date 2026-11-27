@@ -89,7 +89,7 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
       )}
 
       {archived && !forms?.length ? (
-        <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">Nothing archived.</p>
+        <p className="rounded-xl border border-dashed border-line-strong bg-white/60 p-5 text-center text-[14px] text-muted">Nothing archived.</p>
       ) : !forms?.length ? (
         canEdit ? (
           <div className="flex flex-col gap-3">
@@ -97,7 +97,7 @@ export default async function FormsPage({ searchParams }: { searchParams: Promis
             <NewFormButton accountId={ws.account.id} big />
           </div>
         ) : (
-          <p className="rounded-2xl border border-dashed border-line-strong bg-white/60 p-8 text-center text-[14px] text-muted">No forms yet.</p>
+          <p className="rounded-xl border border-dashed border-line-strong bg-white/60 p-5 text-center text-[14px] text-muted">No forms yet.</p>
         )
       ) : (
         <div className="card divide-y divide-line">

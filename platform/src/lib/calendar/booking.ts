@@ -8,7 +8,7 @@ import { normalisePhone } from "@/lib/forms";
 import { pickMember, slotsFor, type Interval, type MemberInput, type Slot } from "./availability";
 import { APP_URL, busyTimes, calendlyBookings, cancelEvent, CONNECTION_COLS, createEvent, moveEvent, type Connection } from "./providers";
 import { dayLabel, timeLabel, validTimeZone } from "./time";
-import { CALENDAR_COLUMNS, cleanOverrides, cleanWeekly, DEFAULT_WEEKLY, LOCATIONS, settingsFromRow, type CalendarSettings } from "./types";
+import { CALENDAR_COLUMNS, cleanOverrides, cleanWeekly, DEFAULT_WEEKLY, LOCATIONS, resolveLocation, settingsFromRow, type CalendarSettings, type LocationType } from "./types";
 
 // Everything that happens when someone books, moves or cancels: open times, round robin,
 // the contact, the deal stage, the event in the member's own calendar (with a Meet or Teams
@@ -102,7 +102,7 @@ export async function openSlots(admin: Db, cal: CalendarRow, from: number, to: n
 
 // ------------------------------------------------------------------ contacts
 
-export type Person = { first: string; last: string; email: string | null; phone: string | null };
+export type Person = { first: string; last: string; email: string | null; phone: string | null; location?: string };
 
 export function cleanPerson(raw: Record<string, unknown>): { person?: Person; error?: string } {
   const first = String(raw.first_name ?? "").trim().slice(0, 80);
@@ -117,7 +117,8 @@ export function cleanPerson(raw: Record<string, unknown>): { person?: Person; er
     if (p === "invalid") return { error: "Please enter a mobile like 07700 900123, or add your country code." };
     phone = p;
   }
-  return { person: { first, last, email: emailIn, phone } };
+  const location = String(raw.location ?? "").trim().slice(0, 300);
+  return { person: { first, last, email: emailIn, phone, ...(location ? { location } : {}) } };
 }
 
 export async function findOrCreateContact(admin: Db, accountId: string, p: Person, source: string, consent: boolean) {
@@ -218,8 +219,12 @@ export async function createBooking(admin: Db, x: BookingInput): Promise<{ id: s
   const opportunityId = await placeInStage(admin, cal.accountId, contactId, cal.stageId, name, source);
 
   const manageToken = randomBytes(18).toString("hex");
-  const loc = cal.locationType;
-  const locationText = loc === "phone" ? `Phone call${x.person.phone ? ` to ${x.person.phone}` : ""}` : loc === "in_person" || loc === "link" ? cal.locationValue : LOCATIONS.find((l) => l.id === loc)?.label ?? "";
+  // The meeting place: the assigned person's own choice on this calendar, else the calendar's.
+  const { data: mine } = await admin.from("calendar_members").select("location_type, location_value").eq("calendar_id", cal.id).eq("user_id", assignedTo).maybeSingle();
+  const own = mine?.location_type && LOCATIONS.some((l) => l.id === mine.location_type);
+  const loc: LocationType = own ? (mine!.location_type as LocationType) : cal.locationType;
+  const where = resolveLocation(loc, own ? String(mine!.location_value ?? "") : cal.locationValue, x.person);
+  const locationText = where.text;
   const { data: appt, error } = await admin
     .from("appointments")
     .insert({
@@ -236,7 +241,7 @@ export async function createBooking(admin: Db, x: BookingInput): Promise<{ id: s
       source: x.source,
       location_type: loc,
       location: locationText.slice(0, 300) || null,
-      meeting_url: loc === "link" && /^https:\/\//.test(cal.locationValue) ? cal.locationValue : null,
+      meeting_url: where.url,
       answers: x.answers.slice(0, 20),
       notes: (x.notes ?? "").slice(0, 5000),
       manage_token: manageToken,
@@ -248,7 +253,7 @@ export async function createBooking(admin: Db, x: BookingInput): Promise<{ id: s
   await admin.from("calendar_members").update({ last_booked_at: new Date().toISOString() }).eq("calendar_id", cal.id).eq("user_id", assignedTo);
 
   // Into the member's own calendar, with a meeting link.
-  let meetingUrl: string | null = loc === "link" && /^https:\/\//.test(cal.locationValue) ? cal.locationValue : null;
+  let meetingUrl: string | null = where.url;
   const conns = (await connectionsFor(admin, cal.accountId, [assignedTo])).filter((c) => c.provider !== "calendly" && c.add_bookings && c.status === "connected");
   const target = conns.find((c) => (loc === "teams" ? c.provider === "microsoft" : loc === "google_meet" ? c.provider === "google" : true)) ?? conns[0];
   if (target) {

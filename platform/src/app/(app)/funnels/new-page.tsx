@@ -90,7 +90,7 @@ function Dialog({ accountId, forms, initial, onClose }: { accountId: string; for
 
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-stretch justify-center bg-ink/55 p-0 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="New page" className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(880px,92vh)] sm:rounded-3xl">
+      <div role="dialog" aria-modal="true" aria-label="New page" className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(880px,92vh)] sm:rounded-xl">
         <div className="flex flex-none flex-wrap items-center gap-3 border-b border-line px-5 py-3.5">
           <div>
             <div className="text-[16px] font-semibold">New page</div>
@@ -189,7 +189,7 @@ function Templates() {
             aria-label={`Preview ${t.name}`}
             onClick={() => setPicked({ t, def })}
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setPicked({ t, def }))}
-            className="group cursor-pointer overflow-hidden rounded-2xl border border-line bg-white text-left transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand"
+            className="group cursor-pointer overflow-hidden rounded-xl border border-line bg-white text-left transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand"
           >
             <div className="relative border-b border-line">
               <Thumb def={def} />
@@ -278,7 +278,7 @@ function AiBuilder({ accountId, forms }: { accountId: string; forms: FormOption[
 
   if (busy)
     return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-4 p-10 text-center">
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 p-6 text-center">
         <span className="tile tile-violet animate-pulse" style={{ width: 52, height: 52, borderRadius: 16 }}>
           <Icon name="spark" size={22} />
         </span>

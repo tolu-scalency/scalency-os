@@ -425,7 +425,7 @@ function Popover({ children, onClose, width }: { children: React.ReactNode; onCl
   return (
     <>
       <button type="button" aria-label="Close" className="fixed inset-0 z-40 cursor-default" onClick={onClose} />
-      <div className={`rise absolute right-0 top-12 z-50 ${width} max-w-[calc(100vw-24px)] rounded-2xl border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]`}>{children}</div>
+      <div className={`rise absolute right-0 top-12 z-50 ${width} max-w-[calc(100vw-24px)] rounded-xl border border-line bg-white p-1.5 shadow-[var(--shadow-pop)]`}>{children}</div>
     </>
   );
 }
@@ -470,7 +470,7 @@ function WorkspaceSwitcher({ user, collapsed }: { user: ShellUser; collapsed: bo
       {open && (
         <>
           <button type="button" aria-label="Close" className="fixed inset-0 z-40 cursor-default" onClick={() => setOpen(false)} />
-          <div className={`rise z-50 rounded-2xl border border-line bg-white p-1.5 text-navy shadow-[var(--shadow-pop)] ${collapsed ? "fixed left-[84px] top-[64px] w-[268px]" : "absolute inset-x-0 top-[calc(100%+6px)]"}`}>
+          <div className={`rise z-50 rounded-xl border border-line bg-white p-1.5 text-navy shadow-[var(--shadow-pop)] ${collapsed ? "fixed left-[84px] top-[64px] w-[268px]" : "absolute inset-x-0 top-[calc(100%+6px)]"}`}>
             <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-medium text-faint">Your workspaces</div>
             <ul className="max-h-64 overflow-y-auto">
               {user.workspaces.map((w) => (
@@ -592,7 +592,7 @@ function SidebarGlow() {
 function NoAccess() {
   return (
     <main className="mx-auto flex min-h-[60vh] w-full max-w-[520px] flex-col items-center justify-center gap-4 px-6 text-center">
-      <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-chip text-brand">
+      <span className="inline-flex h-14 w-14 items-center justify-center rounded-xl bg-chip text-brand">
         <Icon name="lock" size={24} />
       </span>
       <h1 className="text-[22px] font-semibold tracking-[-0.02em]">You don&apos;t have access to this</h1>

@@ -106,7 +106,7 @@ export function CommandBar({ open, onClose, permissions = [] }: { open: boolean;
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-start justify-center px-4 pt-[12vh]" onKeyDown={(e) => e.key === "Escape" && onClose()}>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/40 backdrop-blur-[3px]" />
-      <div role="dialog" aria-modal="true" aria-label="Command bar" className="rise relative w-full max-w-[620px] overflow-hidden rounded-2xl border border-line bg-white shadow-[var(--shadow-pop)]">
+      <div role="dialog" aria-modal="true" aria-label="Command bar" className="rise relative w-full max-w-[620px] overflow-hidden rounded-xl border border-line bg-white shadow-[var(--shadow-pop)]">
         <div className="flex items-center gap-3 border-b border-line px-4">
           <Icon name="search" size={18} className="text-faint" />
           <input

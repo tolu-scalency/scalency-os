@@ -81,9 +81,9 @@ export function AiAudit({ accountId, saved }: { accountId: string; saved: SavedA
 
       {report && (
         <article className="audit-print flex flex-col gap-5">
-          <section className="overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#0a3fa6,#0a5fe3_60%,#29b0f8)] p-6 text-white shadow-[0_30px_60px_-30px_rgba(10,63,166,0.7)] sm:p-8">
+          <section className="overflow-hidden rounded-[24px] bg-[linear-gradient(135deg,#0a3fa6,#0a5fe3_60%,#29b0f8)] p-6 text-white sm:p-8">
             <div className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-white/75">AI opportunity audit · {business}</div>
-            <h2 className="mt-3 max-w-[820px] text-[28px] font-semibold leading-tight tracking-[-0.03em] sm:text-[36px]">{report.headline}</h2>
+            <h2 className="mt-3 max-w-[820px] text-[22px] font-semibold leading-tight tracking-[-0.03em] sm:text-[22px]">{report.headline}</h2>
             <p className="mt-3 max-w-[820px] text-[15px] leading-relaxed text-white/85">{report.summary}</p>
             <div className="mt-6 flex flex-wrap items-end gap-6">
               <div>

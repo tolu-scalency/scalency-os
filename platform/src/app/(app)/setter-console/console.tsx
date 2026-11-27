@@ -102,7 +102,7 @@ export function Console({ items, view }: { items: QueueItem[]; view: "open" | "d
         ).map(([k, v, c]) => (
           <div key={k} className="card p-4">
             <div className="text-[12px] font-medium text-muted">{k}</div>
-            <div className={`mt-1 font-mono text-[26px] font-semibold tracking-tight ${c}`}>{v}</div>
+            <div className={`mt-1 font-mono text-[22px] font-semibold tracking-tight ${c}`}>{v}</div>
           </div>
         ))}
       </div>
@@ -118,7 +118,7 @@ export function Console({ items, view }: { items: QueueItem[]; view: "open" | "d
 
       {items.length === 0 ? (
         <div className="card flex flex-col items-center gap-2 p-12 text-center">
-          <span className="tile h-12 w-12 rounded-2xl">
+          <span className="tile h-12 w-12 rounded-xl">
             <Icon name="check" size={20} />
           </span>
           <div className="text-[15px] font-semibold">{view === "open" ? "Nothing waiting" : "Nothing closed this week"}</div>

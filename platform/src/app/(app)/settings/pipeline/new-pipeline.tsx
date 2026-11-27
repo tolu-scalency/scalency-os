@@ -16,7 +16,7 @@ export function NewPipelineForm() {
       </button>
     );
   return (
-    <ActionForm action={createPipeline} resetOnOk className="rise mt-4 grid gap-3 rounded-2xl border border-line bg-surface/50 p-4 sm:grid-cols-2">
+    <ActionForm action={createPipeline} resetOnOk className="rise mt-4 grid gap-3 rounded-xl border border-line bg-surface/50 p-4 sm:grid-cols-2">
       <label className="flex flex-col gap-1.5">
         <span className="text-[12.5px] font-medium text-muted">Name</span>
         <input name="name" required maxLength={60} placeholder="e.g. Projects" className="field" />

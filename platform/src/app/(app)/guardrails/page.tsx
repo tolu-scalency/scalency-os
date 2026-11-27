@@ -59,7 +59,7 @@ export default async function GuardrailsPage({ searchParams }: { searchParams: P
         })}
       </div>
       <section className="card divide-y divide-line">
-        {shown.length === 0 && <div className="p-8 text-center text-[13px] text-muted">Nothing here. When a guardrail steps in, it&apos;s recorded here with who and when.</div>}
+        {shown.length === 0 && <div className="p-5 text-center text-[13px] text-muted">Nothing here. When a guardrail steps in, it&apos;s recorded here with who and when.</div>}
         {shown.map((r) => {
           const k = kindOf(r.body);
           return (

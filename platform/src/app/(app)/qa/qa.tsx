@@ -73,11 +73,11 @@ export function Qa({ setterId, graded, runs, waiting }: { setterId: string; grad
   };
   const ready = done.length >= 50 && passed >= 48 && breaches === 0;
 
-  if (!setterId) return <div className="card p-8 text-center text-[13.5px] text-muted">Set up an AI setter first.</div>;
+  if (!setterId) return <div className="card p-5 text-center text-[13.5px] text-muted">Set up an AI setter first.</div>;
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex gap-1 self-start rounded-2xl bg-white p-1 ring-1 ring-line">
+      <div className="flex gap-1 self-start rounded-xl bg-white p-1 ring-1 ring-line">
         {(
           [
             ["lab", "Test lab (50 conversations)"],
@@ -107,7 +107,7 @@ export function Qa({ setterId, graded, runs, waiting }: { setterId: string; grad
             ).map(([k, v]) => (
               <div key={k} className="card p-5">
                 <div className="text-[12px] font-medium text-muted">{k}</div>
-                <div className="mt-1.5 font-mono text-[26px] font-semibold tracking-tight text-navy">{v}</div>
+                <div className="mt-1.5 font-mono text-[22px] font-semibold tracking-tight text-navy">{v}</div>
               </div>
             ))}
           </section>
@@ -160,7 +160,7 @@ export function Qa({ setterId, graded, runs, waiting }: { setterId: string; grad
                       <div className="grid gap-4 bg-surface/60 px-5 py-4 lg:grid-cols-[1fr_320px]">
                         <div className="flex flex-col gap-2">
                           {(r.result.turns ?? []).map((t, i) => (
-                            <div key={i} className={`max-w-[85%] rounded-2xl px-3 py-2 text-[13px] ${t.who === "lead" ? "self-start bg-white ring-1 ring-line" : "self-end bg-brand text-white"}`}>
+                            <div key={i} className={`max-w-[85%] rounded-xl px-3 py-2 text-[13px] ${t.who === "lead" ? "self-start bg-white ring-1 ring-line" : "self-end bg-brand text-white"}`}>
                               {t.text}
                             </div>
                           ))}
@@ -220,7 +220,7 @@ export function Qa({ setterId, graded, runs, waiting }: { setterId: string; grad
             </div>
           </section>
           <section className="card divide-y divide-line">
-            {graded.length === 0 && <div className="p-8 text-center text-[13px] text-muted">No graded conversations yet. Click Grade the latest 6.</div>}
+            {graded.length === 0 && <div className="p-5 text-center text-[13px] text-muted">No graded conversations yet. Click Grade the latest 6.</div>}
             {graded.map((g) => (
               <div key={g.id} className="flex flex-wrap items-start gap-3 px-5 py-3.5">
                 <span className={`w-12 font-mono text-[20px] font-semibold ${tone(g.qa_score)}`}>{g.qa_score}</span>

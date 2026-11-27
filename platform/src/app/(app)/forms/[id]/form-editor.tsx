@@ -1151,7 +1151,7 @@ function Submissions({ submissions, name, qualify, views }: { submissions: Submi
       </div>
       <section className="card overflow-hidden">
         {shown.length === 0 ? (
-          <p className="p-8 text-center text-[14px] text-muted">{submissions.length ? "Nothing here with this filter." : "No submissions yet. Once someone fills in the form, they show up here and in Contacts."}</p>
+          <p className="p-5 text-center text-[14px] text-muted">{submissions.length ? "Nothing here with this filter." : "No submissions yet. Once someone fills in the form, they show up here and in Contacts."}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-[13.5px]">

@@ -107,7 +107,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
       />
 
       {noValues && (
-        <p className="rounded-2xl bg-chip px-4 py-3 text-[13px] text-brand">
+        <p className="rounded-xl bg-chip px-4 py-3 text-[13px] text-brand">
           Add an average treatment value (AI setter, Reviews and rebooking) or send each appointment&apos;s value from GHL to see money here. Until then the counts still work.
         </p>
       )}
@@ -131,7 +131,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
         ).map(([k, v, s], i) => (
           <div key={k} className={`card p-5 ${i === 0 ? "col-span-2 bg-[linear-gradient(135deg,#0a3fa6_0%,#0a5fe3_100%)] text-white lg:col-span-1" : ""}`}>
             <div className={`text-[12px] font-medium ${i === 0 ? "text-white/70" : "text-muted"}`}>{k}</div>
-            <div className={`mt-1.5 font-mono text-[28px] font-semibold tracking-tight ${i === 0 ? "text-white" : "text-navy"}`}>{v}</div>
+            <div className={`mt-1.5 font-mono text-[22px] font-semibold tracking-tight ${i === 0 ? "text-white" : "text-navy"}`}>{v}</div>
             <div className={`mt-0.5 text-[11.5px] ${i === 0 ? "text-white/70" : "text-muted"}`}>{s}</div>
           </div>
         ))}
@@ -145,7 +145,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
             <p className="text-[12.5px] text-muted">The lead source GHL records (ad, form, website, Instagram…).</p>
           </div>
           {sources.length === 0 ? (
-            <div className="p-8 text-center text-[13px] text-muted">No leads in this period yet.</div>
+            <div className="p-5 text-center text-[13px] text-muted">No leads in this period yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[820px] text-[13px]">
@@ -202,7 +202,7 @@ export default async function RevenuePage({ searchParams }: { searchParams: Prom
           <div className="mt-4 flex flex-col gap-3">
             {origins.length === 0 && <p className="text-[13px] text-muted">Nothing yet.</p>}
             {origins.map(([o, a]) => (
-              <div key={o} className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
+              <div key={o} className="flex items-center gap-3 rounded-xl bg-surface px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-[13.5px] font-semibold text-navy">{o}</div>
                   <div className="text-[12px] text-muted">

@@ -40,8 +40,8 @@ export default async function DomainsPage() {
       <AddDomain sites={(sites ?? []).map((s) => ({ id: s.id as string, name: s.name as string, kind: s.kind as string }))} />
       <section className="card overflow-hidden">
         {rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 p-10 text-center">
-            <span className="tile h-12 w-12 rounded-2xl">
+          <div className="flex flex-col items-center gap-2 p-6 text-center">
+            <span className="tile h-12 w-12 rounded-xl">
               <Icon name="globe" size={20} />
             </span>
             <div className="text-[15px] font-semibold">No domains yet</div>

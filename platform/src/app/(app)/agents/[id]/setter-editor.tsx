@@ -177,7 +177,7 @@ export function SetterEditor({
         </p>
       )}
 
-      <div className="-mx-1 flex gap-1 overflow-x-auto rounded-2xl bg-white p-1 ring-1 ring-line [scrollbar-width:none]">
+      <div className="-mx-1 flex gap-1 overflow-x-auto rounded-xl bg-white p-1 ring-1 ring-line [scrollbar-width:none]">
         {tabs.map(([k, l, icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)} className={`inline-flex min-h-9 flex-none items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-[13px] font-semibold transition-colors ${tab === k ? "bg-navy text-white shadow-sm" : "text-muted hover:bg-surface hover:text-navy"}`}>
             <Icon name={icon as IconName} size={14} /> {l}
@@ -748,8 +748,44 @@ function WhereTab({ setter, ro, pages }: { setter: Setter; ro: boolean; pages: B
           <p className="text-[12.5px] text-muted">The AI sends messages during the hours set in Hours and alerts. Keep it in Test mode until you&apos;ve tried it on yourself.</p>
         </Section>
       )}
+      {engine === "scalency" && setter.engine === "scalency" && <VoiceSetup setterId={setter.id} />}
       {engine === "ghl" && <GhlTab setter={setter} ro={ro} />}
     </div>
+  );
+}
+
+/** AI phone calls for a setter that works inside Scalency: the Retell (or Vapi) steps and the call-report address. */
+function VoiceSetup({ setterId }: { setterId: string }) {
+  const [hook, setHook] = useState("");
+  const [pending, start] = useTransition();
+  const show = () =>
+    start(async () => {
+      const res = await callSetter({ action: "webhooks", agent_id: setterId });
+      if ("error" in res && res.error) return void notify(String(res.error), "bad");
+      setHook(String((res as Record<string, string>).voice ?? ""));
+    });
+  return (
+    <Section title="AI phone calls (optional)" text="The AI can phone new leads within a minute, and call people who don't reply as a step in the Journey. It uses Retell (or Vapi) for the voice.">
+      <ol className="list-decimal space-y-1.5 pl-5 text-[13px] text-navy">
+        <li>In Retell, create an agent and a phone number (or import your Twilio number).</li>
+        <li>
+          In Supabase (Edge Functions, Secrets) add <strong>RETELL_API_KEY</strong>, <strong>RETELL_AGENT_ID</strong> and <strong>RETELL_FROM_NUMBER</strong>.
+        </li>
+        <li>In Retell&apos;s agent settings, set the webhook URL to the address below, so each call&apos;s summary lands on the contact.</li>
+        <li>
+          In <strong>Voice AI</strong>, choose Retell and switch on &ldquo;call new leads&rdquo;. In <strong>Journey</strong>, add an <strong>AI call</strong> step where you want one.
+        </li>
+      </ol>
+      {hook ? (
+        <CopyBox text={hook} />
+      ) : (
+        <div>
+          <button type="button" disabled={pending} onClick={show} className="btn-ghost inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium">
+            <Icon name="eye" size={14} /> Show the call report address
+          </button>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -1315,12 +1351,12 @@ function TestTab({ setterId, b, r }: { setterId: string; b: SetterBusiness; r: S
                 {t.text}
               </div>
             ) : (
-              <div key={i} className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-[14px] leading-relaxed ${t.who === "ai" ? "self-start bg-white text-navy ring-1 ring-line" : "self-end bg-brand text-white"}`}>
+              <div key={i} className={`max-w-[80%] whitespace-pre-wrap rounded-xl px-3.5 py-2.5 text-[14px] leading-relaxed ${t.who === "ai" ? "self-start bg-white text-navy ring-1 ring-line" : "self-end bg-brand text-white"}`}>
                 {t.text}
               </div>
             ),
           )}
-          {pending && <div className="self-start rounded-2xl bg-white px-3.5 py-2.5 text-[13px] text-muted ring-1 ring-line">{b.assistantName || "The AI"} is typing…</div>}
+          {pending && <div className="self-start rounded-xl bg-white px-3.5 py-2.5 text-[13px] text-muted ring-1 ring-line">{b.assistantName || "The AI"} is typing…</div>}
           <div ref={end} />
         </div>
         <form
@@ -1394,7 +1430,7 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
   const filtered = state !== "all" || origin !== "all" || channel !== "all" || q.trim() !== "";
   if (!threads.length)
     return (
-      <div className="card p-10 text-center text-[14px] text-muted">
+      <div className="card p-6 text-center text-[14px] text-muted">
         No conversations yet. Once the GHL workflows are set up and the AI setter is in Test mode or Live, every lead it works shows here.
       </div>
     );
@@ -1458,7 +1494,7 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
           </div>
         )}
       </div>
-      {!shown.length && <div className="card p-8 text-center text-[13.5px] text-muted">No conversations match these filters.</div>}
+      {!shown.length && <div className="card p-5 text-center text-[13.5px] text-muted">No conversations match these filters.</div>}
       <div className={`card divide-y divide-line overflow-hidden ${shown.length ? "" : "hidden"}`}>
         {shown.map((t) => {
           const look = THREAD_LOOK[t.state];
@@ -1487,7 +1523,7 @@ function ConversationsTab({ threads, ro, timezone }: { threads: ThreadView[]; ro
                         {x.body} · {fmt(x.at)}
                       </div>
                     ) : (
-                      <div key={i} className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-[13.5px] ${x.role === "ai" ? "self-start bg-white ring-1 ring-line" : "self-end bg-brand text-white"}`}>
+                      <div key={i} className={`max-w-[80%] whitespace-pre-wrap rounded-xl px-3.5 py-2 text-[13.5px] ${x.role === "ai" ? "self-start bg-white ring-1 ring-line" : "self-end bg-brand text-white"}`}>
                         {x.body}
                         <div className={`mt-1 text-[10.5px] ${x.role === "ai" ? "text-faint" : "text-white/70"}`}>{fmt(x.at)}</div>
                       </div>

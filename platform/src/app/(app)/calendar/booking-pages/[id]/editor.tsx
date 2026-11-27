@@ -1,15 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icon";
 import { notify } from "@/components/toast";
-import { LOCATIONS, minutesLabel, slugify, type CalendarSettings, type Question } from "@/lib/calendar/types";
+import { ask } from "@/components/confirm";
+import { LOCATIONS, minutesLabel, slugify, type CalendarSettings, type LocationType, type Question } from "@/lib/calendar/types";
 import { archiveCalendar, saveCalendar } from "../../actions";
-import { CopyLink } from "../copy-link";
 
-type TeamMember = { id: string; name: string; on: boolean; priority: number; connected: string[] };
+type TeamMember = { id: string; name: string; on: boolean; priority: number; connected: string[]; locationType: string; locationValue: string };
 export type OpenCheck = { next: string[]; total?: number; reasons: string[]; tz: string };
+type Group = { id: string; name: string };
 
 const AHEAD = [
   [7, "1 week"],
@@ -21,28 +23,6 @@ const AHEAD = [
   [365, "1 year"],
 ] as const;
 
-/** Booking tools people paste by mistake: these are booking pages, not a room to meet in. */
-const BOOKING_LINK = /calendar\.app\.google|calendar\.google\.com\/calendar\/appointments|calendly\.com|cal\.com\/|youcanbook\.me|acuityscheduling/i;
-
-const field = "field h-10 w-full text-[13.5px]";
-const label = "flex flex-col gap-1.5 text-[12.5px] font-semibold text-navy";
-const hint = "text-[11.5px] font-normal text-muted";
-
-function Section({ title, text, children, icon }: { title: string; text?: string; children: React.ReactNode; icon: React.ComponentProps<typeof Icon>["name"] }) {
-  return (
-    <section className="card p-6">
-      <div className="mb-5 flex items-start gap-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#eef6fd] text-brand"><Icon name={icon} size={17} /></span>
-        <div>
-          <h2 className="text-[16px] font-semibold tracking-[-0.01em]">{title}</h2>
-          {text && <p className="mt-0.5 text-[13px] text-muted">{text}</p>}
-        </div>
-      </div>
-      {children}
-    </section>
-  );
-}
-
 const NOTICE = [
   [0, "No notice"],
   [60, "1 hour"],
@@ -53,9 +33,39 @@ const NOTICE = [
   [4320, "3 days"],
 ] as const;
 
-export function BookingPageEditor({ id, initial, base, team: teamIn, stages, check }: { id: string; initial: CalendarSettings; base: string; team: TeamMember[]; stages: { id: string; name: string }[]; check?: OpenCheck }) {
+/** Booking tools people paste by mistake: these are booking pages, not a room to meet in. */
+const BOOKING_LINK = /calendar\.app\.google|calendar\.google\.com\/calendar\/appointments|calendly\.com|cal\.com\/|youcanbook\.me|acuityscheduling/i;
+
+const SECTIONS = [
+  ["basic", "Basic details"],
+  ["staff", "Staff & location"],
+  ["rules", "Booking rules"],
+  ["questions", "Questions"],
+  ["after", "After booking"],
+  ["share", "Share & embed"],
+] as const;
+type SectionKey = (typeof SECTIONS)[number][0];
+
+const box = "h-9 rounded-lg border border-line bg-white px-3 text-[13px] text-navy outline-none focus:border-brand";
+const field = `${box} w-full`;
+const label = "flex flex-col gap-1 text-[12.5px] font-medium text-navy";
+const hint = "text-[11.5px] font-normal text-muted";
+
+function Panel({ title, text, children }: { title: string; text?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-xl border border-line bg-white p-5">
+      <h2 className="text-[15px] font-semibold">{title}</h2>
+      {text && <p className="mt-0.5 text-[12.5px] text-muted">{text}</p>}
+      <div className="mt-4 border-t border-line pt-4">{children}</div>
+    </section>
+  );
+}
+
+// The calendar editor, laid out like GHL: a top bar, a section menu on the left, one section at a time.
+export function BookingPageEditor({ id, initial, base, team: teamIn, stages, check, groups = [] }: { id: string; initial: CalendarSettings; base: string; team: TeamMember[]; stages: { id: string; name: string }[]; check?: OpenCheck; groups?: Group[] }) {
   const [s, setS] = useState(initial);
   const [team, setTeam] = useState(teamIn);
+  const [tab, setTab] = useState<SectionKey>("basic");
   const [pending, start] = useTransition();
   const router = useRouter();
   const [tagText, setTagText] = useState(initial.tags.join(", "));
@@ -64,15 +74,19 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages, che
   const link = base + s.slug;
   const embed = `<iframe src="${link}?embed=1" style="width:100%;min-height:760px;border:0" title="${s.name}"></iframe>`;
   const onTeam = team.filter((m) => m.on);
-  const needs = s.locationType === "google_meet" ? "google" : s.locationType === "teams" ? "microsoft" : null;
-  const missing = needs ? onTeam.filter((m) => !m.connected.includes(needs)) : [];
+  const placeOf = (m: TeamMember): LocationType => (LOCATIONS.some((l) => l.id === m.locationType) ? (m.locationType as LocationType) : s.locationType);
+  const valueOf = (m: TeamMember) => (m.locationType ? m.locationValue : s.locationValue);
+  const setMember = (id: string, p: Partial<TeamMember>) => setTeam((t) => t.map((x) => (x.id === id ? { ...x, ...p } : x)));
 
   const save = () =>
     start(async () => {
+      const chosen = team.filter((m) => m.on);
+      // The calendar's own place follows the first person, so older screens still show something sensible.
+      const first = chosen[0];
       const r = await saveCalendar(
         id,
-        { ...s, tags: tagText.split(",").map((t) => t.trim()).filter(Boolean) },
-        team.filter((m) => m.on).map((m) => ({ userId: m.id, priority: m.priority })),
+        { ...s, ...(first ? { locationType: placeOf(first), locationValue: valueOf(first) } : {}), tags: tagText.split(",").map((t) => t.trim()).filter(Boolean) },
+        chosen.map((m) => ({ userId: m.id, priority: m.priority, locationType: placeOf(m), locationValue: valueOf(m) })),
       );
       if (r.error) notify(r.error, "bad");
       else {
@@ -82,252 +96,291 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages, che
     });
 
   const setQ = (i: number, p: Partial<Question>) => set({ questions: s.questions.map((q, j) => (j === i ? { ...q, ...p } : q)) });
+  const copy = (text: string, what: string) =>
+    navigator.clipboard?.writeText(text).then(
+      () => notify(`${what} copied`),
+      () => notify("Couldn't copy.", "bad"),
+    );
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="card relative overflow-hidden p-6">
-        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full" style={{ background: `radial-gradient(circle, ${s.color}33, transparent 70%)` }} />
-        <div className="relative flex flex-wrap items-end justify-between gap-4">
-          <div className="min-w-0">
-            <div className="mb-2 inline-flex items-center rounded-full bg-chip px-2.5 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-brand">Booking page</div>
-            <input value={s.name} onChange={(e) => set({ name: e.target.value })} maxLength={80} aria-label="Name" className="w-full bg-transparent text-[26px] font-semibold tracking-[-0.03em] outline-none" />
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
-              <span className="truncate">{base}</span>
-              <input value={s.slug} onChange={(e) => set({ slug: slugify(e.target.value) })} aria-label="Link name" className="field h-8 w-48 font-mono text-[12.5px]" />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select value={s.status} onChange={(e) => set({ status: e.target.value as "active" })} className="field h-10 w-auto text-[13px]" aria-label="Status">
-              <option value="active">Taking bookings</option>
-              <option value="paused">Paused</option>
-            </select>
-            <CopyLink link={link} />
-            <a href={link} target="_blank" rel="noreferrer" className="btn-ghost inline-flex h-10 items-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold"><Icon name="eye" size={14} /> Preview</a>
-            <button type="button" disabled={pending} onClick={save} className="btn-primary inline-flex h-10 items-center gap-1.5 rounded-xl px-5 text-[13.5px] font-semibold"><Icon name="check" size={14} /> Save</button>
-          </div>
-        </div>
-      </div>
+    <div className="flex min-h-[calc(100dvh-64px)] flex-col">
+      {/* Top bar */}
+      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-white px-4 py-2.5 sm:px-8">
+        <Link href="/calendar/booking-pages" className="inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-brand">
+          <Icon name="arrowLeft" size={15} /> Calendars
+        </Link>
+        <div className="mx-auto min-w-0 truncate text-[15px] font-semibold">Edit · {s.name || "Calendar"}</div>
+        <select value={s.status} onChange={(e) => set({ status: e.target.value as "active" })} className={`${box} w-auto`} aria-label="Status">
+          <option value="active">Active</option>
+          <option value="paused">Inactive</option>
+        </select>
+        <button type="button" onClick={() => copy(link, "Link")} title="Copy link" aria-label="Copy link" className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted hover:text-brand"><Icon name="share" size={15} /></button>
+        <a href={link} target="_blank" rel="noreferrer" title="Preview" aria-label="Preview" className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted hover:text-brand"><Icon name="eye" size={15} /></a>
+        <button type="button" disabled={pending} onClick={save} className="btn-primary inline-flex h-9 items-center rounded-lg px-4 text-[13px] font-semibold">{pending ? "Saving…" : "Save changes"}</button>
+      </header>
 
-      {check && (
-        <div className={`card flex flex-col gap-2 border p-5 ${check.next.length ? "border-[#bfe7d1]" : "border-[#f3c9c4]"}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`grid h-7 w-7 place-items-center rounded-full ${check.next.length ? "bg-ok-bg text-ok" : "bg-bad-bg text-bad"}`}>
-              <Icon name={check.next.length ? "check" : "x"} size={15} />
-            </span>
-            <h2 className="text-[15px] font-semibold">
-              {check.next.length ? `People can book: ${check.total ?? check.next.length} open times in the next 60 days` : "People can't book yet: there are no open times"}
-            </h2>
-          </div>
-          {check.next.length > 0 ? (
-            <p className="text-[13px] text-muted">
-              Next free: {check.next.join(" · ")} <span className="text-faint">({check.tz.replace(/_/g, " ")} time)</span>
-            </p>
-          ) : (
-            <ul className="ml-9 list-disc text-[13.5px] text-navy">
-              {check.reasons.map((r) => <li key={r}>{r}</li>)}
-            </ul>
+      <div className="flex flex-1 flex-col gap-5 px-4 py-5 sm:px-8 lg:flex-row">
+        {/* Section menu */}
+        <nav className="flex shrink-0 gap-1 overflow-x-auto lg:w-52 lg:flex-col" aria-label="Calendar settings">
+          {SECTIONS.map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setTab(k)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-left text-[13px] ${tab === k ? "bg-[#eaf2fc] font-medium text-brand" : "text-muted hover:bg-white hover:text-navy"}`}>
+              {l}
+            </button>
+          ))}
+          {check && (
+            <div className={`mt-3 hidden rounded-lg px-3 py-2 text-[12px] lg:block ${check.next.length ? "bg-ok-bg text-ok" : "bg-bad-bg text-bad"}`}>
+              {check.next.length ? `${check.total ?? check.next.length} open times in the next 60 days` : "No open times yet"}
+            </div>
           )}
-          <p className="text-[12px] text-faint">Checked with the saved settings. Press Save after a change to check again.</p>
-        </div>
-      )}
+        </nav>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex flex-col gap-5">
-          <Section title="The call" text="What people see on the booking page." icon="calendar">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <label className={label}>
-                Length
-                <select value={s.durationMin} onChange={(e) => set({ durationMin: Number(e.target.value) })} className={field}>
-                  {[10, 15, 20, 30, 45, 60, 75, 90, 120].map((m) => <option key={m} value={m}>{minutesLabel(m)}</option>)}
-                </select>
-              </label>
-              <label className={label}>
-                Start times every
-                <select value={s.slotStepMin} onChange={(e) => set({ slotStepMin: Number(e.target.value) })} className={field}>
-                  {[10, 15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{minutesLabel(m)}</option>)}
-                </select>
-              </label>
-              <label className={label}>
-                Colour
-                <input type="color" value={s.color} onChange={(e) => set({ color: e.target.value })} className="field h-10 w-full cursor-pointer p-1" />
-              </label>
-              <label className={`${label} sm:col-span-3`}>
-                Description
-                <textarea value={s.description} onChange={(e) => set({ description: e.target.value })} rows={3} maxLength={1000} placeholder="What the call is for and what you'll cover." className="field w-full py-2.5 text-[13.5px] font-normal" />
-              </label>
+        <div className="flex min-w-0 max-w-3xl flex-1 flex-col gap-4">
+          {check && !check.next.length && (
+            <div className="rounded-xl border border-[#f3c9c4] bg-white p-4 text-[13px]">
+              <div className="font-semibold text-bad">People can&apos;t book yet: there are no open times</div>
+              <ul className="ml-5 mt-1.5 list-disc text-navy">{check.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
             </div>
-          </Section>
+          )}
 
-          <Section title="Where it happens" icon="video">
-            <div className="grid gap-2 sm:grid-cols-3">
-              {LOCATIONS.map((l) => (
-                <button key={l.id} type="button" onClick={() => set({ locationType: l.id })} className={`rounded-xl border p-3 text-left transition ${s.locationType === l.id ? "border-brand bg-[#eef6fd] shadow-[0_0_0_3px_rgba(4,101,199,0.12)]" : "border-line hover:border-brand/40"}`}>
-                  <div className="text-[13.5px] font-semibold">{l.label}</div>
-                  <div className="mt-0.5 text-[11.5px] leading-snug text-muted">{l.hint}</div>
-                </button>
-              ))}
-            </div>
-            {(s.locationType === "in_person" || s.locationType === "link") && (
-              <label className={`${label} mt-4`}>
-                {s.locationType === "link" ? "Meeting link" : "Address"}
-                <input value={s.locationValue} onChange={(e) => set({ locationValue: e.target.value })} maxLength={300} placeholder={s.locationType === "link" ? "https://zoom.us/j/…" : "128 City Road, London"} className={field} />
-                {s.locationType === "link" && <span className={hint}>The room people join for the call, e.g. your Zoom room or a fixed Google Meet link. Everyone booked gets this link.</span>}
-              </label>
-            )}
-            {s.locationType === "link" && BOOKING_LINK.test(s.locationValue) && (
-              <p className="mt-3 rounded-xl bg-[#fff8e6] px-3 py-2.5 text-[12.5px] leading-relaxed text-[#8a5a00]">
-                That&apos;s a booking page link (Google appointment schedule or Calendly), not a meeting room. Scalency can&apos;t read the times from it.
-                The times people can book come from <strong>Availability</strong> on this page&apos;s team, and busy times from a connected calendar. Paste a meeting room link here instead,
-                or to use Calendly for booking, add it to your form&apos;s Booking calendar step.
-              </p>
-            )}
-            {missing.length > 0 && (
-              <p className="mt-3 rounded-xl bg-[#fff8e6] px-3 py-2 text-[12.5px] text-[#8a5a00]">
-                {missing.map((m) => m.name).join(", ")} {missing.length === 1 ? "hasn't" : "haven't"} connected {needs === "google" ? "Google Calendar" : "Outlook"} yet, so their bookings won&apos;t get a {needs === "google" ? "Meet" : "Teams"} link. They can connect it in Calendar, Connections.
-              </p>
-            )}
-          </Section>
-
-          <Section title="Who takes these bookings" text="Bookings go into each person's own calendar, with a meeting link." icon="users">
-            <div className="mb-4 inline-flex rounded-[11px] border border-line bg-surface p-[3px]">
-              {(["one", "round_robin"] as const).map((k) => (
-                <button key={k} type="button" onClick={() => set({ kind: k })} className={`rounded-lg px-3.5 py-1.5 text-[12.5px] font-semibold ${s.kind === k ? "bg-white text-navy shadow-sm" : "text-muted"}`}>
-                  {k === "one" ? "One person" : "Round robin"}
-                </button>
-              ))}
-            </div>
-            <p className="mb-3 text-[12.5px] text-muted">
-              {s.kind === "one" ? "Every booking goes to the first person ticked." : "Each booking goes to whoever is free and was booked least recently. Higher priority wins a tie."}
-            </p>
-            <div className="divide-y divide-line rounded-xl border border-line">
-              {team.map((m, i) => (
-                <div key={m.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <label className="flex min-w-0 flex-1 items-center gap-3">
-                    <input type="checkbox" checked={m.on} onChange={(e) => setTeam(team.map((x, j) => (j === i ? { ...x, on: e.target.checked } : x)))} className="h-4 w-4 accent-[#0465C7]" />
-                    <span className="truncate text-[14px] font-medium">{m.name}</span>
-                  </label>
-                  <div className="flex gap-1">
-                    {m.connected.map((c) => (
-                      <span key={c} className="rounded-md bg-surface px-1.5 py-0.5 text-[10.5px] font-semibold uppercase text-muted">{c === "microsoft" ? "Outlook" : c}</span>
-                    ))}
-                  </div>
-                  {s.kind === "round_robin" && m.on && (
-                    <select value={m.priority} onChange={(e) => setTeam(team.map((x, j) => (j === i ? { ...x, priority: Number(e.target.value) } : x)))} className="field h-8 w-auto text-[12px]" aria-label="Priority">
-                      {[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>Priority {p}</option>)}
-                    </select>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Section>
-
-          <Section title="When people can book" text="Working hours come from each person's Availability. These rules sit on top." icon="clock">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <label className={label}>
-                Minimum notice
-                <select value={s.minNoticeMin} onChange={(e) => set({ minNoticeMin: Number(e.target.value) })} className={field}>
-                  {NOTICE.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
-                </select>
-              </label>
-              <label className={label}>
-                How far ahead they can book
-                <select value={s.maxDaysAhead} onChange={(e) => set({ maxDaysAhead: Number(e.target.value) })} className={field}>
-                  {!AHEAD.some(([d]) => d === s.maxDaysAhead) && <option value={s.maxDaysAhead}>{s.maxDaysAhead} days</option>}
-                  {AHEAD.map(([d, l]) => <option key={d} value={d}>{l}</option>)}
-                </select>
-              </label>
-              <label className={label}>
-                Most bookings a day, per person
-                <input type="number" min={0} max={100} {...num("dailyLimit")} className={field} />
-                <span className={hint}>0 means no limit.</span>
-              </label>
-              <label className={label}>
-                Gap before (minutes)
-                <input type="number" min={0} max={240} {...num("bufferBeforeMin")} className={field} />
-              </label>
-              <label className={label}>
-                Gap after (minutes)
-                <input type="number" min={0} max={240} {...num("bufferAfterMin")} className={field} />
-              </label>
-            </div>
-          </Section>
-
-          <Section title="Questions" text="Name, email and mobile are always asked. Add anything else you need before the call." icon="form">
-            <div className="flex flex-col gap-3">
-              {s.questions.map((q, i) => (
-                <div key={q.id} className="grid gap-2 rounded-xl border border-line p-3 sm:grid-cols-[minmax(0,1fr)_150px_auto_auto]">
-                  <input value={q.label} onChange={(e) => setQ(i, { label: e.target.value })} maxLength={160} placeholder="e.g. What's your monthly revenue?" className={field} aria-label="Question" />
-                  <select value={q.type} onChange={(e) => setQ(i, { type: e.target.value as Question["type"], options: e.target.value === "select" && !q.options.length ? ["Option 1", "Option 2"] : q.options })} className={field} aria-label="Answer type">
-                    <option value="text">Short answer</option>
-                    <option value="textarea">Long answer</option>
-                    <option value="select">Choose one</option>
+          {tab === "basic" && (
+            <Panel title="Basic details" text="What people see on the booking page.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className={`${label} sm:col-span-2`}>
+                  Calendar name
+                  <input value={s.name} onChange={(e) => set({ name: e.target.value })} maxLength={80} className={field} />
+                </label>
+                <label className={`${label} sm:col-span-2`}>
+                  Description
+                  <textarea value={s.description} onChange={(e) => set({ description: e.target.value })} rows={3} maxLength={1000} placeholder="What the call is for and what you'll cover." className={`${field} h-auto py-2`} />
+                </label>
+                <label className={label}>
+                  Duration
+                  <select value={s.durationMin} onChange={(e) => set({ durationMin: Number(e.target.value) })} className={field}>
+                    {[10, 15, 20, 30, 45, 60, 75, 90, 120].map((m) => <option key={m} value={m}>{minutesLabel(m)}</option>)}
                   </select>
-                  <label className="flex items-center gap-2 text-[12.5px]"><input type="checkbox" checked={q.required} onChange={(e) => setQ(i, { required: e.target.checked })} className="h-4 w-4 accent-[#0465C7]" /> Required</label>
-                  <button type="button" onClick={() => set({ questions: s.questions.filter((_, j) => j !== i) })} aria-label="Remove question" className="inline-grid h-10 w-10 place-items-center rounded-xl text-muted hover:bg-[#fff1f1] hover:text-bad"><Icon name="trash" size={15} /></button>
-                  {q.type === "select" && (
-                    <input value={q.options.join(", ")} onChange={(e) => setQ(i, { options: e.target.value.split(",").map((o) => o.trim()) })} placeholder="Options, separated by commas" className={`${field} sm:col-span-4`} aria-label="Options" />
-                  )}
-                </div>
-              ))}
-              {s.questions.length < 12 && (
-                <button type="button" onClick={() => set({ questions: [...s.questions, { id: Math.random().toString(36).slice(2, 10), label: "", type: "text", required: false, options: [] }] })} className="btn-ghost inline-flex h-10 w-fit items-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold">
-                  <Icon name="plus" size={14} /> Add a question
-                </button>
-              )}
-            </div>
-          </Section>
+                </label>
+                <label className={label}>
+                  Group
+                  <select value={s.groupId ?? ""} onChange={(e) => set({ groupId: e.target.value || null })} className={field}>
+                    <option value="">Not grouped</option>
+                    {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                </label>
+                <label className={`${label} sm:col-span-2`}>
+                  Link
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[12px] text-muted">{base}</span>
+                    <input value={s.slug} onChange={(e) => set({ slug: slugify(e.target.value) })} aria-label="Link name" className={`${box} w-48 font-mono text-[12px]`} />
+                  </div>
+                </label>
+                <label className={label}>
+                  Colour
+                  <input type="color" value={s.color} onChange={(e) => set({ color: e.target.value })} className={`${field} cursor-pointer p-1`} />
+                </label>
+              </div>
+            </Panel>
+          )}
 
-          <Section title="After someone books" text="The contact is created or updated and your “Appointment booked” workflows start." icon="zap">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className={label}>
-                Move their deal to
-                <select value={s.stageId ?? ""} onChange={(e) => set({ stageId: e.target.value || null })} className={field}>
-                  <option value="">Don&apos;t change the pipeline</option>
-                  {stages.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+          {tab === "staff" && (
+            <Panel title="Staff & meeting location" text="Choose who takes these bookings and where each person meets. Bookings go into each person's own calendar.">
+              <div className="mb-4 inline-flex rounded-lg border border-line bg-surface p-0.5">
+                {(["one", "round_robin"] as const).map((k) => (
+                  <button key={k} type="button" onClick={() => set({ kind: k })} className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium ${s.kind === k ? "bg-white text-navy shadow-sm" : "text-muted"}`}>
+                    {k === "one" ? "Personal (one person)" : "Round robin"}
+                  </button>
+                ))}
+              </div>
+              <p className="mb-3 text-[12px] text-muted">{s.kind === "one" ? "Every booking goes to the first person on the list." : "Each booking goes to whoever is free and was booked least recently. Higher priority wins a tie."}</p>
+
+              <label className={`${label} mb-4`}>
+                Add staff
+                <select value="" onChange={(e) => e.target.value && setMember(e.target.value, { on: true })} className={field}>
+                  <option value="">Choose a team member</option>
+                  {team.filter((m) => !m.on).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               </label>
-              <label className={label}>
-                Tags to add
-                <input value={tagText} onChange={(e) => setTagText(e.target.value)} placeholder="Booked call, Website" className={field} />
-              </label>
-              <label className="flex items-center gap-2.5 text-[13.5px]"><input type="checkbox" checked={s.confirmEmail} onChange={(e) => set({ confirmEmail: e.target.checked })} className="h-4 w-4 accent-[#0465C7]" /> Email them a confirmation</label>
-              <label className="flex items-center gap-2.5 text-[13.5px]"><input type="checkbox" checked={s.notifyTeam} onChange={(e) => set({ notifyTeam: e.target.checked })} className="h-4 w-4 accent-[#0465C7]" /> Post it in team chat</label>
-              <label className={`${label} sm:col-span-2`}>
-                Thank-you message
-                <textarea value={s.thankYou} onChange={(e) => set({ thankYou: e.target.value })} rows={2} maxLength={1000} placeholder="You're booked. We've sent the details to your email." className="field w-full py-2.5 text-[13.5px] font-normal" />
-              </label>
-              <label className={`${label} sm:col-span-2`}>
-                Or send them to a page
-                <input value={s.redirectUrl} onChange={(e) => set({ redirectUrl: e.target.value.trim() })} placeholder="https://scalency.us/ai-growth/booked" className={field} />
-                <span className={hint}>For example your own thank-you page. Leave blank to show the message above.</span>
-              </label>
-            </div>
-          </Section>
-        </div>
 
-        <aside className="flex flex-col gap-5">
-          <div className="card sticky top-6 overflow-hidden p-0">
-            <div className="border-b border-line px-5 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted">Share it</div>
-            <div className="flex flex-col gap-4 p-5">
-              <div>
-                <div className="mb-1.5 text-[12.5px] font-semibold">Link</div>
-                <div className="break-all rounded-xl bg-surface px-3 py-2 font-mono text-[12px]">{link}</div>
+              {!onTeam.length && <p className="rounded-lg bg-warn-bg px-3 py-2 text-[12.5px] text-warn">Add at least one person, or nobody can book.</p>}
+              <div className="flex flex-col divide-y divide-line">
+                {onTeam.map((m) => {
+                  const place = placeOf(m);
+                  const meta = LOCATIONS.find((l) => l.id === place);
+                  const needs = place === "google_meet" ? "google" : place === "teams" ? "microsoft" : null;
+                  const value = valueOf(m);
+                  return (
+                    <div key={m.id} className="grid gap-2 py-3 sm:grid-cols-[180px_minmax(0,1fr)_auto] sm:items-start">
+                      <div className="flex items-center gap-2 pt-1.5">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#eaf2fc] text-[11px] font-semibold text-brand">{m.name.slice(0, 2).toUpperCase()}</span>
+                        <span className="truncate text-[13px] font-medium">{m.name}</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <select value={place} onChange={(e) => setMember(m.id, { locationType: e.target.value, locationValue: "" })} className={field} aria-label={`Meeting location for ${m.name}`}>
+                          {LOCATIONS.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                        </select>
+                        {meta?.needs && (
+                          <input value={value} onChange={(e) => setMember(m.id, { locationType: place, locationValue: e.target.value })} maxLength={300} placeholder={meta.needs === "address" ? "128 City Road, London EC1V 2NX" : place === "zoom" ? "https://zoom.us/j/1234567890" : "https://…"} className={field} aria-label="Address or link" />
+                        )}
+                        {meta?.hint && <span className={hint}>{meta.hint}</span>}
+                        {needs && !m.connected.includes(needs) && (
+                          <span className="text-[11.5px] text-warn">
+                            {m.name} hasn&apos;t connected {needs === "google" ? "Google Calendar" : "Outlook"} yet, so there&apos;s no {needs === "google" ? "Meet" : "Teams"} link. Connect it in Calendar, Connections.
+                          </span>
+                        )}
+                        {meta?.needs === "link" && BOOKING_LINK.test(value) && <span className="text-[11.5px] text-warn">That&apos;s a booking page link, not a meeting room. Paste the link people join the call with.</span>}
+                      </div>
+                      <div className="flex items-center gap-1 sm:pt-0.5">
+                        {s.kind === "round_robin" && (
+                          <select value={m.priority} onChange={(e) => setMember(m.id, { priority: Number(e.target.value) })} className={`${box} w-auto`} aria-label="Priority">
+                            {[1, 2, 3, 4, 5].map((p) => <option key={p} value={p}>Priority {p}</option>)}
+                          </select>
+                        )}
+                        <button type="button" onClick={() => setMember(m.id, { on: false })} aria-label={`Remove ${m.name}`} className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-[#fff1f1] hover:text-bad"><Icon name="trash" size={14} /></button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <div>
-                <div className="mb-1.5 text-[12.5px] font-semibold">Embed on a website</div>
-                <textarea readOnly value={embed} rows={4} className="field w-full py-2 font-mono text-[11.5px]" onFocus={(e) => e.currentTarget.select()} />
-                <div className="mt-2"><CopyLink link={embed} label="Copy embed code" /></div>
+            </Panel>
+          )}
+
+          {tab === "rules" && (
+            <Panel title="Booking rules" text="Working hours come from each person's Availability. These rules sit on top.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className={label}>
+                  Start times every
+                  <select value={s.slotStepMin} onChange={(e) => set({ slotStepMin: Number(e.target.value) })} className={field}>
+                    {[10, 15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{minutesLabel(m)}</option>)}
+                  </select>
+                </label>
+                <label className={label}>
+                  Minimum notice
+                  <select value={s.minNoticeMin} onChange={(e) => set({ minNoticeMin: Number(e.target.value) })} className={field}>
+                    {NOTICE.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+                  </select>
+                </label>
+                <label className={label}>
+                  How far ahead people can book
+                  <select value={s.maxDaysAhead} onChange={(e) => set({ maxDaysAhead: Number(e.target.value) })} className={field}>
+                    {!AHEAD.some(([d]) => d === s.maxDaysAhead) && <option value={s.maxDaysAhead}>{s.maxDaysAhead} days</option>}
+                    {AHEAD.map(([d, l]) => <option key={d} value={d}>{l}</option>)}
+                  </select>
+                </label>
+                <label className={label}>
+                  Most bookings a day, per person
+                  <input type="number" min={0} max={100} {...num("dailyLimit")} className={field} />
+                  <span className={hint}>0 means no limit.</span>
+                </label>
+                <label className={label}>
+                  Gap before (minutes)
+                  <input type="number" min={0} max={240} {...num("bufferBeforeMin")} className={field} />
+                </label>
+                <label className={label}>
+                  Gap after (minutes)
+                  <input type="number" min={0} max={240} {...num("bufferAfterMin")} className={field} />
+                </label>
               </div>
-              <div className="rounded-xl bg-[linear-gradient(135deg,#eef6fd,#f5fdff)] p-4 text-[12.5px] leading-relaxed text-muted">
-                <div className="mb-1 font-semibold text-navy">What happens on a booking</div>
-                Contact created or updated · tags added · deal moved · event in their calendar with a {s.locationType === "teams" ? "Teams" : "Meet"} link · confirmation email · team alert · your workflows start.
+              {check && check.next.length > 0 && (
+                <p className="mt-4 text-[12px] text-muted">
+                  Next free: {check.next.join(" · ")} ({check.tz.replace(/_/g, " ")} time). Save to check again after a change.
+                </p>
+              )}
+            </Panel>
+          )}
+
+          {tab === "questions" && (
+            <Panel title="Questions" text="Name, email and mobile are always asked. Add anything else you need before the call.">
+              <div className="flex flex-col gap-2.5">
+                {s.questions.map((q, i) => (
+                  <div key={q.id} className="grid gap-2 rounded-lg border border-line p-2.5 sm:grid-cols-[minmax(0,1fr)_140px_auto_auto]">
+                    <input value={q.label} onChange={(e) => setQ(i, { label: e.target.value })} maxLength={160} placeholder="e.g. What's your monthly revenue?" className={field} aria-label="Question" />
+                    <select value={q.type} onChange={(e) => setQ(i, { type: e.target.value as Question["type"], options: e.target.value === "select" && !q.options.length ? ["Option 1", "Option 2"] : q.options })} className={field} aria-label="Answer type">
+                      <option value="text">Short answer</option>
+                      <option value="textarea">Long answer</option>
+                      <option value="select">Choose one</option>
+                    </select>
+                    <label className="flex items-center gap-2 text-[12.5px]"><input type="checkbox" checked={q.required} onChange={(e) => setQ(i, { required: e.target.checked })} className="h-4 w-4 accent-[#0465C7]" /> Required</label>
+                    <button type="button" onClick={() => set({ questions: s.questions.filter((_, j) => j !== i) })} aria-label="Remove question" className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-[#fff1f1] hover:text-bad"><Icon name="trash" size={14} /></button>
+                    {q.type === "select" && (
+                      <input value={q.options.join(", ")} onChange={(e) => setQ(i, { options: e.target.value.split(",").map((o) => o.trim()) })} placeholder="Options, separated by commas" className={`${field} sm:col-span-4`} aria-label="Options" />
+                    )}
+                  </div>
+                ))}
+                {s.questions.length < 12 && (
+                  <button type="button" onClick={() => set({ questions: [...s.questions, { id: Math.random().toString(36).slice(2, 10), label: "", type: "text", required: false, options: [] }] })} className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium text-brand hover:bg-surface">
+                    <Icon name="plus" size={13} /> Add a question
+                  </button>
+                )}
               </div>
-              <button type="button" onClick={() => start(async () => { const r = await archiveCalendar(id); if (r.error) notify(r.error, "bad"); else { notify("Archived"); router.push("/calendar/booking-pages"); } })} className="inline-flex h-9 w-fit items-center gap-1.5 rounded-xl px-3 text-[12.5px] font-semibold text-bad hover:bg-[#fff1f1]">
-                <Icon name="trash" size={14} /> Archive this booking page
-              </button>
-            </div>
-          </div>
-        </aside>
+            </Panel>
+          )}
+
+          {tab === "after" && (
+            <Panel title="After booking" text="The contact is created or updated and your “Appointment booked” workflows start.">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className={label}>
+                  Move their deal to
+                  <select value={s.stageId ?? ""} onChange={(e) => set({ stageId: e.target.value || null })} className={field}>
+                    <option value="">Don&apos;t change the pipeline</option>
+                    {stages.map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                  </select>
+                </label>
+                <label className={label}>
+                  Tags to add
+                  <input value={tagText} onChange={(e) => setTagText(e.target.value)} placeholder="Booked call, Website" className={field} />
+                </label>
+                <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={s.confirmEmail} onChange={(e) => set({ confirmEmail: e.target.checked })} className="h-4 w-4 accent-[#0465C7]" /> Email them a confirmation</label>
+                <label className="flex items-center gap-2 text-[13px]"><input type="checkbox" checked={s.notifyTeam} onChange={(e) => set({ notifyTeam: e.target.checked })} className="h-4 w-4 accent-[#0465C7]" /> Post it in team chat</label>
+                <label className={`${label} sm:col-span-2`}>
+                  Thank-you message
+                  <textarea value={s.thankYou} onChange={(e) => set({ thankYou: e.target.value })} rows={2} maxLength={1000} placeholder="You're booked. We've sent the details to your email." className={`${field} h-auto py-2`} />
+                </label>
+                <label className={`${label} sm:col-span-2`}>
+                  Or send them to a page
+                  <input value={s.redirectUrl} onChange={(e) => set({ redirectUrl: e.target.value.trim() })} placeholder="https://scalency.us/ai-growth/booked" className={field} />
+                  <span className={hint}>Leave blank to show the message above.</span>
+                </label>
+              </div>
+            </Panel>
+          )}
+
+          {tab === "share" && (
+            <Panel title="Share & embed" text="Send the link, or put the calendar on any website.">
+              <div className="flex flex-col gap-4">
+                <div>
+                  <div className="mb-1 text-[12.5px] font-medium">Link</div>
+                  <div className="flex gap-2">
+                    <div className="min-w-0 flex-1 truncate rounded-lg bg-surface px-3 py-2 font-mono text-[12px]">{link}</div>
+                    <button type="button" onClick={() => copy(link, "Link")} className="btn-primary h-9 rounded-lg px-3 text-[12.5px] font-semibold">Copy</button>
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 text-[12.5px] font-medium">Embed code</div>
+                  <textarea readOnly value={embed} rows={3} className={`${field} h-auto py-2 font-mono text-[11.5px]`} onFocus={(e) => e.currentTarget.select()} />
+                  <button type="button" onClick={() => copy(embed, "Embed code")} className="mt-2 h-9 rounded-lg border border-line px-3 text-[12.5px] font-medium text-brand hover:bg-surface">Copy embed code</button>
+                </div>
+                <div className="border-t border-line pt-4">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!(await ask({ title: `Archive “${s.name}”?`, text: "Its link stops taking bookings. Existing bookings stay.", confirm: "Archive" }))) return;
+                      start(async () => {
+                        const r = await archiveCalendar(id);
+                        if (r.error) notify(r.error, "bad");
+                        else {
+                          notify("Archived");
+                          router.push("/calendar/booking-pages");
+                        }
+                      });
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-bad hover:bg-[#fff1f1]"
+                  >
+                    <Icon name="trash" size={14} /> Archive this calendar
+                  </button>
+                </div>
+              </div>
+            </Panel>
+          )}
+        </div>
       </div>
     </div>
   );

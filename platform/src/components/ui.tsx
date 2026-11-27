@@ -109,13 +109,12 @@ export function Button({ children, href, variant = "secondary", icon, iconRight,
 }
 
 /** Title block at the top of each screen. */
-export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, subtitle, actions }: { eyebrow?: string; title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        {eyebrow && <div className="mb-2.5 inline-flex items-center rounded-full bg-chip px-2.5 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-brand">{eyebrow}</div>}
-        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.03em] sm:text-[30px]">{title}</h1>
-        {subtitle && <div className="mt-1.5 max-w-[720px] text-[14.5px] leading-relaxed text-muted">{subtitle}</div>}
+        <h1 className="text-[20px] font-semibold leading-tight tracking-[-0.02em]">{title}</h1>
+        {subtitle && <div className="mt-0.5 max-w-[680px] text-[13px] leading-snug text-muted">{subtitle}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -124,7 +123,7 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: st
 
 /** The padded column every page sits in. */
 export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-  return <main className={`fade-in mx-auto flex w-full flex-col gap-6 px-4 pb-14 pt-6 sm:px-7 sm:pt-8 ${wide ? "" : "max-w-[1600px]"}`}>{children}</main>;
+  return <main className={`fade-in mx-auto flex w-full flex-col gap-4 px-4 pb-10 pt-4 sm:px-6 sm:pt-5 ${wide ? "" : "max-w-[1600px]"}`}>{children}</main>;
 }
 
 /** Segmented control. Visual only for now. */

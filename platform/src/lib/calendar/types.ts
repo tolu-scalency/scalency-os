@@ -7,7 +7,7 @@ export type Override = { date: string; ranges: Range[] };
 export type QuestionType = "text" | "textarea" | "select";
 export type Question = { id: string; label: string; type: QuestionType; required: boolean; options: string[] };
 
-export type LocationType = "google_meet" | "teams" | "phone" | "in_person" | "link" | "none";
+export type LocationType = "google_meet" | "teams" | "zoom" | "phone" | "in_person" | "link" | "ask_booker" | "none";
 export type AppointmentStatus = "booked" | "confirmed" | "showed" | "no_show" | "cancelled";
 export type Provider = "google" | "microsoft" | "calendly";
 
@@ -34,16 +34,46 @@ export type CalendarSettings = {
   redirectUrl: string;
   color: string;
   status: "active" | "paused" | "archived";
+  groupId: string | null;
 };
 
-export const LOCATIONS: { id: LocationType; label: string; hint: string }[] = [
-  { id: "google_meet", label: "Google Meet", hint: "A Meet link is made for every booking (needs Google Calendar connected)." },
-  { id: "teams", label: "Microsoft Teams", hint: "A Teams link is made for every booking (needs a work Microsoft 365 calendar connected)." },
-  { id: "phone", label: "Phone call", hint: "You call them on the number they give." },
-  { id: "in_person", label: "In person", hint: "Your address goes in the confirmation." },
-  { id: "link", label: "Your own link", hint: "Zoom or any other meeting link, the same for every booking." },
+export const LOCATIONS: { id: LocationType; label: string; hint: string; needs?: "link" | "address" }[] = [
+  { id: "google_meet", label: "Google Meet", hint: "A new Meet link for every booking (needs Google Calendar connected)." },
+  { id: "teams", label: "Microsoft Teams", hint: "A new Teams link for every booking (needs a work Microsoft 365 calendar connected)." },
+  { id: "zoom", label: "Zoom", hint: "Your Zoom meeting link, sent with every booking.", needs: "link" },
+  { id: "phone", label: "Phone", hint: "You call them on the number they give." },
+  { id: "in_person", label: "Full address", hint: "Your address goes in the confirmation.", needs: "address" },
+  { id: "link", label: "Custom link", hint: "Any other meeting link, sent with every booking.", needs: "link" },
+  { id: "ask_booker", label: "Ask the booker", hint: "The person booking says where (an address or their own link)." },
   { id: "none", label: "No location", hint: "" },
 ];
+
+/** A team member's meeting place on one calendar (blank type: the calendar's own). */
+export type MemberLocation = { type: LocationType; value: string };
+
+/** Where a booking happens and the link to join, for one person. */
+export function resolveLocation(type: LocationType, value: string, person: { phone?: string | null; location?: string }): { text: string; url: string | null } {
+  const v = value.trim();
+  const url = (s: string) => (/^https:\/\/\S+$/.test(s) ? s : null);
+  switch (type) {
+    case "phone":
+      return { text: `Phone call${person.phone ? ` to ${person.phone}` : ""}`, url: null };
+    case "in_person":
+      return { text: v, url: null };
+    case "zoom":
+      return { text: "Zoom", url: url(v) };
+    case "link":
+      return { text: bookerLocation("link", v), url: url(v) };
+    case "ask_booker": {
+      const p = (person.location ?? "").trim().slice(0, 300);
+      return { text: p, url: url(p) };
+    }
+    case "none":
+      return { text: "", url: null };
+    default:
+      return { text: LOCATIONS.find((l) => l.id === type)?.label ?? "", url: null };
+  }
+}
 
 /** What the person booking sees for "where": never the admin wording ("Your own link"). */
 export function bookerLocation(type: LocationType, value: string): string {
@@ -56,6 +86,7 @@ export function bookerLocation(type: LocationType, value: string): string {
     return "Video call";
   }
   if (type === "none") return "";
+  if (type === "ask_booker") return "";
   return LOCATIONS.find((l) => l.id === type)?.label ?? "";
 }
 
@@ -162,6 +193,7 @@ export function cleanSettings(raw: unknown): CalendarSettings {
     redirectUrl: /^https:\/\/[^\s]+$/.test(redirect) ? redirect : "",
     color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#0465C7",
     status: o.status === "paused" || o.status === "archived" ? o.status : "active",
+    groupId: typeof o.groupId === "string" && /^[0-9a-f-]{36}$/i.test(o.groupId) ? o.groupId : null,
   };
 }
 
@@ -190,6 +222,7 @@ export function settingsFromRow(r: Record<string, unknown>): CalendarSettings {
     redirectUrl: r.redirect_url ?? "",
     color: r.color,
     status: r.status,
+    groupId: r.group_id,
   });
 }
 
@@ -217,11 +250,12 @@ export function settingsToRow(s: CalendarSettings) {
     redirect_url: s.redirectUrl || null,
     color: s.color,
     status: s.status,
+    group_id: s.groupId,
   };
 }
 
 export const CALENDAR_COLUMNS =
-  "id, account_id, name, slug, description, kind, duration_min, slot_step_min, buffer_before_min, buffer_after_min, min_notice_min, max_days_ahead, daily_limit, location_type, location_value, questions, stage_id, tags, confirm_email, notify_team, thank_you, redirect_url, color, status";
+  "id, account_id, name, slug, description, kind, duration_min, slot_step_min, buffer_before_min, buffer_after_min, min_notice_min, max_days_ahead, daily_limit, location_type, location_value, questions, stage_id, tags, confirm_email, notify_team, thank_you, redirect_url, color, status, group_id";
 
 /** "30 min", "1 hr", "1 hr 30 min". */
 export function minutesLabel(m: number) {

@@ -147,7 +147,7 @@ export function ChatRoom({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-              <span className="tile h-12 w-12 rounded-2xl"><Icon name="hash" size={20} /></span>
+              <span className="tile h-12 w-12 rounded-xl"><Icon name="hash" size={20} /></span>
               <div className="text-[15px] font-semibold">Start the conversation in #{current?.name}</div>
               <p className="max-w-[360px] text-[13.5px] text-muted">
                 {current?.name === "leads" ? "Turn on a workflow with an “Alert the team” step and new leads will post here by themselves." : "Messages here are seen by everyone in the workspace."}
@@ -204,7 +204,7 @@ export function ChatRoom({
 
         <form onSubmit={send} className="flex-none border-t border-line bg-white p-3 sm:p-4">
           {error && <p className="mb-2 text-[13px] text-bad">{error}</p>}
-          <div className="flex items-end gap-2 rounded-2xl border border-line-strong bg-white p-2 focus-within:border-sky focus-within:shadow-[0_0_0_4px_rgba(41,176,248,0.12)]">
+          <div className="flex items-end gap-2 rounded-xl border border-line-strong bg-white p-2 focus-within:border-sky focus-within:">
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

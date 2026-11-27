@@ -48,7 +48,7 @@ export function Connections({ me, canManage, conns, ready }: { me: string; canMa
             <div key={p} className="card relative flex flex-col overflow-hidden p-6">
               <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full opacity-20 blur-2xl" style={{ background: l.bg }} />
               <div className="relative flex items-center gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-2xl text-[18px] font-bold text-white shadow-[0_10px_24px_-10px_rgba(4,101,199,0.6)]" style={{ background: l.bg }}>{l.mark}</span>
+                <span className="grid h-11 w-11 place-items-center rounded-xl text-[18px] font-bold text-white" style={{ background: l.bg }}>{l.mark}</span>
                 <div>
                   <div className="text-[15.5px] font-semibold tracking-[-0.01em]">{l.name}</div>
                   <div className="text-[12px] text-muted">{l.sub}</div>
@@ -132,7 +132,7 @@ function ConnRow({ c, pending, start }: { c: ConnView; pending: boolean; start: 
           <div className="truncate text-[13px] font-semibold">{c.email ?? "Connected"}</div>
           <div className="text-[11.5px] text-muted">{c.provider === "calendly" && c.lastSynced ? `Last import ${new Date(c.lastSynced).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ok ? "Working" : "Needs a look"}</div>
         </div>
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${ok ? "bg-[#12b76a] shadow-[0_0_0_4px_rgba(18,183,106,0.15)]" : "bg-[#f79009]"}`} />
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${ok ? "bg-[#12b76a]" : "bg-[#f79009]"}`} />
       </div>
       {c.lastError && <p className="rounded-xl bg-[#fff8e6] px-3 py-2 text-[12px] text-[#8a5a00]">{c.lastError}</p>}
       {c.provider !== "calendly" && (

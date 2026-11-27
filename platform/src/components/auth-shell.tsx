@@ -21,7 +21,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         <div className="flex flex-1 items-center justify-center py-10">
           <div className="flex w-full max-w-[400px] flex-col gap-6">
             <div>
-              <h1 className="text-[32px] font-semibold tracking-[-0.035em]">{title}</h1>
+              <h1 className="text-[22px] font-semibold tracking-[-0.035em]">{title}</h1>
               <p className="mt-2 text-[15px] text-muted">{subtitle}</p>
             </div>
             {children}
@@ -34,7 +34,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[length:40px_40px]" />
         <div className="relative max-w-[460px]">
           <div className="font-mono text-xs font-semibold tracking-[0.12em] text-[#a8f3f7]">SCALENCY</div>
-          <h2 className="mt-3 text-[30px] font-semibold leading-tight tracking-[-0.03em]">Every enquiry answered, followed up and booked.</h2>
+          <h2 className="mt-3 text-[22px] font-semibold leading-tight tracking-[-0.03em]">Every enquiry answered, followed up and booked.</h2>
         </div>
         <ul className="relative flex max-w-[460px] flex-col gap-3">
           {points.map((r) => (

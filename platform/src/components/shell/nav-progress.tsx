@@ -33,7 +33,7 @@ export function NavProgress() {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-[2.5px]">
       <div
-        className="h-full bg-[linear-gradient(90deg,#55e3ec,#29b0f8,#0a5fe3)] shadow-[0_0_10px_rgba(41,176,248,0.7)]"
+        className="h-full bg-[linear-gradient(90deg,#55e3ec,#29b0f8,#0a5fe3)]"
         style={{
           width: state === "idle" ? "0%" : state === "loading" ? "82%" : "100%",
           opacity: state === "idle" ? 0 : 1,

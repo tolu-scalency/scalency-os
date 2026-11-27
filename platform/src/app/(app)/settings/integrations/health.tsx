@@ -55,7 +55,7 @@ export function Health({ checks, accountId }: { checks: Check[]; accountId: stri
   return (
     <div className="flex flex-col gap-4">
       <section className={`card flex flex-wrap items-center gap-4 p-5 ${bad ? "ring-2 ring-bad/30" : ""}`}>
-        <span className={`flex h-12 w-12 items-center justify-center rounded-2xl ${bad ? "bg-bad-bg text-bad" : warn ? "bg-warn-bg text-warn" : "bg-ok-bg text-ok"}`}>
+        <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${bad ? "bg-bad-bg text-bad" : warn ? "bg-warn-bg text-warn" : "bg-ok-bg text-ok"}`}>
           <Icon name={bad ? "warning" : warn ? "bell" : "checkCircle"} size={22} />
         </span>
         <div className="min-w-0 flex-1">

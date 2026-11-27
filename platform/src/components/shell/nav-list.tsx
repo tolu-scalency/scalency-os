@@ -99,7 +99,7 @@ export function NavList({
                   onFocus={(e) => hasLinks && open(g.key, e.currentTarget.parentElement as HTMLElement)}
                   className={`nav-item flex h-9 min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] ${collapsed ? "justify-center" : ""} ${
                     on
-                      ? "bg-white font-semibold text-brand shadow-[0_6px_18px_-8px_rgba(2,30,80,0.55)]"
+                      ? "bg-white font-semibold text-brand"
                       : g.soon
                         ? "text-white/65 hover:bg-white/10 hover:text-white"
                         : "font-medium text-white/90 hover:bg-white/10 hover:text-white"
@@ -155,7 +155,7 @@ export function NavList({
           className="flyout fixed z-[60] pl-2"
         >
           {/* The padding on the left is an invisible bridge from the sidebar to the panel. */}
-          <div className={`${panelGroup.links.some((l) => l.hint) ? "w-[320px]" : "w-[260px]"} rounded-2xl border border-line bg-white p-2 text-navy shadow-[0_20px_50px_-12px_rgba(11,27,58,0.35)]`}>
+          <div className={`${panelGroup.links.some((l) => l.hint) ? "w-[320px]" : "w-[260px]"} rounded-xl border border-line bg-white p-2 text-navy`}>
           <div className="flex items-center gap-2 px-2.5 pb-2 pt-1.5">
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-chip text-brand">
               <Icon name={panelGroup.icon} size={15} />

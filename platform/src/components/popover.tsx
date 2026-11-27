@@ -82,7 +82,7 @@ export function Popover({
       ref={panel}
       role="dialog"
       aria-label={label}
-      className="rise fixed z-[90] flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-[0_18px_50px_-12px_rgba(10,30,80,.35)]"
+      className="rise fixed z-[90] flex flex-col overflow-hidden rounded-xl border border-line bg-white"
       style={{
         left: place.left,
         width: Math.min(width, window.innerWidth - 16),

@@ -49,7 +49,7 @@ export default async function UsagePage() {
         ).map(([k, v]) => (
           <div key={k} className="card p-5">
             <div className="text-[12px] font-medium text-muted">{k}</div>
-            <div className="mt-1.5 font-mono text-[28px] font-semibold tracking-tight text-navy">{v}</div>
+            <div className="mt-1.5 font-mono text-[22px] font-semibold tracking-tight text-navy">{v}</div>
             {k === "Voice minutes" && <div className="text-[11.5px] text-muted">AI calls made and answered</div>}
           </div>
         ))}

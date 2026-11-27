@@ -61,7 +61,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
           canEdit={can(ws, "deals.edit")}
         >
           {can(ws, "pipeline.manage") && (
-            <ActionForm action={addStage} resetOnOk className="flex w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col gap-2 rounded-2xl border border-dashed border-line-strong p-3 sm:w-[280px]">
+            <ActionForm action={addStage} resetOnOk className="flex w-[calc(100vw-64px)] max-w-[320px] flex-none snap-start flex-col gap-2 rounded-xl border border-dashed border-line-strong p-3 sm:w-[280px]">
               <input type="hidden" name="pipeline_id" value={board.pipeline.id} />
               <input name="name" placeholder="New stage name" required className="field bg-white" />
               <SubmitButton variant="ghost" icon="plus" pendingText="Adding…">

@@ -20,7 +20,7 @@ export function PipelineSetup() {
     <div className="mx-auto flex w-full max-w-[860px] flex-col gap-6 py-4">
       <div className="text-center">
         <span className="tile mx-auto h-14 w-14 rounded-[18px]"><Icon name="pipeline" size={24} /></span>
-        <h1 className="mt-4 text-[28px] font-semibold tracking-[-0.03em]">Set up your pipeline</h1>
+        <h1 className="mt-4 text-[22px] font-semibold tracking-[-0.03em]">Set up your pipeline</h1>
         <p className="mt-1 text-[15px] text-muted">Choose a starting point. You can rename, reorder or add stages any time.</p>
       </div>
 

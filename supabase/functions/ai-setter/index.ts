@@ -2075,6 +2075,18 @@ export async function work(db: Db, agentIn: Agent, thread: Thread, mode: Mode, d
     if (typeof qual.score === "number") patch.lead_score = qual.score;
   }
   if (brain.message && !thread.first_reply_at) patch.first_reply_at = now.toISOString();
+  // The 60-second lead caller: the first message goes, then the AI phones if they haven't replied.
+  if (mode.kind === "opener" && state === "active" && contact.phone && voiceReady(rules) && rules.voiceCallNewLeads && withinHours(now, rules, tz) && !deps.now) {
+    background(
+      (async () => {
+        await new Promise((r) => setTimeout(r, 40_000));
+        const { data: fresh } = await db.from("setter_threads").select("*").eq("id", thread.id).maybeSingle();
+        if (!fresh || (fresh as Thread).last_inbound_at || (fresh as Thread).state !== "active") return;
+        const call = await startCall(db, agent, fresh as Thread, { firstName: contact.first_name ?? "", phone: contact.phone ?? "" }, "new_lead");
+        if (call.ok) await db.from("activity").insert({ account_id: agent.account_id, contact_id: contact.id, type: "call.ai", summary: "AI setter called the new lead" });
+      })(),
+    );
+  }
   if (guard.length) patch.guardrail_flags = (thread.guardrail_flags ?? 0) + guard.length;
   if (brain.message && (thread.note === WAITING_FOR_TAG || thread.note === NO_TAG || (thread.note?.startsWith("First message failed") || thread.note?.startsWith("Reply failed")))) patch.note = null;
   if (sentId) patch.sent_ids = [...(thread.sent_ids ?? []), ...sentId.split(",")].slice(-200);
@@ -2529,6 +2541,11 @@ async function voiceWebhook(db: Db, agent: Agent, body: Record<string, unknown>)
   else await db.from("setter_calls").insert({ ...row, purpose: r.direction === "inbound" ? "inbound" : "outbound" });
   if (thread) {
     await logTurn(db, { agent, thread, role: "event", body: `AI call ${r.direction === "inbound" ? "answered" : "made"} (${mins})${r.summary ? `: ${r.summary.slice(0, 600)}` : "."}`, meta: { call: r.id } });
+    const scContact = (thread as Thread & { contact_id?: string | null }).contact_id;
+    if (scContact) {
+      // Inside Scalency: the call shows on the contact's activity.
+      await db.from("activity").insert({ account_id: agent.account_id, contact_id: scContact, type: "call.ai", summary: `AI call ${r.direction} (${mins})${r.summary ? `: ${r.summary}` : ""}`.slice(0, 300) });
+    }
     if (ghl) {
       try {
         await ghl.note(thread.ghl_contact_id, `AI call ${r.direction} (${mins}).\n${r.summary}\n\nTranscript:\n${r.transcript.slice(0, 3500)}`);
@@ -2726,6 +2743,16 @@ export async function nativeWork(db: Db, agent: Agent, thread: Thread, modeIn: M
     await update(db, thread, { state: "stopped", next_action: null, next_action_at: null, note: "No way to reach them: no email or phone, or they unsubscribed." });
     await logTurn(db, { agent, thread, role: "event", body: "Stopped: there's no email or phone to use, or they unsubscribed." });
     return { stopped: "unreachable" };
+  }
+  if (mode.kind === "followup" && step?.action === "ai_call") {
+    // The AI phones them (Retell or Vapi), then the journey carries on.
+    const touch = mode.touch + 1;
+    const call = voiceReady(rules) ? await startCall(db, agent, thread, { firstName: contact.first_name ?? "", phone: contact.phone ?? "" }, "journey", deps.fetch) : { ok: false as const, error: "Voice AI isn't connected yet" };
+    await logTurn(db, { agent, thread, role: "event", body: call.ok ? `Journey step ${touch}: the AI is calling them.` : `Journey step ${touch}: AI call skipped (${call.error}).` });
+    if (call.ok) await db.from("activity").insert({ account_id: agent.account_id, contact_id: contact.id, type: "call.ai", summary: "AI setter started a phone call" });
+    const next = followUpAt(now, touch, rules, tz);
+    await update(db, thread, { touches: touch, total_touches: (thread.total_touches ?? 0) + 1, next_action: next ? "followup" : null, next_action_at: next?.toISOString() ?? null, ...(next ? {} : { state: "finished" }) });
+    return { journey: "ai_call" };
   }
   if (mode.kind === "followup" && step && step.action !== "sms" && step.action !== "email" && step.action !== "whatsapp") {
     // Calls and setter steps: a task for the team, then the next step.
@@ -3923,7 +3950,7 @@ export async function opportunityAudit(claude: BrainDeps["claude"], answers: Rec
 }
 
 /** Shown when the function's address is opened in a browser, so you can check which version is live. */
-export const VERSION = "v17: works inside Scalency without GHL (AI setter tag, Scalency inbox and booking pages); v16: safer urgent reply (clinic first, no NHS 111, no repeats), alerts email workspace owners when no alert email is set; v15: team replies and AI drafts in the command centre, health monitor, AI opportunity audit; v14: show-up reminders and no-shows, spec journeys, consent check, pipeline stages, waitlist, behaviour triggers, voice calls (Vapi or Retell), QA scoring, test lab, creative studio, diary capacity";
+export const VERSION = "v18: AI calls (Retell or Vapi) inside Scalency: new-lead calls and AI call journey steps, calls logged on the contact; v17: works inside Scalency without GHL (AI setter tag, Scalency inbox and booking pages); v16: safer urgent reply (clinic first, no NHS 111, no repeats), alerts email workspace owners when no alert email is set; v15: team replies and AI drafts in the command centre, health monitor, AI opportunity audit; v14: show-up reminders and no-shows, spec journeys, consent check, pipeline stages, waitlist, behaviour triggers, voice calls (Vapi or Retell), QA scoring, test lab, creative studio, diary capacity";
 
 if (import.meta.main) {
   Deno.serve(async (req) => {

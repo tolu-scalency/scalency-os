@@ -37,7 +37,7 @@ function Thumb({ def, height = 190 }: { def: FormDefinition; height?: number }) 
   return (
     <div className="pointer-events-none relative overflow-hidden" style={{ height, background: def.theme.background }} aria-hidden inert>
       <div className="absolute left-1/2 top-3 origin-top" style={{ width: def.theme.width, transform: `translateX(-50%) scale(${scale})` }}>
-        <div className={def.theme.card ? "rounded-2xl p-6 shadow-sm" : "p-2"} style={{ background: def.theme.card ? (def.theme.dark ? "#111827" : "#fff") : "transparent" }}>
+        <div className={def.theme.card ? "rounded-xl p-6 shadow-sm" : "p-2"} style={{ background: def.theme.card ? (def.theme.dark ? "#111827" : "#fff") : "transparent" }}>
           <LeadForm formId="thumb" def={def} preview />
         </div>
       </div>
@@ -107,7 +107,7 @@ function NewFormDialog({ accountId, initial, onClose }: { accountId: string; ini
 
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-stretch justify-center bg-ink/55 p-0 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="New form" className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(860px,92vh)] sm:rounded-3xl">
+      <div role="dialog" aria-modal="true" aria-label="New form" className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(860px,92vh)] sm:rounded-xl">
         <div className="flex flex-none flex-wrap items-center gap-3 border-b border-line px-5 py-3.5">
           <div>
             <div className="text-[16px] font-semibold">New form</div>
@@ -153,7 +153,7 @@ function Templates() {
       <div className="grid min-h-full lg:grid-cols-[1fr_340px]">
         <div className="overflow-auto p-4 sm:p-8" style={{ background: picked.def.theme.background }}>
           <div className="mx-auto" style={{ maxWidth: picked.def.theme.width }}>
-            <div className={picked.def.theme.card ? "rounded-2xl p-6 shadow-sm sm:p-8" : ""} style={{ background: picked.def.theme.card ? (picked.def.theme.dark ? "#111827" : "#fff") : "transparent" }}>
+            <div className={picked.def.theme.card ? "rounded-xl p-6 shadow-sm sm:p-8" : ""} style={{ background: picked.def.theme.card ? (picked.def.theme.dark ? "#111827" : "#fff") : "transparent" }}>
               <LeadForm formId="preview" def={picked.def} preview />
             </div>
           </div>
@@ -202,7 +202,7 @@ function Templates() {
         </label>
       </div>
       {!shown.length ? (
-        <p className="rounded-2xl border border-dashed border-line-strong p-8 text-center text-[13.5px] text-muted">No templates match. Try Build with AI instead.</p>
+        <p className="rounded-xl border border-dashed border-line-strong p-5 text-center text-[13.5px] text-muted">No templates match. Try Build with AI instead.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {shown.map(({ t, def }) => (
@@ -213,7 +213,7 @@ function Templates() {
               aria-label={`Preview ${t.name}`}
               onClick={() => setPicked({ t, def })}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setPicked({ t, def }))}
-              className="group cursor-pointer overflow-hidden rounded-2xl border border-line bg-white text-left transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand">
+              className="group cursor-pointer overflow-hidden rounded-xl border border-line bg-white text-left transition hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand">
               <div className="relative">
                 <Thumb def={def} />
                 <span className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white to-transparent" />
@@ -258,7 +258,7 @@ function Scratch() {
             ["empty", "Empty canvas", "Only an email question, so you can build it your way."],
           ] as const
         ).map(([key, title, text]) => (
-          <button key={key} type="button" onClick={() => setStart(key)} className={`rounded-2xl border p-4 text-left transition ${start === key ? "border-brand bg-brand/5 ring-2 ring-brand/20" : "border-line hover:border-line-strong"}`}>
+          <button key={key} type="button" onClick={() => setStart(key)} className={`rounded-xl border p-4 text-left transition ${start === key ? "border-brand bg-brand/5 ring-2 ring-brand/20" : "border-line hover:border-line-strong"}`}>
             <div className="text-[14px] font-semibold">{title}</div>
             <div className="mt-1 text-[12.5px] leading-relaxed text-muted">{text}</div>
           </button>
@@ -321,7 +321,7 @@ function AiBuilder({ accountId }: { accountId: string }) {
 
   if (busy)
     return (
-      <div className="flex min-h-full flex-col items-center justify-center gap-4 p-10 text-center">
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 p-6 text-center">
         <span className="tile tile-violet animate-pulse" style={{ width: 52, height: 52, borderRadius: 16 }}>
           <Icon name="spark" size={22} />
         </span>
@@ -335,7 +335,7 @@ function AiBuilder({ accountId }: { accountId: string }) {
       <div className="grid min-h-full lg:grid-cols-[1fr_340px]">
         <div className="overflow-auto p-4 sm:p-8" style={{ background: draft.def.theme.background }}>
           <div className="mx-auto" style={{ maxWidth: draft.def.theme.width }}>
-            <div className="rounded-2xl bg-white p-6 shadow-sm sm:p-8">
+            <div className="rounded-xl bg-white p-6 shadow-sm sm:p-8">
               <LeadForm formId="preview" def={draft.def} preview />
             </div>
           </div>

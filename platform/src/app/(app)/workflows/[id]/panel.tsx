@@ -82,7 +82,7 @@ export function FloatingPanel({ title, subtitle, icon, tone, onClose, children, 
       role="dialog"
       aria-label={title}
       style={{ left: pos.x, top: pos.y, width: pos.w }}
-      className="flyout fixed z-[60] flex max-h-[calc(100vh-100px)] flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_60px_-12px_rgba(15,23,42,0.35)] max-sm:!inset-x-2 max-sm:!bottom-2 max-sm:!top-auto max-sm:!w-auto max-sm:max-h-[75vh]"
+      className="flyout fixed z-[60] flex max-h-[calc(100vh-100px)] flex-col overflow-hidden rounded-xl border border-line bg-white max-sm:!inset-x-2 max-sm:!bottom-2 max-sm:!top-auto max-sm:!w-auto max-sm:max-h-[75vh]"
     >
       <div
         onPointerDown={onResizeDown}

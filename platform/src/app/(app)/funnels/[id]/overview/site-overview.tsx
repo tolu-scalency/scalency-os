@@ -370,7 +370,7 @@ export function SiteOverview({
           </div>
         )}
         {domains.map((d) => (
-          <div key={d.id} className="rounded-2xl border border-line p-4">
+          <div key={d.id} className="rounded-xl border border-line p-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-[14px] font-semibold">{d.domain}</span>
               <Pill tone={d.status === "verified" ? "green" : "neutral"}>{d.status === "verified" ? "Connected" : "Waiting for DNS"}</Pill>

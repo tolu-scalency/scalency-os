@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { adminClient } from "@/lib/admin";
 import { loadCalendar, loadMembers } from "@/lib/calendar/booking";
-import { bookerLocation } from "@/lib/calendar/types";
+import { bookerLocation, type LocationType } from "@/lib/calendar/types";
 import { BookingWidget } from "@/components/booking-widget";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,16 @@ async function load(ws: string, slug: string) {
     const { data: dir } = await admin.from("profiles").select("full_name").eq("user_id", members[0].userId).maybeSingle();
     host = (dir?.full_name as string) || null;
   }
-  return { cal, business: (acc?.name as string) ?? "", host };
+  // Each person can meet somewhere different: show the place only when it's the same for everyone.
+  const { data: locs } = await admin.from("calendar_members").select("user_id, location_type, location_value").eq("calendar_id", cal.id);
+  const places = members.map((m) => {
+    const own = (locs ?? []).find((l) => l.user_id === m.userId && l.location_type);
+    return own ? { type: own.location_type as LocationType, value: String(own.location_value ?? "") } : { type: cal.locationType, value: cal.locationValue };
+  });
+  const kinds = [...new Set(places.map((p) => p.type))];
+  const location = kinds.length === 1 ? bookerLocation(places[0].type, places[0].value) : "";
+  const askLocation = places.some((p) => p.type === "ask_booker");
+  return { cal, business: (acc?.name as string) ?? "", host, location, askLocation };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -52,7 +61,8 @@ export default async function PublicBooking({ params, searchParams }: Props) {
       name={cal.name}
       description={cal.description}
       durationMin={cal.durationMin}
-      location={bookerLocation(cal.locationType, cal.locationValue)}
+      location={x.location}
+      askLocation={x.askLocation}
       color={cal.color}
       questions={cal.questions}
     />

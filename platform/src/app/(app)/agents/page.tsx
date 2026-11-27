@@ -44,7 +44,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       />
       {error && <p className="rounded-xl bg-bad-bg px-4 py-3 text-[13.5px] text-bad">{error === "access" ? "You don't have access to set up AI here." : "Something went wrong. Please try again."}</p>}
       {!agents?.length ? (
-        <div className="card flex flex-col items-center gap-4 p-10 text-center">
+        <div className="card flex flex-col items-center gap-4 p-6 text-center">
           <Tile icon="spark" size={52} />
           <div>
             <h2 className="text-[19px] font-semibold">Your AI patient coordinator</h2>
