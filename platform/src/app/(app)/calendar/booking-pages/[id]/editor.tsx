@@ -38,11 +38,11 @@ const BOOKING_LINK = /calendar\.app\.google|calendar\.google\.com\/calendar\/app
 
 const SECTIONS = [
   ["basic", "Basic details"],
-  ["staff", "Staff & location"],
+  ["staff", "Team & where"],
   ["rules", "Booking rules"],
   ["questions", "Questions"],
   ["after", "After booking"],
-  ["share", "Share & embed"],
+  ["share", "Share"],
 ] as const;
 type SectionKey = (typeof SECTIONS)[number][0];
 
@@ -53,15 +53,15 @@ const hint = "text-[11.5px] font-normal text-muted";
 
 function Panel({ title, text, children }: { title: string; text?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-line bg-white p-5">
+    <section className="card p-5">
       <h2 className="text-[15px] font-semibold">{title}</h2>
       {text && <p className="mt-0.5 text-[12.5px] text-muted">{text}</p>}
-      <div className="mt-4 border-t border-line pt-4">{children}</div>
+      <div className="mt-4">{children}</div>
     </section>
   );
 }
 
-// The calendar editor, laid out like GHL: a top bar, a section menu on the left, one section at a time.
+// The calendar editor: a summary card, section tabs, the settings, and an "at a glance" panel.
 export function BookingPageEditor({ id, initial, base, team: teamIn, stages, check, groups = [] }: { id: string; initial: CalendarSettings; base: string; team: TeamMember[]; stages: { id: string; name: string }[]; check?: OpenCheck; groups?: Group[] }) {
   const [s, setS] = useState(initial);
   const [team, setTeam] = useState(teamIn);
@@ -102,41 +102,47 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages, che
       () => notify("Couldn't copy.", "bad"),
     );
 
+  const people = onTeam.map((m) => ({ name: m.name, place: LOCATIONS.find((l) => l.id === placeOf(m))?.label ?? "" }));
+  const icons: Record<SectionKey, React.ComponentProps<typeof Icon>["name"]> = { basic: "calendar", staff: "users", rules: "clock", questions: "form", after: "zap", share: "link" };
+
   return (
-    <div className="flex min-h-[calc(100dvh-64px)] flex-col">
-      {/* Top bar */}
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-line bg-white px-4 py-2.5 sm:px-8">
-        <Link href="/calendar/booking-pages" className="inline-flex items-center gap-1.5 text-[13px] text-muted hover:text-brand">
-          <Icon name="arrowLeft" size={15} /> Calendars
-        </Link>
-        <div className="mx-auto min-w-0 truncate text-[15px] font-semibold">Edit · {s.name || "Calendar"}</div>
-        <select value={s.status} onChange={(e) => set({ status: e.target.value as "active" })} className={`${box} w-auto`} aria-label="Status">
-          <option value="active">Active</option>
-          <option value="paused">Inactive</option>
-        </select>
-        <button type="button" onClick={() => copy(link, "Link")} title="Copy link" aria-label="Copy link" className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted hover:text-brand"><Icon name="share" size={15} /></button>
-        <a href={link} target="_blank" rel="noreferrer" title="Preview" aria-label="Preview" className="grid h-9 w-9 place-items-center rounded-lg border border-line text-muted hover:text-brand"><Icon name="eye" size={15} /></a>
-        <button type="button" disabled={pending} onClick={save} className="btn-primary inline-flex h-9 items-center rounded-lg px-4 text-[13px] font-semibold">{pending ? "Saving…" : "Save changes"}</button>
-      </header>
+    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 px-4 pb-10 pt-4 sm:px-6 sm:pt-5">
+      <Link href="/calendar/booking-pages" className="inline-flex w-fit items-center gap-1.5 text-[13px] text-muted hover:text-brand">
+        <Icon name="arrowLeft" size={14} /> Calendars
+      </Link>
 
-      <div className="flex flex-1 flex-col gap-5 px-4 py-5 sm:px-8 lg:flex-row">
-        {/* Section menu */}
-        <nav className="flex shrink-0 gap-1 overflow-x-auto lg:w-52 lg:flex-col" aria-label="Calendar settings">
-          {SECTIONS.map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setTab(k)} className={`whitespace-nowrap rounded-lg px-3 py-2 text-left text-[13px] ${tab === k ? "bg-[#eaf2fc] font-medium text-brand" : "text-muted hover:bg-white hover:text-navy"}`}>
-              {l}
-            </button>
-          ))}
-          {check && (
-            <div className={`mt-3 hidden rounded-lg px-3 py-2 text-[12px] lg:block ${check.next.length ? "bg-ok-bg text-ok" : "bg-bad-bg text-bad"}`}>
-              {check.next.length ? `${check.total ?? check.next.length} open times in the next 60 days` : "No open times yet"}
-            </div>
-          )}
-        </nav>
+      {/* Summary */}
+      <div className="card flex flex-wrap items-center gap-4 p-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-white" style={{ background: s.color }}><Icon name="calendar" size={18} /></span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[17px] font-semibold tracking-[-0.01em]">{s.name || "Calendar"}</div>
+          <button type="button" onClick={() => copy(link, "Link")} className="mt-0.5 inline-flex max-w-full items-center gap-1.5 truncate text-[12px] text-muted hover:text-brand" title="Copy link">
+            <Icon name="link" size={12} /> <span className="truncate">{link}</span>
+          </button>
+        </div>
+        <label className="flex items-center gap-2 text-[12.5px] font-medium text-navy">
+          <button type="button" role="switch" aria-checked={s.status === "active"} onClick={() => set({ status: s.status === "active" ? "paused" : "active" })} className={`relative h-5 w-9 rounded-full transition-colors ${s.status === "active" ? "bg-brand" : "bg-line-strong"}`}>
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${s.status === "active" ? "left-[18px]" : "left-0.5"}`} />
+          </button>
+          {s.status === "active" ? "Taking bookings" : "Paused"}
+        </label>
+        <a href={link} target="_blank" rel="noreferrer" className="btn-ghost inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium"><Icon name="eye" size={14} /> Preview</a>
+        <button type="button" disabled={pending} onClick={save} className="btn-primary inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-semibold"><Icon name="check" size={14} /> {pending ? "Saving…" : "Save"}</button>
+      </div>
 
-        <div className="flex min-w-0 max-w-3xl flex-1 flex-col gap-4">
+      {/* Sections */}
+      <nav className="flex gap-5 overflow-x-auto border-b border-line text-[13.5px] font-medium" aria-label="Calendar settings">
+        {SECTIONS.map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setTab(k)} className={`-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 pb-2.5 pt-1 ${tab === k ? "border-brand text-brand" : "border-transparent text-muted hover:text-navy"}`}>
+            <Icon name={icons[k]} size={14} /> {l}
+          </button>
+        ))}
+      </nav>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="flex min-w-0 flex-col gap-4">
           {check && !check.next.length && (
-            <div className="rounded-xl border border-[#f3c9c4] bg-white p-4 text-[13px]">
+            <div className="card border-[#f3c9c4] p-4 text-[13px]">
               <div className="font-semibold text-bad">People can&apos;t book yet: there are no open times</div>
               <ul className="ml-5 mt-1.5 list-disc text-navy">{check.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
             </div>
@@ -182,18 +188,18 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages, che
           )}
 
           {tab === "staff" && (
-            <Panel title="Staff & meeting location" text="Choose who takes these bookings and where each person meets. Bookings go into each person's own calendar.">
+            <Panel title="Who takes bookings, and where" text="Choose who takes these bookings and where each person meets. Bookings go into each person's own calendar.">
               <div className="mb-4 inline-flex rounded-lg border border-line bg-surface p-0.5">
                 {(["one", "round_robin"] as const).map((k) => (
                   <button key={k} type="button" onClick={() => set({ kind: k })} className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium ${s.kind === k ? "bg-white text-navy shadow-sm" : "text-muted"}`}>
-                    {k === "one" ? "Personal (one person)" : "Round robin"}
+                    {k === "one" ? "One person" : "Round robin"}
                   </button>
                 ))}
               </div>
               <p className="mb-3 text-[12px] text-muted">{s.kind === "one" ? "Every booking goes to the first person on the list." : "Each booking goes to whoever is free and was booked least recently. Higher priority wins a tie."}</p>
 
               <label className={`${label} mb-4`}>
-                Add staff
+                Add someone
                 <select value="" onChange={(e) => e.target.value && setMember(e.target.value, { on: true })} className={field}>
                   <option value="">Choose a team member</option>
                   {team.filter((m) => !m.on).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -381,6 +387,30 @@ export function BookingPageEditor({ id, initial, base, team: teamIn, stages, che
             </Panel>
           )}
         </div>
+
+        {/* At a glance */}
+        <aside className="flex flex-col gap-3">
+          <div className="card p-4 lg:sticky lg:top-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">At a glance</div>
+            <div className="mt-3 flex flex-col gap-2.5 text-[13px]">
+              <div className="flex items-center gap-2 text-navy"><Icon name="clock" size={14} className="text-muted" /> {minutesLabel(s.durationMin)} · {s.kind === "round_robin" ? "Round robin" : "One person"}</div>
+              <div className="flex items-start gap-2 text-navy">
+                <Icon name="users" size={14} className="mt-0.5 text-muted" />
+                <div className="flex min-w-0 flex-col gap-1">
+                  {people.length ? people.map((p) => <span key={p.name} className="truncate">{p.name} <span className="text-muted">· {p.place}</span></span>) : <span className="text-warn">Nobody added yet</span>}
+                </div>
+              </div>
+              <div className="flex items-start gap-2 text-navy">
+                <Icon name="calendar" size={14} className="mt-0.5 text-muted" />
+                {check?.next.length ? <span>Next free: {check.next.slice(0, 3).join(", ")}</span> : <span className="text-bad">No open times yet</span>}
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2 border-t border-line pt-3">
+              <button type="button" onClick={() => copy(link, "Link")} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium text-brand hover:bg-[#eaf2fc]"><Icon name="copy" size={13} /> Copy link</button>
+              <button type="button" onClick={() => setTab("share")} className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium text-muted hover:bg-surface hover:text-navy"><Icon name="code" size={13} /> Embed</button>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
